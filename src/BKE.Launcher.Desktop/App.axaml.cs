@@ -7,7 +7,7 @@ using BKE.Launcher.Presentation;
 
 namespace BKE.Launcher.Desktop;
 
-public sealed partial class App : Application
+public sealed partial class App : Avalonia.Application
 {
     public override void Initialize()
     {
