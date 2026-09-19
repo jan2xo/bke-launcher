@@ -51,6 +51,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void OpenProduct(object? sender, RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: SoftwareProductViewModel product,
+            } &&
+            product.CanOpen)
+        {
+            await ViewModel.OpenProductAsync(
+                product.ProductId,
+                CancellationToken.None);
+        }
+    }
+
     private async void Logout(object? sender, RoutedEventArgs args)
     {
         await ViewModel.LogoutAsync(CancellationToken.None);
