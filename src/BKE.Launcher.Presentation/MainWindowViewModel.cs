@@ -11,6 +11,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountSessionController _accountSession;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherSoftwareInstallController _softwareInstall;
+    private readonly LauncherSoftwareOpenController _softwareOpen;
     private string _sessionStatus = "SIGNED_OUT";
     private string _accountDisplay = "Not signed in";
     private string _userCode = string.Empty;
@@ -22,11 +23,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
         LauncherCatalogService catalog,
-        LauncherSoftwareInstallController softwareInstall)
+        LauncherSoftwareInstallController softwareInstall,
+        LauncherSoftwareOpenController softwareOpen)
     {
         _accountSession = accountSession;
         _catalog = catalog;
         _softwareInstall = softwareInstall;
+        _softwareOpen = softwareOpen;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -215,6 +218,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     {
                         StateLabel = "Installed",
                         CanInstall = false,
+                        CanOpen = true,
                     };
                     CatalogStatus = "READY";
                     CatalogMessage =
@@ -255,6 +259,74 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CatalogStatus = "AGENT_UNAVAILABLE";
             CatalogMessage =
                 "The BKE Licensing Agent install capability is unavailable or invalid.";
+        }
+    }
+
+    public async Task OpenProductAsync(
+        string productId,
+        CancellationToken cancellationToken)
+    {
+        var index = Products
+            .Select((product, index) => (product, index))
+            .Where(item =>
+                string.Equals(
+                    item.product.ProductId,
+                    productId,
+                    StringComparison.Ordinal))
+            .Select(item => item.index)
+            .DefaultIfEmpty(-1)
+            .First();
+
+        if (index < 0 || !Products[index].CanOpen)
+        {
+            return;
+        }
+
+        var product = Products[index];
+        CatalogStatus = "OPENING";
+        CatalogMessage =
+            $"Opening {product.DisplayName} through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _softwareOpen.OpenAsync(
+                productId,
+                cancellationToken);
+
+            if (response.Status == "STARTED")
+            {
+                CatalogStatus = "READY";
+                CatalogMessage =
+                    $"{product.DisplayName} was started by the BKE Licensing Agent.";
+                return;
+            }
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                Products[index] = product with
+                {
+                    CanOpen = false,
+                };
+                CatalogStatus = "AUTH_REQUIRED";
+                CatalogMessage =
+                    response.Error?.Message ??
+                    "Sign in with BKE before opening software.";
+                return;
+            }
+
+            CatalogStatus = "FAILED";
+            CatalogMessage =
+                response.Error?.Message ??
+                $"Open failed: {response.State}.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            CatalogStatus = "AGENT_UNAVAILABLE";
+            CatalogMessage =
+                "The BKE Licensing Agent open capability is unavailable or invalid.";
         }
     }
 
@@ -333,7 +405,8 @@ public sealed record SoftwareProductViewModel(
     string ExecutionLabel,
     string StateLabel,
     string VersionLabel,
-    bool CanInstall)
+    bool CanInstall,
+    bool CanOpen)
 {
     public static SoftwareProductViewModel From(LauncherProduct product)
     {
@@ -375,6 +448,8 @@ public sealed record SoftwareProductViewModel(
             state,
             version,
             product.ExecutionType == ProductExecutionType.Standalone &&
-            product.State == LauncherProductState.Installable);
+            product.State == LauncherProductState.Installable,
+            product.ExecutionType == ProductExecutionType.Standalone &&
+            product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable);
     }
 }
