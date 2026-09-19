@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>BKE.Launcher.PluginCertification</AssemblyName>
+    <RootNamespace>BKE.Launcher.PluginCertification</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/BKE.Launcher.PluginHost/BKE.Launcher.PluginHost.csproj" />
+  </ItemGroup>
+</Project>
