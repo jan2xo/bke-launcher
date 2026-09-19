@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>BKE.Launcher.Infrastructure</AssemblyName>
+    <RootNamespace>BKE.Launcher.Infrastructure</RootNamespace>
+  </PropertyGroup>
+</Project>
