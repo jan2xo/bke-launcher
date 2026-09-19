@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>BKE.Launcher.Application</AssemblyName>
+    <RootNamespace>BKE.Launcher.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../BKE.Launcher.Contracts/BKE.Launcher.Contracts.csproj" />
+  </ItemGroup>
+</Project>
