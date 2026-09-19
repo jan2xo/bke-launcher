@@ -17,6 +17,9 @@ Require(AgentLocalContract.SoftwareCatalogContractVersion == 1, "software catalo
 Require(AgentLocalContract.SoftwareInstallPath == "/v1/software/install", "software install path drifted");
 Require(AgentLocalContract.SoftwareInstallCapabilityId == "bke.software-install", "software install capability id drifted");
 Require(AgentLocalContract.SoftwareInstallContractVersion == 1, "software install contract version drifted");
+Require(AgentLocalContract.SoftwareOpenPath == "/v1/software/open", "software open path drifted");
+Require(AgentLocalContract.SoftwareOpenCapabilityId == "bke.software-open", "software open capability id drifted");
+Require(AgentLocalContract.SoftwareOpenContractVersion == 1, "software open contract version drifted");
 
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.LauncherPlugin) == "LAUNCHER_PLUGIN", "launcher plugin execution type drifted");
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.Standalone) == "STANDALONE", "standalone execution type drifted");
@@ -28,6 +31,8 @@ var localResponseProperties = typeof(AccountSessionStartResponse).GetProperties(
     .Concat(typeof(SoftwareCatalogItem).GetProperties())
     .Concat(typeof(SoftwareInstallResponse).GetProperties())
     .Concat(typeof(SoftwareInstallError).GetProperties())
+    .Concat(typeof(SoftwareOpenResponse).GetProperties())
+    .Concat(typeof(SoftwareOpenError).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -39,6 +44,8 @@ Require(!localResponseProperties.Any(name => name.Contains("SigningKey", StringC
 Require(!localResponseProperties.Any(name => name.Contains("InstallPath", StringComparison.OrdinalIgnoreCase)), "Launcher local contracts expose privileged install paths.");
 Require(!localResponseProperties.Any(name => name.Contains("Repository", StringComparison.OrdinalIgnoreCase)), "Launcher local contracts expose GitHub repository identity.");
 Require(!localResponseProperties.Any(name => name.Contains("TargetPolicy", StringComparison.OrdinalIgnoreCase)), "Launcher local contracts expose target policy material.");
+Require(!localResponseProperties.Any(name => name.Contains("EntryPoint", StringComparison.OrdinalIgnoreCase)), "Launcher local contracts expose product entry points.");
+Require(!localResponseProperties.Any(name => name.Contains("Executable", StringComparison.OrdinalIgnoreCase)), "Launcher local contracts expose executable paths.");
 
 var agentMethods = typeof(ILauncherAgentClient)
     .GetMethods()
@@ -50,7 +57,8 @@ Require(agentMethods.SetEquals([
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
     "GetSoftwareCatalogAsync",
-    "InstallSoftwareAsync"
+    "InstallSoftwareAsync",
+    "OpenSoftwareAsync"
 ]), "Launcher Agent client port drifted.");
 
 var contextProperties = typeof(ILauncherContext)
@@ -77,6 +85,7 @@ Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
+Console.WriteLine("Agent-owned standalone Open intent boundary certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
 
