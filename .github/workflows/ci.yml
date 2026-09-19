@@ -24,3 +24,57 @@ jobs:
         run: dotnet run --project tests/BKE.Launcher.ContractCertification/BKE.Launcher.ContractCertification.csproj -c Release --no-build
       - name: Certify plugin contract
         run: dotnet run --project tests/BKE.Launcher.PluginCertification/BKE.Launcher.PluginCertification.csproj -c Release --no-build
+
+  windows-x64-candidate:
+    name: Windows x64 self-contained candidate
+    needs: launcher-core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish self-contained Windows x64 Launcher
+        shell: pwsh
+        run: |
+          dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o dist/windows-x64
+          if ($LASTEXITCODE -ne 0) { throw "Launcher Windows x64 publish failed." }
+
+      - name: Smoke published Launcher
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path ".\dist\windows-x64\bke-launcher.exe"
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Published Launcher smoke failed: $($process.ExitCode)"
+          }
+          Write-Host "Published Launcher smoke: PASS"
+
+      - name: Package candidate and SHA-256 evidence
+        shell: pwsh
+        run: |
+          $archive = ".\dist\BKE-Launcher-Windows-x64-Candidate.zip"
+          if (Test-Path $archive) { Remove-Item $archive -Force }
+          Compress-Archive -Path ".\dist\windows-x64\*" -DestinationPath $archive -CompressionLevel Optimal
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BKE-Launcher-Windows-x64-Candidate.zip" |
+            Set-Content ".\dist\BKE-Launcher-Windows-x64-Candidate.sha256.txt" -Encoding ascii
+          if ((Get-Item $archive).Length -le 0) { throw "Launcher candidate archive is empty." }
+          Write-Host "Launcher candidate SHA256=$hash"
+
+      - name: Upload Windows x64 candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: bke-launcher-windows-x64-candidate
+          path: |
+            dist/BKE-Launcher-Windows-x64-Candidate.zip
+            dist/BKE-Launcher-Windows-x64-Candidate.sha256.txt
+          if-no-files-found: error
+          retention-days: 7
