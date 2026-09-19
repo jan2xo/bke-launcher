@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>bke-launcher</AssemblyName>
+    <RootNamespace>BKE.Launcher.Desktop</RootNamespace>
+    <Description>BKE Launcher customer software hub.</Description>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../BKE.Launcher.AgentClient/BKE.Launcher.AgentClient.csproj" />
+    <ProjectReference Include="../BKE.Launcher.Application/BKE.Launcher.Application.csproj" />
+    <ProjectReference Include="../BKE.Launcher.Presentation/BKE.Launcher.Presentation.csproj" />
+  </ItemGroup>
+</Project>
