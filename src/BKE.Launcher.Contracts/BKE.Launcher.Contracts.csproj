@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>BKE.Launcher.Contracts</AssemblyName>
+    <RootNamespace>BKE.Launcher.Contracts</RootNamespace>
+    <Description>Stable local contracts for BKE Launcher.</Description>
+  </PropertyGroup>
+</Project>
