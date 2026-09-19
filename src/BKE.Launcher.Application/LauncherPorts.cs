@@ -19,6 +19,10 @@ public interface ILauncherAgentClient
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);
+
+    Task<SoftwareInstallResponse> InstallSoftwareAsync(
+        SoftwareInstallRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record LauncherCatalogSnapshot(

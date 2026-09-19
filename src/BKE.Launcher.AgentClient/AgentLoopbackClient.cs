@@ -73,6 +73,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<SoftwareInstallResponse> InstallSoftwareAsync(
+        SoftwareInstallRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<SoftwareInstallRequest, SoftwareInstallResponse>(
+            AgentLocalContract.SoftwareInstallPath,
+            request,
+            cancellationToken);
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(
         string path,
         TRequest request,
