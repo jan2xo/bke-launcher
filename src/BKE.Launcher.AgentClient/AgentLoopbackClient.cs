@@ -65,6 +65,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
+        SoftwareCatalogRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<SoftwareCatalogRequest, SoftwareCatalogResponse>(
+            AgentLocalContract.SoftwareCatalogPath,
+            request,
+            cancellationToken);
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(
         string path,
         TRequest request,
@@ -88,7 +96,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             cancellationToken);
 
         return result ?? throw new InvalidDataException(
-            "BKE Licensing Agent returned an empty account-session response.");
+            "BKE Licensing Agent returned an empty local response.");
     }
 
     private static void ValidateLoopbackBaseAddress(Uri value)

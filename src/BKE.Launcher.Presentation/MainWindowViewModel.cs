@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using BKE.Launcher.Application;
@@ -8,18 +9,26 @@ namespace BKE.Launcher.Presentation;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly LauncherAccountSessionController _accountSession;
+    private readonly LauncherCatalogService _catalog;
     private string _sessionStatus = "SIGNED_OUT";
     private string _accountDisplay = "Not signed in";
     private string _userCode = string.Empty;
     private string _verificationUri = string.Empty;
     private string _message = "Connect this Launcher to the BKE Licensing Agent.";
+    private string _catalogStatus = "AUTH_REQUIRED";
+    private string _catalogMessage = "Sign in to load your BKE software.";
 
-    public MainWindowViewModel(LauncherAccountSessionController accountSession)
+    public MainWindowViewModel(
+        LauncherAccountSessionController accountSession,
+        LauncherCatalogService catalog)
     {
         _accountSession = accountSession;
+        _catalog = catalog;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
 
     public string SessionStatus
     {
@@ -51,6 +60,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _message, value);
     }
 
+    public string CatalogStatus
+    {
+        get => _catalogStatus;
+        private set => SetField(ref _catalogStatus, value);
+    }
+
+    public string CatalogMessage
+    {
+        get => _catalogMessage;
+        private set => SetField(ref _catalogMessage, value);
+    }
+
+    public bool ShowEmptyProducts => Products.Count == 0;
+
     public async Task StartSignInAsync(CancellationToken cancellationToken)
     {
         try
@@ -65,6 +88,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "PENDING" => "Complete sign-in in your browser, then refresh account status.",
                 _ => response.Error?.Message ?? "BKE account sign-in could not be started.",
             };
+
+            if (response.Status == "AUTHENTICATED")
+            {
+                await RefreshCatalogAsync(cancellationToken);
+            }
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
         {
@@ -79,12 +107,57 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var response = await _accountSession.StatusAsync(cancellationToken);
             ApplyStatus(response);
+
+            if (response.Status == "AUTHENTICATED")
+            {
+                await RefreshCatalogAsync(cancellationToken);
+            }
+            else
+            {
+                ClearCatalog(
+                    "AUTH_REQUIRED",
+                    "Sign in to load your BKE software.");
+            }
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
         {
             SessionStatus = "AGENT_UNAVAILABLE";
             AccountDisplay = "Not available";
             Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
+            ClearCatalog(
+                "AGENT_UNAVAILABLE",
+                "Software catalog is unavailable while the Agent cannot be reached.");
+        }
+    }
+
+    public async Task RefreshCatalogAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var snapshot = await _catalog.GetProductsAsync(cancellationToken);
+            CatalogStatus = snapshot.Status;
+            CatalogMessage = snapshot.Message ?? snapshot.Status switch
+            {
+                "READY" => snapshot.Products.Count == 0
+                    ? "No software is currently available for this account."
+                    : "Catalog and installed state are supplied by the BKE Licensing Agent.",
+                "AUTH_REQUIRED" => "Sign in to load your BKE software.",
+                _ => "The software catalog is currently unavailable.",
+            };
+
+            Products.Clear();
+            foreach (var product in snapshot.Products)
+            {
+                Products.Add(SoftwareProductViewModel.From(product));
+            }
+
+            Raise(nameof(ShowEmptyProducts));
+        }
+        catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
+        {
+            ClearCatalog(
+                "AGENT_UNAVAILABLE",
+                "BKE Licensing Agent software catalog is unavailable or invalid.");
         }
     }
 
@@ -98,6 +171,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             UserCode = string.Empty;
             VerificationUri = string.Empty;
             Message = response.Error?.Message ?? "Signed out on this machine.";
+            ClearCatalog(
+                "AUTH_REQUIRED",
+                "Sign in to load your BKE software.");
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
         {
@@ -130,6 +206,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         };
     }
 
+    private void ClearCatalog(string status, string message)
+    {
+        CatalogStatus = status;
+        CatalogMessage = message;
+        Products.Clear();
+        Raise(nameof(ShowEmptyProducts));
+    }
+
     private void SetField(ref string field, string value, [CallerMemberName] string? propertyName = null)
     {
         if (string.Equals(field, value, StringComparison.Ordinal))
@@ -139,5 +223,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void Raise(string? propertyName) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+public sealed record SoftwareProductViewModel(
+    string DisplayName,
+    string Summary,
+    string ExecutionLabel,
+    string StateLabel,
+    string VersionLabel)
+{
+    public static SoftwareProductViewModel From(LauncherProduct product)
+    {
+        var execution = product.ExecutionType switch
+        {
+            ProductExecutionType.LauncherPlugin => "Launcher Plugin",
+            ProductExecutionType.Standalone => "Standalone",
+            null => "Unassigned",
+            _ => "Unknown",
+        };
+
+        var state = product.State switch
+        {
+            LauncherProductState.NotEntitled => "Not entitled",
+            LauncherProductState.Installable => "Installable",
+            LauncherProductState.Installed => "Installed",
+            LauncherProductState.UpdateAvailable => "Update available",
+            LauncherProductState.InstalledNotEntitled => "Installed · entitlement unavailable",
+            LauncherProductState.PolicyUnassigned => "Owner policy unassigned",
+            LauncherProductState.ReleaseUnavailable => "Release unavailable",
+            LauncherProductState.Unavailable => "Unavailable",
+            LauncherProductState.Installing => "Installing",
+            LauncherProductState.RepairRequired => "Repair required",
+            _ => "Unknown",
+        };
+
+        var version = product.InstalledVersion is not null
+            ? product.AvailableVersion is not null &&
+              !string.Equals(product.InstalledVersion, product.AvailableVersion, StringComparison.Ordinal)
+                ? $"{product.InstalledVersion} → {product.AvailableVersion}"
+                : product.InstalledVersion
+            : product.AvailableVersion ?? "No release";
+
+        return new SoftwareProductViewModel(
+            product.DisplayName,
+            product.Summary,
+            execution,
+            state,
+            version);
     }
 }

@@ -11,13 +11,15 @@ public sealed class LauncherCatalogService
         _source = source;
     }
 
-    public async Task<IReadOnlyList<LauncherProduct>> GetProductsAsync(
+    public async Task<LauncherCatalogSnapshot> GetProductsAsync(
         CancellationToken cancellationToken)
     {
-        var products = await _source.GetProductsAsync(cancellationToken);
-        return products
+        var snapshot = await _source.GetProductsAsync(cancellationToken);
+        var products = snapshot.Products
             .OrderBy(product => product.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(product => product.ProductId, StringComparer.Ordinal)
             .ToArray();
+
+        return snapshot with { Products = products };
     }
 }

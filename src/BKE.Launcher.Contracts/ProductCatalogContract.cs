@@ -28,21 +28,23 @@ public static class ProductExecutionTypeWire
 
 public enum LauncherProductState
 {
-    Available,
-    Entitled,
     NotEntitled,
     Installable,
-    Installing,
     Installed,
     UpdateAvailable,
-    RepairRequired,
+    InstalledNotEntitled,
+    PolicyUnassigned,
+    ReleaseUnavailable,
     Unavailable,
+    Installing,
+    RepairRequired,
 }
 
 public sealed record LauncherProduct(
     string ProductId,
     string DisplayName,
-    ProductExecutionType ExecutionType,
+    string Summary,
+    ProductExecutionType? ExecutionType,
     LauncherProductState State,
     string? InstalledVersion = null,
     string? AvailableVersion = null);

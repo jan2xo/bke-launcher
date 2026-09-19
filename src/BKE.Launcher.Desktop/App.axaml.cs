@@ -20,7 +20,9 @@ public sealed partial class App : Avalonia.Application
         {
             var agentClient = new AgentLoopbackClient();
             var accountSession = new LauncherAccountSessionController(agentClient);
-            var viewModel = new MainWindowViewModel(accountSession);
+            var catalogSource = new AgentSoftwareCatalogSource(agentClient);
+            var catalog = new LauncherCatalogService(catalogSource);
+            var viewModel = new MainWindowViewModel(accountSession, catalog);
 
             desktop.MainWindow = new MainWindow
             {

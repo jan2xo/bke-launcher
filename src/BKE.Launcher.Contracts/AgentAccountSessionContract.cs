@@ -6,10 +6,13 @@ public static class AgentLocalContract
 {
     public const string CapabilityId = "bke.account-session";
     public const int ContractVersion = 1;
+    public const string SoftwareCatalogCapabilityId = "bke.software-catalog";
+    public const int SoftwareCatalogContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
     public const string AccountSessionStartPath = "/v1/account-session/start";
     public const string AccountSessionStatusPath = "/v1/account-session/status";
     public const string AccountSessionLogoutPath = "/v1/account-session/logout";
+    public const string SoftwareCatalogPath = "/v1/software/catalog";
 }
 
 public sealed record AccountSessionStartRequest(

@@ -15,9 +15,18 @@ public interface ILauncherAgentClient
     Task<AccountSessionLogoutResponse> LogoutAccountSessionAsync(
         AccountSessionLogoutRequest request,
         CancellationToken cancellationToken);
+
+    Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
+        SoftwareCatalogRequest request,
+        CancellationToken cancellationToken);
 }
+
+public sealed record LauncherCatalogSnapshot(
+    string Status,
+    IReadOnlyList<LauncherProduct> Products,
+    string? Message);
 
 public interface ILauncherCatalogSource
 {
-    Task<IReadOnlyList<LauncherProduct>> GetProductsAsync(CancellationToken cancellationToken);
+    Task<LauncherCatalogSnapshot> GetProductsAsync(CancellationToken cancellationToken);
 }

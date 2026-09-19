@@ -32,6 +32,11 @@ public sealed partial class MainWindow : Window
         await ViewModel.RefreshStatusAsync(CancellationToken.None);
     }
 
+    private async void RefreshCatalog(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.RefreshCatalogAsync(CancellationToken.None);
+    }
+
     private async void Logout(object? sender, RoutedEventArgs args)
     {
         await ViewModel.LogoutAsync(CancellationToken.None);
