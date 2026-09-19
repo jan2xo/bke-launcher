@@ -81,6 +81,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<SoftwareOpenResponse> OpenSoftwareAsync(
+        SoftwareOpenRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<SoftwareOpenRequest, SoftwareOpenResponse>(
+            AgentLocalContract.SoftwareOpenPath,
+            request,
+            cancellationToken);
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(
         string path,
         TRequest request,
