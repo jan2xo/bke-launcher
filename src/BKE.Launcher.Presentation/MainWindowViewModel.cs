@@ -10,6 +10,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly LauncherAccountSessionController _accountSession;
     private readonly LauncherCatalogService _catalog;
+    private readonly LauncherSoftwareInstallController _softwareInstall;
     private string _sessionStatus = "SIGNED_OUT";
     private string _accountDisplay = "Not signed in";
     private string _userCode = string.Empty;
@@ -20,10 +21,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
-        LauncherCatalogService catalog)
+        LauncherCatalogService catalog,
+        LauncherSoftwareInstallController softwareInstall)
     {
         _accountSession = accountSession;
         _catalog = catalog;
+        _softwareInstall = softwareInstall;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -161,6 +164,100 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task InstallProductAsync(
+        string productId,
+        CancellationToken cancellationToken)
+    {
+        var index = Products
+            .Select((product, index) => (product, index))
+            .Where(item =>
+                string.Equals(
+                    item.product.ProductId,
+                    productId,
+                    StringComparison.Ordinal))
+            .Select(item => item.index)
+            .DefaultIfEmpty(-1)
+            .First();
+
+        if (index < 0 || !Products[index].CanInstall)
+        {
+            return;
+        }
+
+        var previous = Products[index];
+        Products[index] = previous with
+        {
+            StateLabel = "Installing",
+            CanInstall = false,
+        };
+        CatalogStatus = "INSTALLING";
+        CatalogMessage =
+            $"Starting verified installation for {previous.DisplayName}…";
+
+        try
+        {
+            var response = await _softwareInstall.InstallAsync(
+                productId,
+                cancellationToken);
+
+            switch (response.Status)
+            {
+                case "STARTED":
+                case "IN_PROGRESS":
+                    CatalogStatus = "INSTALLING";
+                    CatalogMessage = response.Status == "STARTED"
+                        ? $"Verified installation started for {previous.DisplayName}. Refresh software after the elevation step completes."
+                        : $"Installation is already in progress for {previous.DisplayName}.";
+                    break;
+
+                case "ALREADY_INSTALLED":
+                    Products[index] = previous with
+                    {
+                        StateLabel = "Installed",
+                        CanInstall = false,
+                    };
+                    CatalogStatus = "READY";
+                    CatalogMessage =
+                        $"{previous.DisplayName} is already installed on this machine.";
+                    break;
+
+                case "AUTH_REQUIRED":
+                    Products[index] = previous with
+                    {
+                        StateLabel = "Sign in required",
+                        CanInstall = false,
+                    };
+                    CatalogStatus = "AUTH_REQUIRED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        "Sign in with BKE before installing software.";
+                    break;
+
+                default:
+                    Products[index] = previous with
+                    {
+                        StateLabel = "Install failed",
+                        CanInstall = response.Error?.Retryable == true,
+                    };
+                    CatalogStatus = "FAILED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        $"Installation failed: {response.State}.";
+                    break;
+            }
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            Products[index] = previous;
+            CatalogStatus = "AGENT_UNAVAILABLE";
+            CatalogMessage =
+                "The BKE Licensing Agent install capability is unavailable or invalid.";
+        }
+    }
+
     public async Task LogoutAsync(CancellationToken cancellationToken)
     {
         try
@@ -230,11 +327,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 }
 
 public sealed record SoftwareProductViewModel(
+    string ProductId,
     string DisplayName,
     string Summary,
     string ExecutionLabel,
     string StateLabel,
-    string VersionLabel)
+    string VersionLabel,
+    bool CanInstall)
 {
     public static SoftwareProductViewModel From(LauncherProduct product)
     {
@@ -269,10 +368,13 @@ public sealed record SoftwareProductViewModel(
             : product.AvailableVersion ?? "No release";
 
         return new SoftwareProductViewModel(
+            product.ProductId,
             product.DisplayName,
             product.Summary,
             execution,
             state,
-            version);
+            version,
+            product.ExecutionType == ProductExecutionType.Standalone &&
+            product.State == LauncherProductState.Installable);
     }
 }
