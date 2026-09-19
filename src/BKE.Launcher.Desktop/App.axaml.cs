@@ -9,8 +9,6 @@ namespace BKE.Launcher.Desktop;
 
 public sealed partial class App : Application
 {
-    private AgentLoopbackClient? _agentClient;
-
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -20,8 +18,8 @@ public sealed partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            _agentClient = new AgentLoopbackClient();
-            var accountSession = new LauncherAccountSessionController(_agentClient);
+            var agentClient = new AgentLoopbackClient();
+            var accountSession = new LauncherAccountSessionController(agentClient);
             var viewModel = new MainWindowViewModel(accountSession);
 
             desktop.MainWindow = new MainWindow
@@ -29,7 +27,7 @@ public sealed partial class App : Application
                 DataContext = viewModel,
             };
 
-            desktop.Exit += (_, _) => _agentClient.Dispose();
+            desktop.Exit += (_, _) => agentClient.Dispose();
         }
 
         base.OnFrameworkInitializationCompleted();
