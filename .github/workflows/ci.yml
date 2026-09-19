@@ -1,0 +1,26 @@
+name: BKE Launcher CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  launcher-core:
+    name: .NET 10 Launcher core + contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Restore
+        run: dotnet restore BKE.Launcher.sln
+      - name: Build
+        run: dotnet build BKE.Launcher.sln -c Release --no-restore
+      - name: Certify Launcher contracts
+        run: dotnet run --project tests/BKE.Launcher.ContractCertification/BKE.Launcher.ContractCertification.csproj -c Release --no-build
+      - name: Certify plugin contract
+        run: dotnet run --project tests/BKE.Launcher.PluginCertification/BKE.Launcher.PluginCertification.csproj -c Release --no-build
