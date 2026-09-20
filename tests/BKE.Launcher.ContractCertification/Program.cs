@@ -87,11 +87,17 @@ var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
 var installTimeoutField = typeof(AgentLoopbackClient).GetField(
     "InstallRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
-Require(defaultTimeoutField?.GetValue(null) is TimeSpan defaultTimeout &&
-        defaultTimeout == TimeSpan.FromSeconds(5),
+var defaultTimeoutValue = defaultTimeoutField?.GetValue(null);
+var installTimeoutValue = installTimeoutField?.GetValue(null);
+Require(defaultTimeoutValue is TimeSpan,
+    "Launcher default loopback timeout field is unavailable.");
+Require(installTimeoutValue is TimeSpan,
+    "Launcher install-operation timeout field is unavailable.");
+var defaultTimeout = (TimeSpan)defaultTimeoutValue!;
+var installTimeout = (TimeSpan)installTimeoutValue!;
+Require(defaultTimeout == TimeSpan.FromSeconds(5),
     "Launcher default loopback timeout drifted.");
-Require(installTimeoutField?.GetValue(null) is TimeSpan installTimeout &&
-        installTimeout == TimeSpan.FromMinutes(10),
+Require(installTimeout == TimeSpan.FromMinutes(10),
     "Launcher install-operation timeout drifted.");
 Require(installTimeout > defaultTimeout,
     "Launcher install operation does not have a dedicated long-running timeout.");
