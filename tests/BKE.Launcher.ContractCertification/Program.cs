@@ -81,10 +81,26 @@ catch (ArgumentException)
 }
 Require(rejectedNonLoopback, "Launcher Agent client accepted a non-loopback endpoint.");
 
+var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
+    "DefaultRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
+var installTimeoutField = typeof(AgentLoopbackClient).GetField(
+    "InstallRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
+Require(defaultTimeoutField?.GetValue(null) is TimeSpan defaultTimeout &&
+        defaultTimeout == TimeSpan.FromSeconds(5),
+    "Launcher default loopback timeout drifted.");
+Require(installTimeoutField?.GetValue(null) is TimeSpan installTimeout &&
+        installTimeout == TimeSpan.FromMinutes(10),
+    "Launcher install-operation timeout drifted.");
+Require(installTimeout > defaultTimeout,
+    "Launcher install operation does not have a dedicated long-running timeout.");
+
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
+Console.WriteLine("Bounded long-running install transport certified");
 Console.WriteLine("Agent-owned standalone Open intent boundary certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
