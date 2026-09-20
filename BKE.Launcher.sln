@@ -1,0 +1,66 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Contracts", "src\BKE.Launcher.Contracts\BKE.Launcher.Contracts.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10001}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Application", "src\BKE.Launcher.Application\BKE.Launcher.Application.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10002}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.AgentClient", "src\BKE.Launcher.AgentClient\BKE.Launcher.AgentClient.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10003}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.PluginHost", "src\BKE.Launcher.PluginHost\BKE.Launcher.PluginHost.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10004}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Infrastructure", "src\BKE.Launcher.Infrastructure\BKE.Launcher.Infrastructure.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10005}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Presentation", "src\BKE.Launcher.Presentation\BKE.Launcher.Presentation.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10006}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Desktop", "src\BKE.Launcher.Desktop\BKE.Launcher.Desktop.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10007}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.ContractCertification", "tests\BKE.Launcher.ContractCertification\BKE.Launcher.ContractCertification.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10008}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.PluginCertification", "tests\BKE.Launcher.PluginCertification\BKE.Launcher.PluginCertification.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10002}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10003}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10004}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10004}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10004}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10004}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10005}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10005}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10005}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10005}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10006}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10006}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10006}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10006}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10007}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10007}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10007}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10007}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10008}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10008}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10008}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10008}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

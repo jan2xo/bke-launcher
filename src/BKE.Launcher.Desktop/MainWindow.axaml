@@ -1,0 +1,104 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BKE.Launcher.Presentation"
+        x:Class="BKE.Launcher.Desktop.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="BKE Launcher"
+        Width="1120"
+        Height="740"
+        MinWidth="860"
+        MinHeight="580">
+  <Grid RowDefinitions="Auto,*" Margin="28">
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,24">
+      <StackPanel Spacing="4">
+        <TextBlock Text="BKE Launcher" FontSize="30" FontWeight="SemiBold" />
+        <TextBlock Text="Your BKE software, one machine-local trust boundary." Opacity="0.72" />
+      </StackPanel>
+      <Border Grid.Column="1" Padding="14,8" CornerRadius="8">
+        <TextBlock Text="{Binding SessionStatus}" FontWeight="SemiBold" />
+      </Border>
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="24">
+      <Border Padding="22" CornerRadius="12">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Account" FontSize="20" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding AccountDisplay}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Opacity="0.78" />
+
+          <TextBlock Text="Device code" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Text="{Binding UserCode}" FontFamily="Consolas" FontSize="18" />
+          <TextBlock Text="{Binding VerificationUri}" TextWrapping="Wrap" Opacity="0.72" />
+
+          <Button Content="Continue with BKE" Click="StartSignIn" />
+          <Button Content="Refresh account status" Click="RefreshStatus" />
+          <Button Content="Sign out on this machine" Click="Logout" />
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Padding="22" CornerRadius="12">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="3">
+              <TextBlock Text="My Software" FontSize="20" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding CatalogMessage}" TextWrapping="Wrap" Opacity="0.72" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+              <Border Padding="10,6" CornerRadius="8">
+                <TextBlock Text="{Binding CatalogStatus}" FontSize="11" FontWeight="SemiBold" />
+              </Border>
+              <Button Content="Refresh software" Click="RefreshCatalog" />
+            </StackPanel>
+          </Grid>
+
+          <TextBlock Grid.Row="1"
+                     Text="Execution policy comes from Digital Solutions; installed state comes from the Licensing Agent."
+                     TextWrapping="Wrap"
+                     Opacity="0.62"
+                     Margin="0,12,0,14" />
+
+          <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+              <ItemsControl ItemsSource="{Binding Products}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SoftwareProductViewModel">
+                    <Border Padding="14" CornerRadius="10" Margin="0,0,0,8">
+                      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="15" />
+                        <TextBlock Grid.Column="1" Text="{Binding StateLabel}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="1" Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.72" Margin="0,4,18,0" />
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                          <TextBlock Text="{Binding ExecutionLabel}" FontSize="11" Opacity="0.72" />
+                          <TextBlock Text="{Binding VersionLabel}" FontSize="11" Opacity="0.72" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2"
+                                    Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    Margin="16,6,0,0">
+                          <Button Content="Install"
+                                  IsVisible="{Binding CanInstall}"
+                                  Click="InstallProduct" />
+                          <Button Content="Open"
+                                  IsVisible="{Binding CanOpen}"
+                                  Click="OpenProduct" />
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Border IsVisible="{Binding ShowEmptyProducts}" Padding="18" CornerRadius="10">
+                <TextBlock Text="No Agent-projected software is available yet."
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           Opacity="0.68" />
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

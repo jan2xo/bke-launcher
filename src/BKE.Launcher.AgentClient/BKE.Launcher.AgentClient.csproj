@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>BKE.Launcher.AgentClient</AssemblyName>
+    <RootNamespace>BKE.Launcher.AgentClient</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../BKE.Launcher.Contracts/BKE.Launcher.Contracts.csproj" />
+    <ProjectReference Include="../BKE.Launcher.Application/BKE.Launcher.Application.csproj" />
+  </ItemGroup>
+</Project>
