@@ -8,6 +8,9 @@ namespace BKE.Launcher.AgentClient;
 
 public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
 {
+    internal static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = false,
@@ -29,7 +32,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             })
             {
                 BaseAddress = resolvedBaseAddress,
-                Timeout = TimeSpan.FromSeconds(5),
+                Timeout = Timeout.InfiniteTimeSpan,
             };
             _ownsHttpClient = true;
         }
@@ -37,6 +40,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
         {
             _http = httpClient;
             _http.BaseAddress = resolvedBaseAddress;
+            _http.Timeout = Timeout.InfiniteTimeSpan;
             _ownsHttpClient = false;
         }
     }
@@ -79,6 +83,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
         PostAsync<SoftwareInstallRequest, SoftwareInstallResponse>(
             AgentLocalContract.SoftwareInstallPath,
             request,
+            InstallRequestTimeout,
             cancellationToken);
 
     public Task<SoftwareOpenResponse> OpenSoftwareAsync(
@@ -89,16 +94,31 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    private Task<TResponse> PostAsync<TRequest, TResponse>(
+        string path,
+        TRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<TRequest, TResponse>(
+            path,
+            request,
+            DefaultRequestTimeout,
+            cancellationToken);
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(
         string path,
         TRequest request,
+        TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        timeoutSource.CancelAfter(timeout);
+
         using var response = await _http.PostAsJsonAsync(
             path,
             request,
             JsonOptions,
-            cancellationToken);
+            timeoutSource.Token);
 
         if (IsRedirect(response.StatusCode))
         {
@@ -109,7 +129,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
 
         var result = await response.Content.ReadFromJsonAsync<TResponse>(
             JsonOptions,
-            cancellationToken);
+            timeoutSource.Token);
 
         return result ?? throw new InvalidDataException(
             "BKE Licensing Agent returned an empty local response.");
