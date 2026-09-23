@@ -46,6 +46,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void UpdateProduct(object? sender, RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: SoftwareProductViewModel product,
+            } &&
+            product.CanUpdate)
+        {
+            await ViewModel.UpdateProductAsync(
+                product.ProductId,
+                CancellationToken.None);
+        }
+    }
+
     private async void OpenProduct(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
