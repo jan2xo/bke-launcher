@@ -34,7 +34,7 @@ VersionInfoDescription=BKE parent installer PREPRODUCTION
 VersionInfoProductName={#AppName}
 
 [Files]
-Source: "..\..\dist\windows-x64\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "..\..\dist\windows-arm64\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 Source: "..\..\agent-src\dist\installer\{#AgentInstaller}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\..\dist\parent\COMPONENT-MANIFEST.json"; DestDir: "{app}"; Flags: ignoreversion
 
