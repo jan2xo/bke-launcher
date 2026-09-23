@@ -158,10 +158,12 @@ jobs:
           Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service-arm64/bke-licensing-agent-service.exe" 0xAA64
 
           $arm64Parent = Get-Content packaging/windows/bke-parent-arm64.iss -Raw
-          if ($arm64Parent -notmatch 'dist\\\\windows-arm64\\\\\*') {
+          $expectedArm64Source = 'Source: "..\..\dist\windows-arm64\*"'
+          $forbiddenX64Source = 'Source: "..\..\dist\windows-x64\*"'
+          if (-not $arm64Parent.Contains($expectedArm64Source)) {
             throw "ARM64 parent installer is not wired to the ARM64 BKE payload."
           }
-          if ($arm64Parent -match 'Source:\s*"\.\.\\\\\.\.\\\\dist\\\\windows-x64\\\\\*"') {
+          if ($arm64Parent.Contains($forbiddenX64Source)) {
             throw "ARM64 parent installer still references the x64 BKE payload."
           }
 
