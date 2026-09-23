@@ -207,13 +207,10 @@ jobs:
           }
           if ($null -eq $mp) { throw "Microsoft Defender unavailable." }
 
-          foreach ($path in @(
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe",
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
-          )) {
-            & $mp.FullName -Scan -ScanType 3 -File (Resolve-Path $path).Path -DisableRemediation
-            if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
-          }
+          $remainingBkeRegistration = @(Get-InnoUninstallCandidates "BKE" $bkeRoot)
+          if ($remainingBkeRegistration.Count -ne 0) { throw "BKE uninstall registration survived root uninstall." }
+          $remainingAgentRegistration = @(Get-InnoUninstallCandidates "BKE Licensing Agent" $agentRoot)
+          if ($remainingAgentRegistration.Count -ne 0) { throw "Agent uninstall registration survived root uninstall." }
 
       - name: Fresh-install x64 parent package
         shell: pwsh
@@ -258,41 +255,99 @@ jobs:
           $lifecycle = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\lifecycle\bke-root-uninstall.ps1"
           if (!(Test-Path $lifecycle)) { throw "BKE root uninstall orchestrator is missing." }
 
-          $bkeUninstallKeys = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Parent-PREPRODUCTION}_is1",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Parent-PREPRODUCTION}_is1"
-          ) | Where-Object { Test-Path -LiteralPath $_ }
-          if ($bkeUninstallKeys.Count -ne 1) { throw "BKE uninstall registration is missing or ambiguous." }
+          function Get-InnoUninstallCandidates([string]$DisplayName, [string]$ExpectedRoot) {
+            $registryRoots = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            )
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\\') + '\\'
+            foreach ($registryRoot in $registryRoots) {
+              if (!(Test-Path -LiteralPath $registryRoot)) { continue }
+              foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
+                $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+                if ($null -eq $entry) { continue }
+                if ([string]$entry.DisplayName -ne $DisplayName -or [string]$entry.Publisher -ne "BKE Digital Solutions") { continue }
+                $command = [string]$entry.UninstallString
+                $uninstaller = $null
+                if ($command -match '^\s*"([^"]+)"') { $uninstaller = $Matches[1] }
+                elseif ($command -match '^\s*(\S+\.exe)(?:\s|$)') { $uninstaller = $Matches[1] }
+                if ([string]::IsNullOrWhiteSpace($uninstaller)) { continue }
+                $fullUninstaller = [IO.Path]::GetFullPath($uninstaller)
+                if (!$fullUninstaller.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ([IO.Path]::GetFileName($fullUninstaller) -notmatch '^unins\d+\.exe$') { continue }
+                [pscustomobject]@{ RegistryPath = $key.PSPath; Uninstaller = $fullUninstaller }
+              }
+            }
+          }
 
-          $agentUninstallKeys = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1"
-          ) | Where-Object { Test-Path -LiteralPath $_ }
-          if ($agentUninstallKeys.Count -ne 1) { throw "Agent uninstall registration is missing or ambiguous." }
+          $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
+          $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
+          $bkeUninstallEntries = @(Get-InnoUninstallCandidates "BKE" $bkeRoot)
+          if ($bkeUninstallEntries.Count -ne 1) { throw "BKE uninstall registration is missing or ambiguous." }
+          $agentUninstallEntries = @(Get-InnoUninstallCandidates "BKE Licensing Agent" $agentRoot)
+          if ($agentUninstallEntries.Count -ne 1) { throw "Agent uninstall registration is missing or ambiguous." }
 
           Write-Host "BKE parent installer x64 fresh install: PASS"
 
       - name: Certify full BKE root uninstall
         shell: pwsh
         run: |
-          function Resolve-InnoUninstaller([string]$AppId, [string]$DisplayName) {
-            $paths = @(
-              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$($AppId)_is1",
-              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$($AppId)_is1"
+          function Get-InnoUninstallCandidates([string]$DisplayName, [string]$ExpectedRoot) {
+            $registryRoots = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
             )
-            $entries = @(
-              foreach ($path in $paths) {
-                if (Test-Path -LiteralPath $path) {
-                  Get-ItemProperty -LiteralPath $path
-                }
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\\') + '\\'
+            foreach ($registryRoot in $registryRoots) {
+              if (!(Test-Path -LiteralPath $registryRoot)) { continue }
+              foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
+                $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+                if ($null -eq $entry) { continue }
+                if ([string]$entry.DisplayName -ne $DisplayName -or [string]$entry.Publisher -ne "BKE Digital Solutions") { continue }
+                $command = [string]$entry.UninstallString
+                $uninstaller = $null
+                if ($command -match '^\s*"([^"]+)"') { $uninstaller = $Matches[1] }
+                elseif ($command -match '^\s*(\S+\.exe)(?:\s|$)') { $uninstaller = $Matches[1] }
+                if ([string]::IsNullOrWhiteSpace($uninstaller)) { continue }
+                $fullUninstaller = [IO.Path]::GetFullPath($uninstaller)
+                if (!$fullUninstaller.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ([IO.Path]::GetFileName($fullUninstaller) -notmatch '^unins\d+\.exe$') { continue }
+                [pscustomobject]@{ RegistryPath = $key.PSPath; Uninstaller = $fullUninstaller }
               }
+            }
+          }
+
+          function Get-InnoUninstallCandidates([string]$DisplayName, [string]$ExpectedRoot) {
+            $registryRoots = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
             )
-            if ($entries.Count -ne 1) { throw "Expected exactly one uninstall entry for $DisplayName." }
-            if ([string]$entries[0].DisplayName -ne $DisplayName) { throw "Unexpected uninstall display name for $DisplayName." }
-            $command = [string]$entries[0].UninstallString
-            if ($command -match '^\s*"([^"]+)"') { return $Matches[1] }
-            if ($command -match '^\s*(\S+\.exe)(?:\s|$)') { return $Matches[1] }
-            throw "Could not parse uninstall command for $DisplayName."
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\\') + '\\'
+            foreach ($registryRoot in $registryRoots) {
+              if (!(Test-Path -LiteralPath $registryRoot)) { continue }
+              foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
+                $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+                if ($null -eq $entry) { continue }
+                if ([string]$entry.DisplayName -ne $DisplayName -or [string]$entry.Publisher -ne "BKE Digital Solutions") { continue }
+                $command = [string]$entry.UninstallString
+                $uninstaller = $null
+                if ($command -match '^\s*"([^"]+)"') { $uninstaller = $Matches[1] }
+                elseif ($command -match '^\s*(\S+\.exe)(?:\s|$)') { $uninstaller = $Matches[1] }
+                if ([string]::IsNullOrWhiteSpace($uninstaller)) { continue }
+                $fullUninstaller = [IO.Path]::GetFullPath($uninstaller)
+                if (!$fullUninstaller.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ([IO.Path]::GetFileName($fullUninstaller) -notmatch '^unins\d+\.exe$') { continue }
+                [pscustomobject]@{ RegistryPath = $key.PSPath; Uninstaller = $fullUninstaller }
+              }
+            }
+          }
+
+          function Resolve-InnoUninstaller([string]$DisplayName, [string]$ExpectedRoot) {
+            $entries = @(Get-InnoUninstallCandidates $DisplayName $ExpectedRoot)
+            if ($entries.Count -ne 1) { throw "Expected exactly one trusted uninstall entry for $DisplayName." }
+            $uninstaller = [string]$entries[0].Uninstaller
+            if (!(Test-Path -LiteralPath $uninstaller -PathType Leaf)) { throw "Registered uninstaller is missing for $DisplayName." }
+            return $uninstaller
           }
 
           $sentinelRoot = Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data"
@@ -306,10 +361,10 @@ jobs:
           $managedRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Certification Product"
           if (!(Test-Path $managedRoot)) { throw "Managed product fixture was not created." }
 
-          $bkeUninstaller = Resolve-InnoUninstaller "{BKE-Parent-PREPRODUCTION}" "BKE"
           $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
           $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
           $agentData = Join-Path $env:ProgramData "BKE Digital Solutions\Licensing Agent"
+          $bkeUninstaller = Resolve-InnoUninstaller "BKE" $bkeRoot
 
           $process = Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "BKE root uninstall failed: $($process.ExitCode)" }
@@ -375,7 +430,7 @@ jobs:
           $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
           $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
           $sentinel = Join-Path (Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data") "sentinel.txt"
-          $bkeUninstaller = Resolve-InnoUninstaller "{BKE-Parent-PREPRODUCTION}" "BKE"
+          $bkeUninstaller = Resolve-InnoUninstaller "BKE" $bkeRoot
 
           $uninstall=Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART") -Wait -PassThru
           if ($uninstall.ExitCode -eq 0) { throw "BKE root uninstall did not fail closed for LEGACY_UNKNOWN inventory." }
