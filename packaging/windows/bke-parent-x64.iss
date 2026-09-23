@@ -27,8 +27,10 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
-Uninstallable=no
-CreateUninstallRegKey=no
+Uninstallable=yes
+CreateUninstallRegKey=yes
+UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\\bke-launcher.exe
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription=BKE parent installer PREPRODUCTION
 VersionInfoProductName={#AppName}
@@ -38,8 +40,7 @@ Source: "..\..\dist\windows-x64\*"; DestDir: "{app}"; Flags: recursesubdirs igno
 Source: "..\..\agent-src\dist\installer\{#AgentInstaller}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\..\dist\parent\COMPONENT-MANIFEST.json"; DestDir: "{app}"; Flags: ignoreversion
 
-[Icons]
-Name: "{group}\BKE"; Filename: "{app}\bke-launcher.exe"
+[UninstallDelete]\nType: filesandordirs; Name: "{app}"\n\n[Icons]\nName: "{group}\BKE"; Filename: "{app}\bke-launcher.exe"
 Name: "{autodesktop}\BKE"; Filename: "{app}\bke-launcher.exe"
 
 [Run]
@@ -104,4 +105,46 @@ begin
 
   RemoveAgentCustomerShortcut;
   Log('Bundled Licensing Agent is healthy; BKE remains the only customer-facing desktop entry.');
+end;
+
+
+function InitializeUninstall(): Boolean;
+var
+  ResultCode: Integer;
+  PowerShell: String;
+  ScriptPath: String;
+  Parameters: String;
+begin
+  Result := False;
+  ScriptPath := ExpandConstant('{app}\\lifecycle\\bke-root-uninstall.ps1');
+
+  if not FileExists(ScriptPath) then
+  begin
+    Log('BKE root uninstall refused teardown because the lifecycle orchestrator is missing.');
+    Exit;
+  end;
+
+  PowerShell := ExpandConstant('{sys}\\WindowsPowerShell\\v1.0\\powershell.exe');
+  Parameters := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
+
+  if not Exec(
+    PowerShell,
+    Parameters,
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode) then
+  begin
+    Log('BKE root uninstall could not execute the lifecycle orchestrator.');
+    Exit;
+  end;
+
+  if ResultCode <> 0 then
+  begin
+    Log(Format('BKE root uninstall prerequisite cleanup failed with exit code %d; BKE will remain installed.', [ResultCode]));
+    Exit;
+  end;
+
+  Log('BKE managed products and Licensing Agent were removed safely; continuing BKE uninstall.');
+  Result := True;
 end;
