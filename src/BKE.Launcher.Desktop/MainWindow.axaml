@@ -94,6 +94,9 @@
                           <Button Content="Install"
                                   IsVisible="{Binding CanInstall}"
                                   Click="InstallProduct" />
+                          <Button Content="Update"
+                                  IsVisible="{Binding CanUpdate}"
+                                  Click="UpdateProduct" />
                           <Button Content="Open"
                                   IsVisible="{Binding CanOpen}"
                                   Click="OpenProduct" />
