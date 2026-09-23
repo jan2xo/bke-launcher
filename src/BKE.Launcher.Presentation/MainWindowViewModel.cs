@@ -9,26 +9,30 @@ namespace BKE.Launcher.Presentation;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly LauncherAccountSessionController _accountSession;
+    private readonly LauncherNativeSignInController _nativeSignIn;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareOpenController _softwareOpen;
     private readonly LauncherSoftwareRemoveController _softwareRemove;
     private string _sessionStatus = "SIGNED_OUT";
     private string _accountDisplay = "Not signed in";
-    private string _userCode = string.Empty;
-    private string _verificationUri = string.Empty;
-    private string _message = "Connect this Launcher to the BKE Licensing Agent.";
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private LauncherNativeAccountChoice? _selectedAccount;
+    private string _message = "Sign in with your BKE account.";
     private string _catalogStatus = "AUTH_REQUIRED";
     private string _catalogMessage = "Sign in to load your BKE software.";
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
+        LauncherNativeSignInController nativeSignIn,
         LauncherCatalogService catalog,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareOpenController softwareOpen,
         LauncherSoftwareRemoveController softwareRemove)
     {
         _accountSession = accountSession;
+        _nativeSignIn = nativeSignIn;
         _catalog = catalog;
         _softwareInstall = softwareInstall;
         _softwareOpen = softwareOpen;
@@ -51,17 +55,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _accountDisplay, value);
     }
 
-    public string UserCode
+    public string Email
     {
-        get => _userCode;
-        private set => SetField(ref _userCode, value);
+        get => _email;
+        set => SetField(ref _email, value);
     }
 
-    public string VerificationUri
+    public string Password
     {
-        get => _verificationUri;
-        private set => SetField(ref _verificationUri, value);
+        get => _password;
+        set => SetField(ref _password, value);
     }
+
+    public ObservableCollection<LauncherNativeAccountChoice> AccountChoices { get; } = [];
+
+    public LauncherNativeAccountChoice? SelectedAccount
+    {
+        get => _selectedAccount;
+        set => SetField(ref _selectedAccount, value);
+    }
+
+    public bool ShowAccountSelection => AccountChoices.Count > 0;
 
     public string Message
     {
@@ -85,28 +99,64 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task StartSignInAsync(CancellationToken cancellationToken)
     {
+        var email = Email.Trim();
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrEmpty(Password))
+        {
+            SessionStatus = "FAILED";
+            Message = "Enter your BKE email and password.";
+            return;
+        }
+
         try
         {
-            var response = await _accountSession.StartAsync(cancellationToken);
-            SessionStatus = response.Status;
-            UserCode = response.UserCode ?? string.Empty;
-            VerificationUri = response.VerificationUri ?? string.Empty;
-            Message = response.Status switch
-            {
-                "AUTHENTICATED" => "This machine already has an authenticated BKE account session.",
-                "PENDING" => "Complete sign-in in your browser, then refresh account status.",
-                _ => response.Error?.Message ?? "BKE account sign-in could not be started.",
-            };
+            var result = await _nativeSignIn.SignInAsync(
+                email,
+                Password,
+                SelectedAccount?.AccountId,
+                cancellationToken);
 
-            if (response.Status == "AUTHENTICATED")
+            SessionStatus = result.Status;
+
+            if (result.Status == "ACCOUNT_SELECTION_REQUIRED")
             {
-                await RefreshCatalogAsync(cancellationToken);
+                AccountChoices.Clear();
+                foreach (var account in result.Accounts)
+                {
+                    AccountChoices.Add(account);
+                }
+                SelectedAccount = AccountChoices.FirstOrDefault();
+                Raise(nameof(ShowAccountSelection));
+                Message = result.Message ?? "Choose the account to use on this machine, then sign in again.";
+                return;
             }
+
+            Password = string.Empty;
+            ClearAccountChoices();
+
+            if (result.Status == "AUTHENTICATED" && result.Account is not null)
+            {
+                AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
+                Message = result.Message ?? "Signed in with BKE on this machine.";
+                await RefreshCatalogAsync(cancellationToken);
+                return;
+            }
+
+            AccountDisplay = "Not signed in";
+            Message = result.Message ?? "BKE account sign-in failed.";
+            ClearCatalog(
+                "AUTH_REQUIRED",
+                "Sign in to load your BKE software.");
         }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
         {
-            SessionStatus = "AGENT_UNAVAILABLE";
-            Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
+            Password = string.Empty;
+            ClearAccountChoices();
+            SessionStatus = "AUTH_UNAVAILABLE";
+            AccountDisplay = "Not signed in";
+            Message = "BKE account authentication or the Licensing Agent is unavailable.";
         }
     }
 
@@ -421,8 +471,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var response = await _accountSession.LogoutAsync(cancellationToken);
             SessionStatus = response.Status;
             AccountDisplay = "Not signed in";
-            UserCode = string.Empty;
-            VerificationUri = string.Empty;
+            Password = string.Empty;
+            ClearAccountChoices();
             Message = response.Error?.Message ?? "Signed out on this machine.";
             ClearCatalog(
                 "AUTH_REQUIRED",
@@ -451,12 +501,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Message = response.Error?.Message ?? response.Status switch
         {
             "AUTHENTICATED" => "Launcher and License Center share this Agent-owned account session.",
-            "PENDING" => "Waiting for browser approval.",
+            "PENDING" => "A legacy account authorization is pending.",
             "SIGNED_OUT" => "No BKE account is authenticated on this machine.",
             "DENIED" => "BKE account authorization was denied.",
             "EXPIRED" => "BKE account authorization expired.",
             _ => "BKE account-session status updated.",
         };
+    }
+
+    private void ClearAccountChoices()
+    {
+        AccountChoices.Clear();
+        SelectedAccount = null;
+        Raise(nameof(ShowAccountSelection));
     }
 
     private void ClearCatalog(string status, string message)
@@ -467,9 +524,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowEmptyProducts));
     }
 
-    private void SetField(ref string field, string value, [CallerMemberName] string? propertyName = null)
+    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
-        if (string.Equals(field, value, StringComparison.Ordinal))
+        if (EqualityComparer<T>.Default.Equals(field, value))
         {
             return;
         }
