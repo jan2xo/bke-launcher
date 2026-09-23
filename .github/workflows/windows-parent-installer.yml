@@ -20,7 +20,7 @@ jobs:
     env:
       BKE_VERSION: "0.1.0"
       AGENT_VERSION: "2.0.0"
-      AGENT_SOURCE_SHA: "b1718c5cb4193a30a45eb879ecf5182d97a656f8"
+      AGENT_SOURCE_SHA: "8e4ccfe148b21a3744eeacb14faeb473073ec395"
       AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
 
     steps:
@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: b1718c5cb4193a30a45eb879ecf5182d97a656f8
+          ref: 8e4ccfe148b21a3744eeacb14faeb473073ec395
           path: agent-src
           fetch-depth: 1
 
@@ -84,6 +84,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Agent updater build failed." }
           dotnet build dotnet/src/BKE.LicensingAgent.Provisioner/BKE.LicensingAgent.Provisioner.csproj --configuration Release
           if ($LASTEXITCODE -ne 0) { throw "Agent provisioner build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.RootCleanup/BKE.LicensingAgent.RootCleanup.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent root cleanup build failed." }
           dotnet run --project dotnet/certification/BKE.LicensingAgent.ContractCertification/BKE.LicensingAgent.ContractCertification.csproj --configuration Release
           if ($LASTEXITCODE -ne 0) { throw "Agent contract certification failed." }
 
@@ -156,6 +158,8 @@ jobs:
           Assert-PeMachine "dist/windows-arm64/bke-launcher.exe" 0xAA64
           Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service/bke-licensing-agent-service.exe" 0x8664
           Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service-arm64/bke-licensing-agent-service.exe" 0xAA64
+          Assert-PeMachine "agent-src/dist/windows/bke-root-cleanup-x64/bke-root-cleanup.exe" 0x8664
+          Assert-PeMachine "agent-src/dist/windows/bke-root-cleanup-arm64/bke-root-cleanup.exe" 0xAA64
 
       - name: Build parent component manifest
         shell: pwsh
@@ -170,7 +174,7 @@ jobs:
             agent_source_sha = $env:AGENT_SOURCE_SHA
             agent_version = $env:AGENT_VERSION
             agent_trust = "DISPOSABLE_PREPRODUCTION"
-            root_uninstall = "NOT_IMPLEMENTED"
+            root_uninstall = "IMPLEMENTED_PREPRODUCTION"
             customer_download_surface = "BKE_ONLY"
           }
           $manifest | ConvertTo-Json -Depth 5 | Set-Content dist/parent/COMPONENT-MANIFEST.json -Encoding utf8
@@ -205,7 +209,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
           }
 
-      - name: Fresh-install x64 parent package
+      - name: Fresh-install then root-uninstall x64 parent package
         shell: pwsh
         run: |
           $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
@@ -243,7 +247,44 @@ jobs:
           $manifest=Get-Content (Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\COMPONENT-MANIFEST.json") -Raw | ConvertFrom-Json
           if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Installed Agent source pin drifted." }
           if ($manifest.production_ready -ne $false) { throw "PREPRODUCTION parent installer claims production readiness." }
-          Write-Host "BKE parent installer x64 fresh install: PASS"
+          if ($manifest.root_uninstall -ne "IMPLEMENTED_PREPRODUCTION") { throw "Root uninstall manifest state drifted." }
+
+          $rootCleanup=Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent\root-cleanup\bke-root-cleanup.exe"
+          if (!(Test-Path $rootCleanup)) { throw "Installed Agent root-cleanup helper is missing." }
+          $rootCleanupSmoke=Start-Process -FilePath $rootCleanup -ArgumentList "--smoke" -Wait -PassThru
+          if ($rootCleanupSmoke.ExitCode -ne 0) { throw "Installed Agent root-cleanup smoke failed: $($rootCleanupSmoke.ExitCode)" }
+
+          $userDataRoot=Join-Path ([Environment]::GetFolderPath("MyDocuments")) "BKE User Projects"
+          New-Item -ItemType Directory -Force $userDataRoot | Out-Null
+          $userSentinel=Join-Path $userDataRoot "root-uninstall-preserve.txt"
+          "customer-created-data" | Set-Content $userSentinel -Encoding utf8
+
+          $bkeRoot=Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
+          $bkeUninstaller=Join-Path $bkeRoot "unins000.exe"
+          if (!(Test-Path $bkeUninstaller)) { throw "BKE root uninstaller is missing." }
+
+          $uninstallLog=Join-Path $env:RUNNER_TEMP "bke-root-uninstall.log"
+          $uninstall=Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$uninstallLog") -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) {
+            if (Test-Path $uninstallLog) { Get-Content $uninstallLog }
+            throw "BKE root uninstall failed: $($uninstall.ExitCode)"
+          }
+
+          if (Test-Path (Join-Path $bkeRoot "bke-launcher.exe")) { throw "BKE launcher survived root uninstall." }
+
+          $remainingService=Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue
+          if ($null -ne $remainingService) { throw "Licensing Agent service survived BKE root uninstall." }
+
+          $agentRoot=Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
+          if (Test-Path $agentRoot) { throw "Licensing Agent install root survived BKE root uninstall." }
+
+          $agentData=Join-Path $env:ProgramData "BKE Digital Solutions\Licensing Agent"
+          if (Test-Path $agentData) { throw "Licensing Agent machine state survived BKE root uninstall." }
+
+          if (!(Test-Path $userSentinel)) { throw "Customer-created project data was removed by BKE root uninstall." }
+          if ((Get-Content $userSentinel -Raw).Trim() -ne "customer-created-data") { throw "Customer-created project data changed during BKE root uninstall." }
+
+          Write-Host "BKE parent installer x64 install + root uninstall: PASS"
 
       - name: Package parent-installer evidence
         shell: pwsh
@@ -263,7 +304,7 @@ jobs:
           @(
             "PREPRODUCTION ONLY",
             "Agent trust is disposable and unsigned.",
-            "Root BKE uninstall is intentionally disabled until its lifecycle is implemented.",
+            "Root BKE uninstall removes managed products and Agent platform state while preserving user-created project data.",
             "Do not publish these candidates as production installers."
           ) | Set-Content dist/parent-evidence/NOT-PRODUCTION.txt -Encoding utf8
 
