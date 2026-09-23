@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using BKE.Launcher.AgentClient;
 using BKE.Launcher.Application;
 using BKE.Launcher.Contracts;
@@ -92,6 +93,29 @@ Require(
         name.Contains("Email", StringComparison.OrdinalIgnoreCase)),
     "Launcher Agent native-complete request contains credentials.");
 
+var updateRequestProperties = typeof(SoftwareUpdateRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    updateRequestProperties.SequenceEqual(["CorrelationId", "ProductId"]),
+    "Launcher widened the Agent software-update request.");
+
+using (var updateRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new SoftwareUpdateRequest(
+            "cert-update-correlation",
+            "bke-cert-product"))))
+{
+    var updateRequestWireFields = updateRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        updateRequestWireFields.SequenceEqual(["correlation_id", "product_id"]),
+        "Launcher software-update wire request widened.");
+}
+
 var nativeLoginResponseProperties = typeof(NativeBkeLoginResponse)
     .GetProperties()
     .Select(property => property.Name)
@@ -126,8 +150,35 @@ Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanUpdate}\"", StringCom
 Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "Software Update click handler is missing.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
-Require(viewModelSource.Contains("product.State == LauncherProductState.UpdateAvailable", StringComparison.Ordinal),
-    "Launcher Update action widened beyond UPDATE_AVAILABLE.");
+Require(viewModelSource.Contains(
+    "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
+    StringComparison.Ordinal),
+    "Launcher Update action is not restricted to STANDALONE + UPDATE_AVAILABLE.");
+
+var launcherSource = string.Join(
+    "\n",
+    Directory.EnumerateFiles("src", "*.cs", SearchOption.AllDirectories)
+        .Where(path =>
+            !path.Split(Path.DirectorySeparatorChar)
+                .Any(segment => segment is "bin" or "obj"))
+        .Select(File.ReadAllText));
+var forbiddenUpdateAuthorityMarkers = new[]
+{
+    "/api/agent-sessions/update/standalone",
+    "api.github.com/repos/",
+    "/releases/tags/",
+    "artifact_sha256",
+    "artifact_size",
+    "install_root",
+    "bke.privileged-update-request",
+    "privileged_arguments",
+};
+foreach (var marker in forbiddenUpdateAuthorityMarkers)
+{
+    Require(
+        !launcherSource.Contains(marker, StringComparison.OrdinalIgnoreCase),
+        $"Launcher absorbed forbidden software-update authority: {marker}");
+}
 
 var contextProperties = typeof(ILauncherContext)
     .GetProperties()
