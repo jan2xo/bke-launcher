@@ -180,6 +180,15 @@ jobs:
           $manifest | ConvertTo-Json -Depth 5 | Set-Content dist/parent/COMPONENT-MANIFEST.json -Encoding utf8
           Get-Content dist/parent/COMPONENT-MANIFEST.json
 
+      - name: Certify parent architecture source mapping
+        shell: pwsh
+        run: |
+          $x64=Get-Content packaging/windows/bke-parent-x64.iss -Raw
+          $arm64=Get-Content packaging/windows/bke-parent-arm64.iss -Raw
+          if ($x64 -notmatch 'dist\\windows-x64') { throw "x64 parent installer no longer embeds x64 BKE payload." }
+          if ($arm64 -notmatch 'dist\\windows-arm64') { throw "ARM64 parent installer no longer embeds ARM64 BKE payload." }
+          if ($arm64 -match 'Source:.*dist\\windows-x64') { throw "ARM64 parent installer still references x64 BKE payload." }
+
       - name: Compile BKE parent installers
         shell: pwsh
         run: |
