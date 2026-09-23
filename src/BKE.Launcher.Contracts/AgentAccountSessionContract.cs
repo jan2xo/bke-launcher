@@ -12,6 +12,8 @@ public static class AgentLocalContract
     public const int SoftwareInstallContractVersion = 1;
     public const string SoftwareOpenCapabilityId = "bke.software-open";
     public const int SoftwareOpenContractVersion = 1;
+    public const string SoftwareRemoveCapabilityId = "bke.software-remove";
+    public const int SoftwareRemoveContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
     public const string AccountSessionStartPath = "/v1/account-session/start";
     public const string AccountSessionStatusPath = "/v1/account-session/status";
@@ -19,6 +21,7 @@ public static class AgentLocalContract
     public const string SoftwareCatalogPath = "/v1/software/catalog";
     public const string SoftwareInstallPath = "/v1/software/install";
     public const string SoftwareOpenPath = "/v1/software/open";
+    public const string SoftwareRemovePath = "/v1/software/remove";
 }
 
 public sealed record AccountSessionStartRequest(

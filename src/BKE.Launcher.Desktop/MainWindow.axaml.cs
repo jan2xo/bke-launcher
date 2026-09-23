@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using BKE.Launcher.Presentation;
 
 namespace BKE.Launcher.Desktop;
@@ -63,6 +65,85 @@ public sealed partial class MainWindow : Window
                 product.ProductId,
                 CancellationToken.None);
         }
+    }
+
+    private async void RemoveProduct(object? sender, RoutedEventArgs args)
+    {
+        if (sender is not Button
+            {
+                DataContext: SoftwareProductViewModel product,
+            } ||
+            !product.CanRemove)
+        {
+            return;
+        }
+
+        if (!await ConfirmRemovalAsync(product))
+        {
+            return;
+        }
+
+        await ViewModel.RemoveProductAsync(
+            product.ProductId,
+            CancellationToken.None);
+    }
+
+    private async Task<bool> ConfirmRemovalAsync(
+        SoftwareProductViewModel product)
+    {
+        var dialog = new Window
+        {
+            Title = "Remove software",
+            Width = 440,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var remove = new Button
+        {
+            Content = "Remove",
+        };
+        var cancel = new Button
+        {
+            Content = "Cancel",
+        };
+
+        remove.Click += (_, _) => dialog.Close(true);
+        cancel.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(24),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"Remove {product.DisplayName}?",
+                    FontSize = 20,
+                    FontWeight = Avalonia.Media.FontWeight.SemiBold,
+                },
+                new TextBlock
+                {
+                    Text = "BKE will ask the Licensing Agent to run the product's trusted uninstall strategy. User-created projects and exports outside the managed install root are not part of this removal.",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 10,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children =
+                    {
+                        cancel,
+                        remove,
+                    },
+                },
+            },
+        };
+
+        return await dialog.ShowDialog<bool>(this);
     }
 
     private async void Logout(object? sender, RoutedEventArgs args)
