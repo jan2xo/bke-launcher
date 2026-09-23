@@ -3,4 +3,8 @@
     <AssemblyName>BKE.Launcher.Infrastructure</AssemblyName>
     <RootNamespace>BKE.Launcher.Infrastructure</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../BKE.Launcher.Contracts/BKE.Launcher.Contracts.csproj" />
+    <ProjectReference Include="../BKE.Launcher.Application/BKE.Launcher.Application.csproj" />
+  </ItemGroup>
 </Project>
