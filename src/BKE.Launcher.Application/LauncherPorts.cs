@@ -27,6 +27,10 @@ public interface ILauncherAgentClient
     Task<SoftwareOpenResponse> OpenSoftwareAsync(
         SoftwareOpenRequest request,
         CancellationToken cancellationToken);
+
+    Task<SoftwareRemoveResponse> RemoveSoftwareAsync(
+        SoftwareRemoveRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record LauncherCatalogSnapshot(
