@@ -16,6 +16,8 @@ public static class AgentLocalContract
     public const int SoftwareRemoveContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
     public const string AccountSessionStartPath = "/v1/account-session/start";
+    public const string AccountSessionNativeContextPath = "/v1/account-session/native/context";
+    public const string AccountSessionNativeCompletePath = "/v1/account-session/native/complete";
     public const string AccountSessionStatusPath = "/v1/account-session/status";
     public const string AccountSessionLogoutPath = "/v1/account-session/logout";
     public const string SoftwareCatalogPath = "/v1/software/catalog";
@@ -34,6 +36,30 @@ public sealed record AccountSessionStartResponse(
     [property: JsonPropertyName("verification_uri"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? VerificationUri,
     [property: JsonPropertyName("user_code"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? UserCode,
     [property: JsonPropertyName("expires_at"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ExpiresAt,
+    [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountSessionError? Error);
+
+public sealed record AccountSessionNativeContextRequest(
+    [property: JsonPropertyName("correlation_id")] string CorrelationId);
+
+public sealed record AccountSessionNativeContextResponse(
+    [property: JsonPropertyName("capability_id")] string CapabilityId,
+    [property: JsonPropertyName("contract_version")] int ContractVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("device_id"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DeviceId,
+    [property: JsonPropertyName("device_name"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DeviceName,
+    [property: JsonPropertyName("platform"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Platform,
+    [property: JsonPropertyName("architecture"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Architecture,
+    [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountSessionError? Error);
+
+public sealed record AccountSessionNativeCompleteRequest(
+    [property: JsonPropertyName("correlation_id")] string CorrelationId,
+    [property: JsonPropertyName("handoff_code")] string HandoffCode);
+
+public sealed record AccountSessionNativeCompleteResponse(
+    [property: JsonPropertyName("capability_id")] string CapabilityId,
+    [property: JsonPropertyName("contract_version")] int ContractVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("account"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountSessionAccount? Account,
     [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountSessionError? Error);
 
 public sealed record AccountSessionStatusRequest(
