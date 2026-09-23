@@ -8,6 +8,7 @@
     <ProjectReference Include="../../src/BKE.Launcher.Contracts/BKE.Launcher.Contracts.csproj" />
     <ProjectReference Include="../../src/BKE.Launcher.Application/BKE.Launcher.Application.csproj" />
     <ProjectReference Include="../../src/BKE.Launcher.AgentClient/BKE.Launcher.AgentClient.csproj" />
+    <ProjectReference Include="../../src/BKE.Launcher.Infrastructure/BKE.Launcher.Infrastructure.csproj" />
     <ProjectReference Include="../../src/BKE.Launcher.PluginHost/BKE.Launcher.PluginHost.csproj" />
   </ItemGroup>
 </Project>
