@@ -46,6 +46,22 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
         }
     }
 
+    public Task<AccountSessionDeviceContextResponse> GetAccountSessionDeviceContextAsync(
+        AccountSessionDeviceContextRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountSessionDeviceContextRequest, AccountSessionDeviceContextResponse>(
+            AgentLocalContract.AccountSessionDeviceContextPath,
+            request,
+            cancellationToken);
+
+    public Task<AccountSessionCompleteResponse> CompleteAccountSessionAsync(
+        AccountSessionCompleteRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountSessionCompleteRequest, AccountSessionCompleteResponse>(
+            AgentLocalContract.AccountSessionCompletePath,
+            request,
+            cancellationToken);
+
     public Task<AccountSessionStartResponse> StartAccountSessionAsync(
         AccountSessionStartRequest request,
         CancellationToken cancellationToken) =>
