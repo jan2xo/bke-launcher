@@ -12,6 +12,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherNativeSignInController _nativeSignIn;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherSoftwareInstallController _softwareInstall;
+    private readonly LauncherSoftwareUpdateController _softwareUpdate;
     private readonly LauncherSoftwareOpenController _softwareOpen;
     private readonly LauncherSoftwareRemoveController _softwareRemove;
     private string _sessionStatus = "SIGNED_OUT";
@@ -30,6 +31,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherNativeSignInController nativeSignIn,
         LauncherCatalogService catalog,
         LauncherSoftwareInstallController softwareInstall,
+        LauncherSoftwareUpdateController softwareUpdate,
         LauncherSoftwareOpenController softwareOpen,
         LauncherSoftwareRemoveController softwareRemove)
     {
@@ -37,6 +39,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _nativeSignIn = nativeSignIn;
         _catalog = catalog;
         _softwareInstall = softwareInstall;
+        _softwareUpdate = softwareUpdate;
         _softwareOpen = softwareOpen;
         _softwareRemove = softwareRemove;
     }
@@ -359,6 +362,100 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task UpdateProductAsync(
+        string productId,
+        CancellationToken cancellationToken)
+    {
+        var index = Products
+            .Select((product, index) => (product, index))
+            .Where(item =>
+                string.Equals(
+                    item.product.ProductId,
+                    productId,
+                    StringComparison.Ordinal))
+            .Select(item => item.index)
+            .DefaultIfEmpty(-1)
+            .First();
+
+        if (index < 0 || !Products[index].CanUpdate)
+        {
+            return;
+        }
+
+        var previous = Products[index];
+        Products[index] = previous with
+        {
+            StateLabel = "Updating",
+            CanInstall = false,
+            CanUpdate = false,
+            CanOpen = false,
+            CanRemove = false,
+        };
+        CatalogStatus = "UPDATING";
+        CatalogMessage =
+            $"Starting verified update for {previous.DisplayName}…";
+
+        try
+        {
+            var response = await _softwareUpdate.UpdateAsync(
+                productId,
+                cancellationToken);
+
+            switch (response.Status)
+            {
+                case "STARTED":
+                case "IN_PROGRESS":
+                    CatalogStatus = "UPDATING";
+                    CatalogMessage = response.Status == "STARTED"
+                        ? $"Verified update started for {previous.DisplayName}. Refresh software after the elevation step completes."
+                        : $"An update is already in progress for {previous.DisplayName}.";
+                    return;
+
+                case "UP_TO_DATE":
+                    await RefreshCatalogAsync(cancellationToken);
+                    CatalogStatus = "READY";
+                    CatalogMessage =
+                        $"{previous.DisplayName} is already up to date.";
+                    return;
+
+                case "NOT_INSTALLED":
+                    await RefreshCatalogAsync(cancellationToken);
+                    CatalogMessage =
+                        $"{previous.DisplayName} is no longer installed on this machine.";
+                    return;
+
+                case "AUTH_REQUIRED":
+                    Products[index] = previous with
+                    {
+                        CanUpdate = false,
+                    };
+                    CatalogStatus = "AUTH_REQUIRED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        "Sign in with BKE before updating software.";
+                    return;
+
+                default:
+                    Products[index] = previous;
+                    CatalogStatus = "FAILED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        $"Update failed: {response.State}.";
+                    return;
+            }
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            Products[index] = previous;
+            CatalogStatus = "AGENT_UNAVAILABLE";
+            CatalogMessage =
+                "The BKE Licensing Agent update capability is unavailable or invalid.";
+        }
+    }
+
     public async Task OpenProductAsync(
         string productId,
         CancellationToken cancellationToken)
@@ -452,6 +549,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             StateLabel = "Removing",
             CanInstall = false,
+            CanUpdate = false,
             CanOpen = false,
             CanRemove = false,
         };
@@ -588,6 +686,7 @@ public sealed record SoftwareProductViewModel(
     string StateLabel,
     string VersionLabel,
     bool CanInstall,
+    bool CanUpdate,
     bool CanOpen,
     bool CanRemove)
 {
@@ -632,6 +731,8 @@ public sealed record SoftwareProductViewModel(
             version,
             product.ExecutionType == ProductExecutionType.Standalone &&
             product.State == LauncherProductState.Installable,
+            product.ExecutionType == ProductExecutionType.Standalone &&
+            product.State == LauncherProductState.UpdateAvailable,
             product.ExecutionType == ProductExecutionType.Standalone &&
             product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable,
             product.ExecutionType == ProductExecutionType.Standalone &&
