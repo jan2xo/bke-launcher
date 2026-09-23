@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:BKE.Launcher.Presentation"
+        xmlns:app="using:BKE.Launcher.Application"
         x:Class="BKE.Launcher.Desktop.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="BKE Launcher"
@@ -26,11 +27,25 @@
           <TextBlock Text="{Binding AccountDisplay}" TextWrapping="Wrap" />
           <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Opacity="0.78" />
 
-          <TextBlock Text="Device code" FontWeight="SemiBold" Margin="0,8,0,0" />
-          <TextBlock Text="{Binding UserCode}" FontFamily="Consolas" FontSize="18" />
-          <TextBlock Text="{Binding VerificationUri}" TextWrapping="Wrap" Opacity="0.72" />
+          <TextBlock Text="Email" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBox Text="{Binding Email, Mode=TwoWay}" />
 
-          <Button Content="Continue with BKE" Click="StartSignIn" />
+          <TextBlock Text="Password" FontWeight="SemiBold" />
+          <TextBox Text="{Binding Password, Mode=TwoWay}" PasswordChar="●" />
+
+          <StackPanel IsVisible="{Binding ShowAccountSelection}" Spacing="6">
+            <TextBlock Text="Account" FontWeight="SemiBold" />
+            <ComboBox ItemsSource="{Binding AccountChoices}"
+                      SelectedItem="{Binding SelectedAccount, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="app:LauncherNativeAccountChoice">
+                  <TextBlock Text="{Binding DisplayLabel}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <Button Content="Sign in" Click="StartSignIn" />
           <Button Content="Refresh account status" Click="RefreshStatus" />
           <Button Content="Sign out on this machine" Click="Logout" />
         </StackPanel>
