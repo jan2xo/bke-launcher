@@ -54,6 +54,22 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<AccountSessionNativeContextResponse> GetNativeAccountSessionContextAsync(
+        AccountSessionNativeContextRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountSessionNativeContextRequest, AccountSessionNativeContextResponse>(
+            AgentLocalContract.AccountSessionNativeContextPath,
+            request,
+            cancellationToken);
+
+    public Task<AccountSessionNativeCompleteResponse> CompleteNativeAccountSessionAsync(
+        AccountSessionNativeCompleteRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountSessionNativeCompleteRequest, AccountSessionNativeCompleteResponse>(
+            AgentLocalContract.AccountSessionNativeCompletePath,
+            request,
+            cancellationToken);
+
     public Task<AccountSessionStatusResponse> GetAccountSessionStatusAsync(
         AccountSessionStatusRequest request,
         CancellationToken cancellationToken) =>
