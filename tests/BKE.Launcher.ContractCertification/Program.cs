@@ -150,7 +150,8 @@ Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanUpdate}\"", StringCom
 Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "Software Update click handler is missing.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
-Require(viewModelSource.Contains(
+var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
+Require(normalizedViewModelSource.Contains(
     "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
     StringComparison.Ordinal),
     "Launcher Update action is not restricted to STANDALONE + UPDATE_AVAILABLE.");
