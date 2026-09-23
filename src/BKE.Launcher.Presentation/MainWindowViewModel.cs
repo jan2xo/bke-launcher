@@ -12,6 +12,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareOpenController _softwareOpen;
+    private readonly LauncherSoftwareRemoveController _softwareRemove;
     private string _sessionStatus = "SIGNED_OUT";
     private string _accountDisplay = "Not signed in";
     private string _userCode = string.Empty;
@@ -24,12 +25,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountSessionController accountSession,
         LauncherCatalogService catalog,
         LauncherSoftwareInstallController softwareInstall,
-        LauncherSoftwareOpenController softwareOpen)
+        LauncherSoftwareOpenController softwareOpen,
+        LauncherSoftwareRemoveController softwareRemove)
     {
         _accountSession = accountSession;
         _catalog = catalog;
         _softwareInstall = softwareInstall;
         _softwareOpen = softwareOpen;
+        _softwareRemove = softwareRemove;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -330,6 +333,87 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task RemoveProductAsync(
+        string productId,
+        CancellationToken cancellationToken)
+    {
+        var index = Products
+            .Select((product, index) => (product, index))
+            .Where(item =>
+                string.Equals(
+                    item.product.ProductId,
+                    productId,
+                    StringComparison.Ordinal))
+            .Select(item => item.index)
+            .DefaultIfEmpty(-1)
+            .First();
+
+        if (index < 0 || !Products[index].CanRemove)
+        {
+            return;
+        }
+
+        var previous = Products[index];
+        Products[index] = previous with
+        {
+            StateLabel = "Removing",
+            CanInstall = false,
+            CanOpen = false,
+            CanRemove = false,
+        };
+        CatalogStatus = "REMOVING";
+        CatalogMessage =
+            $"Removing {previous.DisplayName} through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _softwareRemove.RemoveAsync(
+                productId,
+                cancellationToken);
+
+            switch (response.Status)
+            {
+                case "REMOVED":
+                case "NOT_INSTALLED":
+                    CatalogStatus = "READY";
+                    CatalogMessage = response.Status == "REMOVED"
+                        ? $"{previous.DisplayName} was removed from this machine."
+                        : $"{previous.DisplayName} is no longer installed on this machine.";
+                    await RefreshCatalogAsync(cancellationToken);
+                    return;
+
+                case "AUTH_REQUIRED":
+                    Products[index] = previous with
+                    {
+                        CanRemove = false,
+                    };
+                    CatalogStatus = "AUTH_REQUIRED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        "Sign in with BKE before removing software.";
+                    return;
+
+                default:
+                    Products[index] = previous;
+                    CatalogStatus = "FAILED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        $"Remove failed: {response.State}.";
+                    return;
+            }
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            Products[index] = previous;
+            CatalogStatus = "AGENT_UNAVAILABLE";
+            CatalogMessage =
+                "The BKE Licensing Agent remove capability is unavailable or invalid.";
+        }
+    }
+
     public async Task LogoutAsync(CancellationToken cancellationToken)
     {
         try
@@ -406,7 +490,8 @@ public sealed record SoftwareProductViewModel(
     string StateLabel,
     string VersionLabel,
     bool CanInstall,
-    bool CanOpen)
+    bool CanOpen,
+    bool CanRemove)
 {
     public static SoftwareProductViewModel From(LauncherProduct product)
     {
@@ -450,6 +535,11 @@ public sealed record SoftwareProductViewModel(
             product.ExecutionType == ProductExecutionType.Standalone &&
             product.State == LauncherProductState.Installable,
             product.ExecutionType == ProductExecutionType.Standalone &&
-            product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable);
+            product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable,
+            product.ExecutionType == ProductExecutionType.Standalone &&
+            product.State is LauncherProductState.Installed
+                or LauncherProductState.UpdateAvailable
+                or LauncherProductState.InstalledNotEntitled
+                or LauncherProductState.RepairRequired);
     }
 }
