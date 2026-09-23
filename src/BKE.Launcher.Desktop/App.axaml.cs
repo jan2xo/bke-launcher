@@ -24,11 +24,13 @@ public sealed partial class App : Avalonia.Application
             var catalog = new LauncherCatalogService(catalogSource);
             var softwareInstall = new LauncherSoftwareInstallController(agentClient);
             var softwareOpen = new LauncherSoftwareOpenController(agentClient);
+            var softwareRemove = new LauncherSoftwareRemoveController(agentClient);
             var viewModel = new MainWindowViewModel(
                 accountSession,
                 catalog,
                 softwareInstall,
-                softwareOpen);
+                softwareOpen,
+                softwareRemove);
 
             desktop.MainWindow = new MainWindow
             {
