@@ -1,0 +1,276 @@
+name: BKE Windows Parent Installer
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-parent-installer.yml"
+      - "packaging/windows/**"
+      - "src/**"
+      - "tests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parent-installer:
+    name: BKE + Licensing Agent parent package
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      BKE_VERSION: "0.1.0"
+      AGENT_VERSION: "2.0.0"
+      AGENT_SOURCE_SHA: "b1718c5cb4193a30a45eb879ecf5182d97a656f8"
+      AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
+
+    steps:
+      - name: Checkout BKE Launcher
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Licensing Agent
+        uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: b1718c5cb4193a30a45eb879ecf5182d97a656f8
+          path: agent-src
+          fetch-depth: 1
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Certify BKE Launcher contracts
+        shell: pwsh
+        run: |
+          dotnet restore BKE.Launcher.sln
+          if ($LASTEXITCODE -ne 0) { throw "Launcher restore failed." }
+          dotnet build BKE.Launcher.sln -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw "Launcher build failed." }
+          dotnet run --project tests/BKE.Launcher.ContractCertification/BKE.Launcher.ContractCertification.csproj -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw "Launcher contract certification failed." }
+          dotnet run --project tests/BKE.Launcher.PluginCertification/BKE.Launcher.PluginCertification.csproj -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw "Launcher plugin certification failed." }
+
+      - name: Publish BKE x64 + ARM64 payloads
+        shell: pwsh
+        run: |
+          dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:DebugType=None -p:DebugSymbols=false -p:Version=$env:BKE_VERSION `
+            -o dist/windows-x64
+          if ($LASTEXITCODE -ne 0) { throw "BKE x64 publish failed." }
+
+          dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
+            -c Release -r win-arm64 --self-contained true `
+            -p:DebugType=None -p:DebugSymbols=false -p:Version=$env:BKE_VERSION `
+            -o dist/windows-arm64
+          if ($LASTEXITCODE -ne 0) { throw "BKE ARM64 publish failed." }
+
+      - name: Certify pinned Licensing Agent source
+        shell: pwsh
+        working-directory: agent-src
+        run: |
+          dotnet build dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent bootstrap build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent runtime build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Desktop/BKE.LicensingAgent.Desktop.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent License Center build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Updater/BKE.LicensingAgent.Updater.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent updater build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Provisioner/BKE.LicensingAgent.Provisioner.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent provisioner build failed." }
+          dotnet run --project dotnet/certification/BKE.LicensingAgent.ContractCertification/BKE.LicensingAgent.ContractCertification.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent contract certification failed." }
+
+      - name: Build pinned Agent support payloads
+        shell: pwsh
+        working-directory: agent-src
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish_dotnet_windows_payloads.ps1 -Version $env:AGENT_VERSION -Architecture all
+          if ($LASTEXITCODE -ne 0) { throw "Agent support payload publish failed." }
+
+          dotnet run --project dotnet/tools/BKE.LicensingAgent.ReleaseTooling/BKE.LicensingAgent.ReleaseTooling.csproj --configuration Release -- `
+            generate-disposable-trust `
+            --root dist/windows `
+            --target-key-id bke-parent-preproduction-target `
+            --policy-id bke-parent-preproduction `
+            --update-key-id bke-parent-preproduction-update
+          if ($LASTEXITCODE -ne 0) { throw "Agent disposable trust generation failed." }
+
+          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-service | Out-Null
+          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-runtime | Out-Null
+          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-service-arm64 | Out-Null
+          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-runtime-arm64 | Out-Null
+
+          dotnet publish dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj `
+            --configuration Release --runtime win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:Version=$env:AGENT_VERSION `
+            --output dist/windows/bke-licensing-agent-service
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 service publish failed." }
+
+          dotnet publish dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj `
+            --configuration Release --runtime win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:BKEAgentRuntimeBridge=true -p:Version=$env:AGENT_VERSION `
+            --output dist/windows/bke-licensing-agent-runtime
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 runtime publish failed." }
+
+          dotnet publish dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj `
+            --configuration Release --runtime win-arm64 --self-contained true `
+            -p:PublishSingleFile=true -p:Version=$env:AGENT_VERSION `
+            --output dist/windows/bke-licensing-agent-service-arm64
+          if ($LASTEXITCODE -ne 0) { throw "Agent ARM64 service publish failed." }
+
+          dotnet publish dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj `
+            --configuration Release --runtime win-arm64 --self-contained true `
+            -p:PublishSingleFile=true -p:BKEAgentRuntimeBridge=true -p:Version=$env:AGENT_VERSION `
+            --output dist/windows/bke-licensing-agent-runtime-arm64
+          if ($LASTEXITCODE -ne 0) { throw "Agent ARM64 runtime publish failed." }
+
+      - name: Compile pinned Agent installers
+        shell: pwsh
+        working-directory: agent-src
+        run: |
+          $iscc = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "Inno Setup 6\ISCC.exe"
+          & $iscc packaging/windows/bke-licensing-agent.iss
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 installer compile failed." }
+          & $iscc packaging/windows/bke-licensing-agent-arm64.iss
+          if ($LASTEXITCODE -ne 0) { throw "Agent ARM64 installer compile failed." }
+
+      - name: Verify component architectures
+        shell: pwsh
+        run: |
+          function Assert-PeMachine([string]$Path,[int]$Expected) {
+            $bytes=[IO.File]::ReadAllBytes((Resolve-Path $Path))
+            $offset=[BitConverter]::ToInt32($bytes,0x3c)
+            $signature="PE"+[char]0+[char]0
+            if ([Text.Encoding]::ASCII.GetString($bytes,$offset,4) -ne $signature) { throw "invalid PE: $Path" }
+            $machine=[BitConverter]::ToUInt16($bytes,$offset+4)
+            if ($machine -ne $Expected) { throw ("wrong PE machine {0}: 0x{1:X4}" -f $Path,$machine) }
+          }
+          Assert-PeMachine "dist/windows-x64/bke-launcher.exe" 0x8664
+          Assert-PeMachine "dist/windows-arm64/bke-launcher.exe" 0xAA64
+          Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service/bke-licensing-agent-service.exe" 0x8664
+          Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service-arm64/bke-licensing-agent-service.exe" 0xAA64
+
+      - name: Build parent component manifest
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/parent | Out-Null
+          $manifest = [ordered]@{
+            schema = "bke.parent-installer-components.v1"
+            status = "PREPRODUCTION"
+            production_ready = $false
+            bke_source_sha = $env:GITHUB_SHA
+            bke_version = $env:BKE_VERSION
+            agent_source_sha = $env:AGENT_SOURCE_SHA
+            agent_version = $env:AGENT_VERSION
+            agent_trust = "DISPOSABLE_PREPRODUCTION"
+            root_uninstall = "NOT_IMPLEMENTED"
+            customer_download_surface = "BKE_ONLY"
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content dist/parent/COMPONENT-MANIFEST.json -Encoding utf8
+          Get-Content dist/parent/COMPONENT-MANIFEST.json
+
+      - name: Compile BKE parent installers
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "Inno Setup 6\ISCC.exe"
+          & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-x64.iss
+          if ($LASTEXITCODE -ne 0) { throw "BKE parent x64 compile failed." }
+          & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-arm64.iss
+          if ($LASTEXITCODE -ne 0) { throw "BKE parent ARM64 compile failed." }
+
+      - name: Defender scan parent installers
+        shell: pwsh
+        run: |
+          $platformRoot=Join-Path $env:ProgramData "Microsoft\Windows Defender\Platform"
+          $mp=Get-ChildItem $platformRoot -Filter MpCmdRun.exe -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $mp) {
+            $fallback=Join-Path $env:ProgramFiles "Windows Defender\MpCmdRun.exe"
+            if (Test-Path $fallback) { $mp=Get-Item $fallback }
+          }
+          if ($null -eq $mp) { throw "Microsoft Defender unavailable." }
+
+          foreach ($path in @(
+            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe",
+            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
+          )) {
+            & $mp.FullName -Scan -ScanType 3 -File (Resolve-Path $path).Path -DisableRemediation
+            if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
+          }
+
+      - name: Fresh-install x64 parent package
+        shell: pwsh
+        run: |
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $log=Join-Path $env:RUNNER_TEMP "bke-parent-install.log"
+          $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log }
+            throw "BKE parent installer failed: $($process.ExitCode)"
+          }
+
+          $bke=Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\bke-launcher.exe"
+          if (!(Test-Path $bke)) { throw "BKE launcher missing after parent install." }
+
+          $smoke=Start-Process -FilePath $bke -ArgumentList "--smoke" -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Installed BKE smoke failed: $($smoke.ExitCode)" }
+
+          $service=Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue
+          if ($null -eq $service) { throw "Bundled Licensing Agent service is missing." }
+          $service.WaitForStatus("Running",[TimeSpan]::FromSeconds(30))
+
+          $deadline=(Get-Date).AddSeconds(30)
+          $healthy=$false
+          do {
+            try {
+              $response=Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:43873/license-center?product_id=bke-parent-cert&version=$($env:AGENT_VERSION)&installation_id=github-parent-cert" -TimeoutSec 2
+              if ($response.StatusCode -eq 200) { $healthy=$true; break }
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          } while ((Get-Date) -lt $deadline)
+          if (!$healthy) { throw "Bundled Agent local API did not become healthy." }
+
+          $agentShortcut=Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\BKE Licensing Agent"
+          if (Test-Path $agentShortcut) { throw "Agent customer-facing Start Menu shortcut survived parent installation." }
+
+          $manifest=Get-Content (Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\COMPONENT-MANIFEST.json") -Raw | ConvertFrom-Json
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Installed Agent source pin drifted." }
+          if ($manifest.production_ready -ne $false) { throw "PREPRODUCTION parent installer claims production readiness." }
+          Write-Host "BKE parent installer x64 fresh install: PASS"
+
+      - name: Package parent-installer evidence
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/parent-evidence | Out-Null
+          Copy-Item dist/parent/COMPONENT-MANIFEST.json dist/parent-evidence/
+          @(
+            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe",
+            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
+          ) | ForEach-Object {
+            $item=Get-Item $_
+            $hash=(Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($item.Name)" | Add-Content dist/parent-evidence/SHA256SUMS.txt -Encoding ascii
+            Copy-Item $item.FullName dist/parent-evidence/
+          }
+
+          @(
+            "PREPRODUCTION ONLY",
+            "Agent trust is disposable and unsigned.",
+            "Root BKE uninstall is intentionally disabled until its lifecycle is implemented.",
+            "Do not publish these candidates as production installers."
+          ) | Set-Content dist/parent-evidence/NOT-PRODUCTION.txt -Encoding utf8
+
+      - name: Upload BKE parent installer candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: BKE-Windows-Parent-Installer-PREPRODUCTION
+          path: dist/parent-evidence/**
+          if-no-files-found: error
+          retention-days: 14
