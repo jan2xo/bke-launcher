@@ -4,6 +4,14 @@ namespace BKE.Launcher.Application;
 
 public interface ILauncherAgentClient
 {
+    Task<AccountSessionDeviceContextResponse> GetAccountSessionDeviceContextAsync(
+        AccountSessionDeviceContextRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountSessionCompleteResponse> CompleteAccountSessionAsync(
+        AccountSessionCompleteRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountSessionStartResponse> StartAccountSessionAsync(
         AccountSessionStartRequest request,
         CancellationToken cancellationToken);
@@ -42,3 +50,18 @@ public interface ILauncherCatalogSource
 {
     Task<LauncherCatalogSnapshot> GetProductsAsync(CancellationToken cancellationToken);
 }
+
+
+public interface ILauncherIdentityClient
+{
+    Task<NativeBkeLoginResponse> LoginAsync(
+        NativeBkeLoginRequest request,
+        CancellationToken cancellationToken);
+}
+
+public sealed record LauncherNativeSignInResult(
+    string Status,
+    IReadOnlyList<NativeBkeAccountChoice> Accounts,
+    AccountSessionAccount? Account,
+    string? ErrorCode,
+    string? ErrorMessage);

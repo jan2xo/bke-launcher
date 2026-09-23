@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -18,15 +17,9 @@ public sealed partial class MainWindow : Window
         DataContext as MainWindowViewModel
         ?? throw new InvalidOperationException("BKE Launcher view model is unavailable.");
 
-    private async void StartSignIn(object? sender, RoutedEventArgs args)
+    private async void NativeSignIn(object? sender, RoutedEventArgs args)
     {
-        await ViewModel.StartSignInAsync(CancellationToken.None);
-
-        if (Uri.TryCreate(ViewModel.VerificationUri, UriKind.Absolute, out var uri) &&
-            uri.Scheme == Uri.UriSchemeHttps)
-        {
-            TryOpenBrowser(uri);
-        }
+        await ViewModel.NativeSignInAsync(CancellationToken.None);
     }
 
     private async void RefreshStatus(object? sender, RoutedEventArgs args)
@@ -151,18 +144,4 @@ public sealed partial class MainWindow : Window
         await ViewModel.LogoutAsync(CancellationToken.None);
     }
 
-    private static void TryOpenBrowser(Uri uri)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(uri.ToString())
-            {
-                UseShellExecute = true,
-            });
-        }
-        catch
-        {
-            // The verification URI remains visible so the user can open it manually.
-        }
-    }
 }

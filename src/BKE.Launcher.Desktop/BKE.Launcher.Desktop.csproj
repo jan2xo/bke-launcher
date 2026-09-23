@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="../BKE.Launcher.AgentClient/BKE.Launcher.AgentClient.csproj" />
     <ProjectReference Include="../BKE.Launcher.Application/BKE.Launcher.Application.csproj" />
+    <ProjectReference Include="../BKE.Launcher.Infrastructure/BKE.Launcher.Infrastructure.csproj" />
     <ProjectReference Include="../BKE.Launcher.Presentation/BKE.Launcher.Presentation.csproj" />
   </ItemGroup>
 </Project>

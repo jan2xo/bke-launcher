@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using BKE.Launcher.AgentClient;
 using BKE.Launcher.Application;
+using BKE.Launcher.Infrastructure;
 using BKE.Launcher.Presentation;
 
 namespace BKE.Launcher.Desktop;
@@ -20,6 +21,8 @@ public sealed partial class App : Avalonia.Application
         {
             var agentClient = new AgentLoopbackClient();
             var accountSession = new LauncherAccountSessionController(agentClient);
+            var identityClient = new PlatformIdentityClient();
+            var nativeSignIn = new LauncherNativeSignInController(agentClient, identityClient);
             var catalogSource = new AgentSoftwareCatalogSource(agentClient);
             var catalog = new LauncherCatalogService(catalogSource);
             var softwareInstall = new LauncherSoftwareInstallController(agentClient);
@@ -27,6 +30,7 @@ public sealed partial class App : Avalonia.Application
             var softwareRemove = new LauncherSoftwareRemoveController(agentClient);
             var viewModel = new MainWindowViewModel(
                 accountSession,
+                nativeSignIn,
                 catalog,
                 softwareInstall,
                 softwareOpen,
@@ -37,7 +41,11 @@ public sealed partial class App : Avalonia.Application
                 DataContext = viewModel,
             };
 
-            desktop.Exit += (_, _) => agentClient.Dispose();
+            desktop.Exit += (_, _) =>
+            {
+                identityClient.Dispose();
+                agentClient.Dispose();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();

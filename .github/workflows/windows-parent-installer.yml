@@ -20,7 +20,7 @@ jobs:
     env:
       BKE_VERSION: "0.1.0"
       AGENT_VERSION: "2.0.0"
-      AGENT_SOURCE_SHA: "e55fcd95f0a9a797ceac16db1c0a812877e958c0"
+      AGENT_SOURCE_SHA: "0c9767918838cd87313e2d5d8fe0ab1ac5636e22"
       AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
 
     steps:
@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: e55fcd95f0a9a797ceac16db1c0a812877e958c0
+          ref: 0c9767918838cd87313e2d5d8fe0ab1ac5636e22
           path: agent-src
           fetch-depth: 1
 
@@ -246,6 +246,15 @@ jobs:
             Start-Sleep -Milliseconds 500
           } while ((Get-Date) -lt $deadline)
           if (!$healthy) { throw "Bundled Agent local API did not become healthy." }
+
+          $nativeContextBody = @{ correlation_id = "github-native-context-cert" } | ConvertTo-Json -Compress
+          $nativeContext = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:43873/v1/account-session/device-context" -ContentType "application/json" -Body $nativeContextBody -TimeoutSec 5
+          if ($nativeContext.status -ne "READY") { throw "Bundled Agent native device-context capability is unavailable." }
+          if ([string]::IsNullOrWhiteSpace([string]$nativeContext.device_id)) { throw "Bundled Agent returned empty native device id." }
+          if ([string]$nativeContext.platform -ne "windows") { throw "Bundled Agent native platform context drifted." }
+          if ([string]$nativeContext.architecture -notin @("x64","arm64","x86")) { throw "Bundled Agent native architecture context is invalid." }
+          if ($null -ne $nativeContext.access_token -or $null -ne $nativeContext.refresh_token) { throw "Bundled Agent native device-context leaked cloud tokens." }
+          Write-Host "Bundled Agent native device-context capability: PASS"
 
           $agentShortcut=Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\BKE Licensing Agent"
           if (Test-Path $agentShortcut) { throw "Agent customer-facing Start Menu shortcut survived parent installation." }

@@ -9,11 +9,15 @@ namespace BKE.Launcher.Presentation;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly LauncherAccountSessionController _accountSession;
+    private readonly LauncherNativeSignInController _nativeSignIn;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareOpenController _softwareOpen;
     private readonly LauncherSoftwareRemoveController _softwareRemove;
     private string _sessionStatus = "SIGNED_OUT";
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private NativeBkeAccountChoice? _selectedAccount;
     private string _accountDisplay = "Not signed in";
     private string _userCode = string.Empty;
     private string _verificationUri = string.Empty;
@@ -23,12 +27,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
+        LauncherNativeSignInController nativeSignIn,
         LauncherCatalogService catalog,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareOpenController softwareOpen,
         LauncherSoftwareRemoveController softwareRemove)
     {
         _accountSession = accountSession;
+        _nativeSignIn = nativeSignIn;
         _catalog = catalog;
         _softwareInstall = softwareInstall;
         _softwareOpen = softwareOpen;
@@ -38,6 +44,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
+    public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
+
+    public string Email
+    {
+        get => _email;
+        set => SetField(ref _email, value);
+    }
+
+    public string Password
+    {
+        get => _password;
+        set => SetField(ref _password, value);
+    }
+
+    public NativeBkeAccountChoice? SelectedAccount
+    {
+        get => _selectedAccount;
+        set => SetField(ref _selectedAccount, value);
+    }
+
+    public bool HasAccountChoices => AvailableAccounts.Count > 0;
 
     public string SessionStatus
     {
@@ -82,6 +109,73 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public bool ShowEmptyProducts => Products.Count == 0;
+
+    public async Task NativeSignInAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrEmpty(Password))
+        {
+            SessionStatus = "SIGNED_OUT";
+            Message = "Enter your BKE email and password.";
+            return;
+        }
+
+        try
+        {
+            SessionStatus = "SIGNING_IN";
+            Message = "Authenticating directly with BKE Digital Solutions…";
+
+            var result = await _nativeSignIn.SignInAsync(
+                Email,
+                Password,
+                SelectedAccount?.AccountId,
+                cancellationToken);
+
+            if (result.Status == "ACCOUNT_SELECTION_REQUIRED")
+            {
+                AvailableAccounts.Clear();
+                foreach (var account in result.Accounts)
+                {
+                    AvailableAccounts.Add(account);
+                }
+                SelectedAccount = AvailableAccounts.FirstOrDefault();
+                Raise(nameof(HasAccountChoices));
+                SessionStatus = "ACCOUNT_SELECTION_REQUIRED";
+                Message = AvailableAccounts.Count == 0
+                    ? "No active BKE account is available for this identity."
+                    : "Choose the account to connect to this machine, then sign in again.";
+                return;
+            }
+
+            Password = string.Empty;
+            AvailableAccounts.Clear();
+            SelectedAccount = null;
+            Raise(nameof(HasAccountChoices));
+
+            SessionStatus = result.Status;
+            if (result.Status == "AUTHENTICATED" && result.Account is not null)
+            {
+                AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
+                Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
+                await RefreshCatalogAsync(cancellationToken);
+                return;
+            }
+
+            AccountDisplay = "Not signed in";
+            Message = result.ErrorMessage ?? "BKE account sign-in failed.";
+            ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            Password = string.Empty;
+            SessionStatus = "SIGN_IN_UNAVAILABLE";
+            AccountDisplay = "Not signed in";
+            Message = "BKE native sign-in is unavailable or returned an invalid response.";
+            ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+        }
+    }
 
     public async Task StartSignInAsync(CancellationToken cancellationToken)
     {
@@ -423,6 +517,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             AccountDisplay = "Not signed in";
             UserCode = string.Empty;
             VerificationUri = string.Empty;
+            Password = string.Empty;
+            AvailableAccounts.Clear();
+            SelectedAccount = null;
+            Raise(nameof(HasAccountChoices));
             Message = response.Error?.Message ?? "Signed out on this machine.";
             ClearCatalog(
                 "AUTH_REQUIRED",
@@ -467,9 +565,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowEmptyProducts));
     }
 
-    private void SetField(ref string field, string value, [CallerMemberName] string? propertyName = null)
+    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
-        if (string.Equals(field, value, StringComparison.Ordinal))
+        if (EqualityComparer<T>.Default.Equals(field, value))
         {
             return;
         }

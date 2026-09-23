@@ -15,6 +15,8 @@ public static class AgentLocalContract
     public const string SoftwareRemoveCapabilityId = "bke.software-remove";
     public const int SoftwareRemoveContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
+    public const string AccountSessionDeviceContextPath = "/v1/account-session/device-context";
+    public const string AccountSessionCompletePath = "/v1/account-session/complete";
     public const string AccountSessionStartPath = "/v1/account-session/start";
     public const string AccountSessionStatusPath = "/v1/account-session/status";
     public const string AccountSessionLogoutPath = "/v1/account-session/logout";
@@ -23,6 +25,30 @@ public static class AgentLocalContract
     public const string SoftwareOpenPath = "/v1/software/open";
     public const string SoftwareRemovePath = "/v1/software/remove";
 }
+
+public sealed record AccountSessionDeviceContextRequest(
+    [property: JsonPropertyName("correlation_id")] string CorrelationId);
+
+public sealed record AccountSessionDeviceContextResponse(
+    [property: JsonPropertyName("capability_id")] string CapabilityId,
+    [property: JsonPropertyName("contract_version")] int ContractVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("device_id"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DeviceId,
+    [property: JsonPropertyName("device_name"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DeviceName,
+    [property: JsonPropertyName("platform"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Platform,
+    [property: JsonPropertyName("architecture"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Architecture,
+    [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountSessionError? Error);
+
+public sealed record AccountSessionCompleteRequest(
+    [property: JsonPropertyName("correlation_id")] string CorrelationId,
+    [property: JsonPropertyName("handoff_code")] string HandoffCode);
+
+public sealed record AccountSessionCompleteResponse(
+    [property: JsonPropertyName("capability_id")] string CapabilityId,
+    [property: JsonPropertyName("contract_version")] int ContractVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("account"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountSessionAccount? Account,
+    [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountSessionError? Error);
 
 public sealed record AccountSessionStartRequest(
     [property: JsonPropertyName("correlation_id")] string CorrelationId);
