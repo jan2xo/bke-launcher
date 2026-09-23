@@ -32,6 +32,10 @@ public interface ILauncherAgentClient
         SoftwareInstallRequest request,
         CancellationToken cancellationToken);
 
+    Task<SoftwareUpdateResponse> UpdateSoftwareAsync(
+        SoftwareUpdateRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareOpenResponse> OpenSoftwareAsync(
         SoftwareOpenRequest request,
         CancellationToken cancellationToken);
