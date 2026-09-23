@@ -10,6 +10,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
 {
     internal static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(5);
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RemoveRequestTimeout = TimeSpan.FromMinutes(10);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -101,6 +102,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AgentLocalContract.SoftwareInstallPath,
             request,
             InstallRequestTimeout,
+            cancellationToken);
+
+    public Task<SoftwareUpdateResponse> UpdateSoftwareAsync(
+        SoftwareUpdateRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<SoftwareUpdateRequest, SoftwareUpdateResponse>(
+            AgentLocalContract.SoftwareUpdatePath,
+            request,
+            UpdateRequestTimeout,
             cancellationToken);
 
     public Task<SoftwareOpenResponse> OpenSoftwareAsync(

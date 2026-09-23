@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using BKE.Launcher.AgentClient;
 using BKE.Launcher.Application;
 using BKE.Launcher.Contracts;
@@ -20,6 +21,9 @@ Require(AgentLocalContract.SoftwareCatalogContractVersion == 1, "software catalo
 Require(AgentLocalContract.SoftwareInstallPath == "/v1/software/install", "software install path drifted");
 Require(AgentLocalContract.SoftwareInstallCapabilityId == "bke.software-install", "software install capability id drifted");
 Require(AgentLocalContract.SoftwareInstallContractVersion == 1, "software install contract version drifted");
+Require(AgentLocalContract.SoftwareUpdatePath == "/v1/software/update", "software update path drifted");
+Require(AgentLocalContract.SoftwareUpdateCapabilityId == "bke.software-update", "software update capability id drifted");
+Require(AgentLocalContract.SoftwareUpdateContractVersion == 1, "software update contract version drifted");
 Require(AgentLocalContract.SoftwareOpenPath == "/v1/software/open", "software open path drifted");
 Require(AgentLocalContract.SoftwareOpenCapabilityId == "bke.software-open", "software open capability id drifted");
 Require(AgentLocalContract.SoftwareOpenContractVersion == 1, "software open contract version drifted");
@@ -36,6 +40,8 @@ var localResponseProperties = typeof(AccountSessionDeviceContextResponse).GetPro
     .Concat(typeof(SoftwareCatalogItem).GetProperties())
     .Concat(typeof(SoftwareInstallResponse).GetProperties())
     .Concat(typeof(SoftwareInstallError).GetProperties())
+    .Concat(typeof(SoftwareUpdateResponse).GetProperties())
+    .Concat(typeof(SoftwareUpdateError).GetProperties())
     .Concat(typeof(SoftwareOpenResponse).GetProperties())
     .Concat(typeof(SoftwareOpenError).GetProperties())
     .Concat(typeof(SoftwareRemoveResponse).GetProperties())
@@ -69,6 +75,7 @@ Require(agentMethods.SetEquals([
     "LogoutAccountSessionAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
+    "UpdateSoftwareAsync",
     "OpenSoftwareAsync",
     "RemoveSoftwareAsync"
 ]), "Launcher Agent client port drifted.");
@@ -85,6 +92,29 @@ Require(
         name.Contains("Password", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Email", StringComparison.OrdinalIgnoreCase)),
     "Launcher Agent native-complete request contains credentials.");
+
+var updateRequestProperties = typeof(SoftwareUpdateRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    updateRequestProperties.SequenceEqual(["CorrelationId", "ProductId"]),
+    "Launcher widened the Agent software-update request.");
+
+using (var updateRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new SoftwareUpdateRequest(
+            "cert-update-correlation",
+            "bke-cert-product"))))
+{
+    var updateRequestWireFields = updateRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        updateRequestWireFields.SequenceEqual(["correlation_id", "product_id"]),
+        "Launcher software-update wire request widened.");
+}
 
 var nativeLoginResponseProperties = typeof(NativeBkeLoginResponse)
     .GetProperties()
@@ -115,6 +145,41 @@ Require(!mainWindowSource.Contains("Process.Start", StringComparison.Ordinal), "
 Require(!mainWindowMarkup.Contains("Device code", StringComparison.Ordinal), "Device-code UX remains visible in Launcher.");
 Require(mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Native sign-in action is missing.");
 Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Native password field is not masked.");
+Require(mainWindowMarkup.Contains("Content=\"Update\"", StringComparison.Ordinal), "Software Update action is missing.");
+Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanUpdate}\"", StringComparison.Ordinal), "Software Update visibility is not state-bound.");
+Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "Software Update click handler is missing.");
+var viewModelSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
+var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
+Require(normalizedViewModelSource.Contains(
+    "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
+    StringComparison.Ordinal),
+    "Launcher Update action is not restricted to STANDALONE + UPDATE_AVAILABLE.");
+
+var launcherSource = string.Join(
+    "\n",
+    Directory.EnumerateFiles("src", "*.cs", SearchOption.AllDirectories)
+        .Where(path =>
+            !path.Split(Path.DirectorySeparatorChar)
+                .Any(segment => segment is "bin" or "obj"))
+        .Select(File.ReadAllText));
+var forbiddenUpdateAuthorityMarkers = new[]
+{
+    "/api/agent-sessions/update/standalone",
+    "api.github.com/repos/",
+    "/releases/tags/",
+    "artifact_sha256",
+    "artifact_size",
+    "install_root",
+    "bke.privileged-update-request",
+    "privileged_arguments",
+};
+foreach (var marker in forbiddenUpdateAuthorityMarkers)
+{
+    Require(
+        !launcherSource.Contains(marker, StringComparison.OrdinalIgnoreCase),
+        $"Launcher absorbed forbidden software-update authority: {marker}");
+}
 
 var contextProperties = typeof(ILauncherContext)
     .GetProperties()
@@ -142,20 +207,27 @@ var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
 var installTimeoutField = typeof(AgentLoopbackClient).GetField(
     "InstallRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
+var updateTimeoutField = typeof(AgentLoopbackClient).GetField(
+    "UpdateRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
 var removeTimeoutField = typeof(AgentLoopbackClient).GetField(
     "RemoveRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
 var defaultTimeoutValue = defaultTimeoutField?.GetValue(null);
 var installTimeoutValue = installTimeoutField?.GetValue(null);
+var updateTimeoutValue = updateTimeoutField?.GetValue(null);
 var removeTimeoutValue = removeTimeoutField?.GetValue(null);
 Require(defaultTimeoutValue is TimeSpan,
     "Launcher default loopback timeout field is unavailable.");
 Require(installTimeoutValue is TimeSpan,
     "Launcher install-operation timeout field is unavailable.");
+Require(updateTimeoutValue is TimeSpan,
+    "Launcher update-operation timeout field is unavailable.");
 Require(removeTimeoutValue is TimeSpan,
     "Launcher remove-operation timeout field is unavailable.");
 var defaultTimeout = (TimeSpan)defaultTimeoutValue!;
 var installTimeout = (TimeSpan)installTimeoutValue!;
+var updateTimeout = (TimeSpan)updateTimeoutValue!;
 var removeTimeout = (TimeSpan)removeTimeoutValue!;
 Require(defaultTimeout == TimeSpan.FromSeconds(5),
     "Launcher default loopback timeout drifted.");
@@ -163,6 +235,10 @@ Require(installTimeout == TimeSpan.FromMinutes(10),
     "Launcher install-operation timeout drifted.");
 Require(installTimeout > defaultTimeout,
     "Launcher install operation does not have a dedicated long-running timeout.");
+Require(updateTimeout == TimeSpan.FromMinutes(10),
+    "Launcher update-operation timeout drifted.");
+Require(updateTimeout > defaultTimeout,
+    "Launcher update operation does not have a dedicated long-running timeout.");
 Require(removeTimeout == TimeSpan.FromMinutes(10),
     "Launcher remove-operation timeout drifted.");
 Require(removeTimeout > defaultTimeout,
@@ -174,6 +250,8 @@ Console.WriteLine("Native Launcher credential -> DS -> one-time Agent handoff bo
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
 Console.WriteLine("Bounded long-running install transport certified");
+Console.WriteLine("Agent-owned software Update intent boundary certified");
+Console.WriteLine("Bounded long-running update transport certified");
 Console.WriteLine("Agent-owned standalone Open intent boundary certified");
 Console.WriteLine("Agent-owned software Remove intent boundary certified");
 Console.WriteLine("Bounded long-running remove transport certified");
