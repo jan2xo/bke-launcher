@@ -20,7 +20,7 @@ jobs:
     env:
       BKE_VERSION: "0.1.0"
       AGENT_VERSION: "2.0.0"
-      AGENT_SOURCE_SHA: "b1718c5cb4193a30a45eb879ecf5182d97a656f8"
+      AGENT_SOURCE_SHA: "e55fcd95f0a9a797ceac16db1c0a812877e958c0"
       AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
 
     steps:
@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: b1718c5cb4193a30a45eb879ecf5182d97a656f8
+          ref: e55fcd95f0a9a797ceac16db1c0a812877e958c0
           path: agent-src
           fetch-depth: 1
 
@@ -157,6 +157,14 @@ jobs:
           Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service/bke-licensing-agent-service.exe" 0x8664
           Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service-arm64/bke-licensing-agent-service.exe" 0xAA64
 
+          $arm64Parent = Get-Content packaging/windows/bke-parent-arm64.iss -Raw
+          if ($arm64Parent -notmatch 'dist\\\\windows-arm64\\\\\*') {
+            throw "ARM64 parent installer is not wired to the ARM64 BKE payload."
+          }
+          if ($arm64Parent -match 'Source:\s*"\.\.\\\\\.\.\\\\dist\\\\windows-x64\\\\\*"') {
+            throw "ARM64 parent installer still references the x64 BKE payload."
+          }
+
       - name: Build parent component manifest
         shell: pwsh
         run: |
@@ -170,7 +178,7 @@ jobs:
             agent_source_sha = $env:AGENT_SOURCE_SHA
             agent_version = $env:AGENT_VERSION
             agent_trust = "DISPOSABLE_PREPRODUCTION"
-            root_uninstall = "NOT_IMPLEMENTED"
+            root_uninstall = "CERTIFIED_PREPRODUCTION"
             customer_download_surface = "BKE_ONLY"
           }
           $manifest | ConvertTo-Json -Depth 5 | Set-Content dist/parent/COMPONENT-MANIFEST.json -Encoding utf8
@@ -243,7 +251,149 @@ jobs:
           $manifest=Get-Content (Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\COMPONENT-MANIFEST.json") -Raw | ConvertFrom-Json
           if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Installed Agent source pin drifted." }
           if ($manifest.production_ready -ne $false) { throw "PREPRODUCTION parent installer claims production readiness." }
+          if ($manifest.root_uninstall -ne "CERTIFIED_PREPRODUCTION") { throw "Root uninstall manifest state drifted." }
+
+          $lifecycle = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\lifecycle\bke-root-uninstall.ps1"
+          if (!(Test-Path $lifecycle)) { throw "BKE root uninstall orchestrator is missing." }
+
+          $bkeUninstallKeys = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Parent-PREPRODUCTION}_is1",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Parent-PREPRODUCTION}_is1"
+          ) | Where-Object { Test-Path -LiteralPath $_ }
+          if ($bkeUninstallKeys.Count -ne 1) { throw "BKE uninstall registration is missing or ambiguous." }
+
+          $agentUninstallKeys = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1"
+          ) | Where-Object { Test-Path -LiteralPath $_ }
+          if ($agentUninstallKeys.Count -ne 1) { throw "Agent uninstall registration is missing or ambiguous." }
+
           Write-Host "BKE parent installer x64 fresh install: PASS"
+
+      - name: Certify full BKE root uninstall
+        shell: pwsh
+        run: |
+          function Resolve-InnoUninstaller([string]$AppId, [string]$DisplayName) {
+            $paths = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$($AppId)_is1",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$($AppId)_is1"
+            )
+            $entries = @(
+              foreach ($path in $paths) {
+                if (Test-Path -LiteralPath $path) {
+                  Get-ItemProperty -LiteralPath $path
+                }
+              }
+            )
+            if ($entries.Count -ne 1) { throw "Expected exactly one uninstall entry for $DisplayName." }
+            if ([string]$entries[0].DisplayName -ne $DisplayName) { throw "Unexpected uninstall display name for $DisplayName." }
+            $command = [string]$entries[0].UninstallString
+            if ($command -match '^\s*"([^"]+)"') { return $Matches[1] }
+            if ($command -match '^\s*(\S+\.exe)(?:\s|$)') { return $Matches[1] }
+            throw "Could not parse uninstall command for $DisplayName."
+          }
+
+          $sentinelRoot = Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data"
+          $sentinel = Join-Path $sentinelRoot "sentinel.txt"
+          New-Item -ItemType Directory -Force $sentinelRoot | Out-Null
+          "preserve-me" | Set-Content $sentinel -Encoding utf8
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --seed-managed-product
+          if ($LASTEXITCODE -ne 0) { throw "Managed product fixture seeding failed." }
+
+          $managedRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Certification Product"
+          if (!(Test-Path $managedRoot)) { throw "Managed product fixture was not created." }
+
+          $bkeUninstaller = Resolve-InnoUninstaller "{BKE-Parent-PREPRODUCTION}" "BKE"
+          $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
+          $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
+          $agentData = Join-Path $env:ProgramData "BKE Digital Solutions\Licensing Agent"
+
+          $process = Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "BKE root uninstall failed: $($process.ExitCode)" }
+
+          if (Test-Path $managedRoot) { throw "Managed product survived BKE root uninstall." }
+          if (Test-Path $agentRoot) { throw "Licensing Agent install root survived BKE root uninstall." }
+          if (Test-Path $bkeRoot) { throw "BKE install root survived BKE root uninstall." }
+          if ($null -ne (Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue)) {
+            throw "Licensing Agent service survived BKE root uninstall."
+          }
+          if (!(Test-Path $sentinel)) { throw "Unrelated user-data sentinel was removed." }
+          if (!(Test-Path $agentData)) { throw "Agent ProgramData was silently purged." }
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --assert-product-absent bke-certification-product
+          if ($LASTEXITCODE -ne 0) { throw "Managed product inventory row survived BKE root uninstall." }
+
+          foreach ($path in @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Parent-PREPRODUCTION}_is1",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Parent-PREPRODUCTION}_is1",
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1"
+          )) {
+            if (Test-Path -LiteralPath $path) { throw "Uninstall registration survived: $path" }
+          }
+
+          Write-Host "BKE full root uninstall certification: PASS"
+
+      - name: Certify fail-closed BKE root uninstall
+        shell: pwsh
+        run: |
+          function Resolve-InnoUninstaller([string]$AppId, [string]$DisplayName) {
+            $paths = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$($AppId)_is1",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$($AppId)_is1"
+            )
+            $entries = @(
+              foreach ($path in $paths) {
+                if (Test-Path -LiteralPath $path) {
+                  Get-ItemProperty -LiteralPath $path
+                }
+              }
+            )
+            if ($entries.Count -ne 1) { throw "Expected exactly one uninstall entry for $DisplayName." }
+            if ([string]$entries[0].DisplayName -ne $DisplayName) { throw "Unexpected uninstall display name for $DisplayName." }
+            $command = [string]$entries[0].UninstallString
+            if ($command -match '^\s*"([^"]+)"') { return $Matches[1] }
+            if ($command -match '^\s*(\S+\.exe)(?:\s|$)') { return $Matches[1] }
+            throw "Could not parse uninstall command for $DisplayName."
+          }
+
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $log=Join-Path $env:RUNNER_TEMP "bke-parent-reinstall.log"
+          $install=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log }
+            throw "BKE parent reinstall failed: $($install.ExitCode)"
+          }
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --seed-legacy-product
+          if ($LASTEXITCODE -ne 0) { throw "LEGACY_UNKNOWN fixture seeding failed." }
+
+          $legacyRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Certification Legacy Product"
+          $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
+          $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
+          $sentinel = Join-Path (Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data") "sentinel.txt"
+          $bkeUninstaller = Resolve-InnoUninstaller "{BKE-Parent-PREPRODUCTION}" "BKE"
+
+          $uninstall=Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART") -Wait -PassThru
+          if ($uninstall.ExitCode -eq 0) { throw "BKE root uninstall did not fail closed for LEGACY_UNKNOWN inventory." }
+
+          if (!(Test-Path $legacyRoot)) { throw "LEGACY_UNKNOWN product was modified by failed root uninstall." }
+          if (!(Test-Path $bkeRoot)) { throw "BKE was removed despite failed product cleanup." }
+          if (!(Test-Path $agentRoot)) { throw "Licensing Agent was removed despite failed product cleanup." }
+          if ($null -eq (Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue)) {
+            throw "Licensing Agent service was removed despite failed product cleanup."
+          }
+          if (!(Test-Path $sentinel)) { throw "Unrelated user-data sentinel was removed during failed root uninstall." }
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --assert-product-present bke-certification-legacy
+          if ($LASTEXITCODE -ne 0) { throw "LEGACY_UNKNOWN inventory row changed during failed root uninstall." }
+
+          $bke=Join-Path $bkeRoot "bke-launcher.exe"
+          $smoke=Start-Process -FilePath $bke -ArgumentList "--smoke" -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "BKE no longer works after fail-closed uninstall refusal." }
+
+          Write-Host "BKE fail-closed root uninstall certification: PASS"
 
       - name: Package parent-installer evidence
         shell: pwsh
@@ -263,7 +413,7 @@ jobs:
           @(
             "PREPRODUCTION ONLY",
             "Agent trust is disposable and unsigned.",
-            "Root BKE uninstall is intentionally disabled until its lifecycle is implemented.",
+            "Root BKE uninstall is implemented and remotely certified for managed-product cleanup, Agent teardown, and fail-closed unknown provenance.",
             "Do not publish these candidates as production installers."
           ) | Set-Content dist/parent-evidence/NOT-PRODUCTION.txt -Encoding utf8
 
