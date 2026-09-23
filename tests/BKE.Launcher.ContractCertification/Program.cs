@@ -33,6 +33,8 @@ var localResponseProperties = typeof(AccountSessionStartResponse).GetProperties(
     .Concat(typeof(SoftwareInstallError).GetProperties())
     .Concat(typeof(SoftwareOpenResponse).GetProperties())
     .Concat(typeof(SoftwareOpenError).GetProperties())
+    .Concat(typeof(SoftwareRemoveResponse).GetProperties())
+    .Concat(typeof(SoftwareRemoveError).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -58,7 +60,8 @@ Require(agentMethods.SetEquals([
     "LogoutAccountSessionAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
-    "OpenSoftwareAsync"
+    "OpenSoftwareAsync",
+    "RemoveSoftwareAsync"
 ]), "Launcher Agent client port drifted.");
 
 var contextProperties = typeof(ILauncherContext)
@@ -87,20 +90,31 @@ var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
 var installTimeoutField = typeof(AgentLoopbackClient).GetField(
     "InstallRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
+var removeTimeoutField = typeof(AgentLoopbackClient).GetField(
+    "RemoveRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
 var defaultTimeoutValue = defaultTimeoutField?.GetValue(null);
 var installTimeoutValue = installTimeoutField?.GetValue(null);
+var removeTimeoutValue = removeTimeoutField?.GetValue(null);
 Require(defaultTimeoutValue is TimeSpan,
     "Launcher default loopback timeout field is unavailable.");
 Require(installTimeoutValue is TimeSpan,
     "Launcher install-operation timeout field is unavailable.");
+Require(removeTimeoutValue is TimeSpan,
+    "Launcher remove-operation timeout field is unavailable.");
 var defaultTimeout = (TimeSpan)defaultTimeoutValue!;
 var installTimeout = (TimeSpan)installTimeoutValue!;
+var removeTimeout = (TimeSpan)removeTimeoutValue!;
 Require(defaultTimeout == TimeSpan.FromSeconds(5),
     "Launcher default loopback timeout drifted.");
 Require(installTimeout == TimeSpan.FromMinutes(10),
     "Launcher install-operation timeout drifted.");
 Require(installTimeout > defaultTimeout,
     "Launcher install operation does not have a dedicated long-running timeout.");
+Require(removeTimeout == TimeSpan.FromMinutes(10),
+    "Launcher remove-operation timeout drifted.");
+Require(removeTimeout > defaultTimeout,
+    "Launcher remove operation does not have a dedicated long-running timeout.");
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
@@ -108,6 +122,8 @@ Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
 Console.WriteLine("Bounded long-running install transport certified");
 Console.WriteLine("Agent-owned standalone Open intent boundary certified");
+Console.WriteLine("Agent-owned software Remove intent boundary certified");
+Console.WriteLine("Bounded long-running remove transport certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
 
