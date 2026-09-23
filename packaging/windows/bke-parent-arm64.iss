@@ -30,17 +30,22 @@ RestartApplications=no
 Uninstallable=yes
 CreateUninstallRegKey=yes
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={app}\\bke-launcher.exe
+UninstallDisplayIcon={app}\bke-launcher.exe
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription=BKE parent installer PREPRODUCTION
 VersionInfoProductName={#AppName}
 
 [Files]
-Source: "..\..\dist\windows-x64\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "..\..\dist\windows-arm64\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 Source: "..\..\agent-src\dist\installer\{#AgentInstaller}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\..\dist\parent\COMPONENT-MANIFEST.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\packaging\windows\bke-root-uninstall.ps1"; DestDir: "{app}\lifecycle"; Flags: ignoreversion
 
-[UninstallDelete]\nType: filesandordirs; Name: "{app}"\n\n[Icons]\nName: "{group}\BKE"; Filename: "{app}\bke-launcher.exe"
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
+[Icons]
+Name: "{group}\BKE"; Filename: "{app}\bke-launcher.exe"
 Name: "{autodesktop}\BKE"; Filename: "{app}\bke-launcher.exe"
 
 [Run]
@@ -116,7 +121,7 @@ var
   Parameters: String;
 begin
   Result := False;
-  ScriptPath := ExpandConstant('{app}\\lifecycle\\bke-root-uninstall.ps1');
+  ScriptPath := ExpandConstant('{app}\lifecycle\bke-root-uninstall.ps1');
 
   if not FileExists(ScriptPath) then
   begin
@@ -124,7 +129,7 @@ begin
     Exit;
   end;
 
-  PowerShell := ExpandConstant('{sys}\\WindowsPowerShell\\v1.0\\powershell.exe');
+  PowerShell := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
   Parameters := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
 
   if not Exec(
