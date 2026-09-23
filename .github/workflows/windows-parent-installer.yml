@@ -263,7 +263,7 @@ jobs:
               "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
               "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
             )
-            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\\') + '\\'
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\') + '\'
             foreach ($registryRoot in $registryRoots) {
               if (!(Test-Path -LiteralPath $registryRoot)) { continue }
               foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
@@ -300,7 +300,7 @@ jobs:
               "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
               "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
             )
-            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\\') + '\\'
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\') + '\'
             foreach ($registryRoot in $registryRoots) {
               if (!(Test-Path -LiteralPath $registryRoot)) { continue }
               foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
@@ -374,7 +374,7 @@ jobs:
               "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
               "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
             )
-            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\\') + '\\'
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\') + '\'
             foreach ($registryRoot in $registryRoots) {
               if (!(Test-Path -LiteralPath $registryRoot)) { continue }
               foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
