@@ -2,6 +2,7 @@ using System.Reflection;
 using BKE.Launcher.AgentClient;
 using BKE.Launcher.Application;
 using BKE.Launcher.Contracts;
+using BKE.Launcher.Infrastructure;
 using BKE.Launcher.PluginHost;
 
 var agentBase = new Uri(AgentLocalContract.DefaultBaseAddress, UriKind.Absolute);
@@ -9,6 +10,8 @@ Require(agentBase.IsLoopback, "Agent default address is not loopback.");
 Require(agentBase.Scheme == Uri.UriSchemeHttp, "Agent default address must use local HTTP.");
 
 Require(AgentLocalContract.AccountSessionStartPath == "/v1/account-session/start", "account-session start path drifted");
+Require(AgentLocalContract.AccountSessionNativeContextPath == "/v1/account-session/native/context", "native account-session context path drifted");
+Require(AgentLocalContract.AccountSessionNativeCompletePath == "/v1/account-session/native/complete", "native account-session complete path drifted");
 Require(AgentLocalContract.AccountSessionStatusPath == "/v1/account-session/status", "account-session status path drifted");
 Require(AgentLocalContract.AccountSessionLogoutPath == "/v1/account-session/logout", "account-session logout path drifted");
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
@@ -25,6 +28,8 @@ Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.LauncherPlugin
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.Standalone) == "STANDALONE", "standalone execution type drifted");
 
 var localResponseProperties = typeof(AccountSessionStartResponse).GetProperties()
+    .Concat(typeof(AccountSessionNativeContextResponse).GetProperties())
+    .Concat(typeof(AccountSessionNativeCompleteResponse).GetProperties())
     .Concat(typeof(AccountSessionStatusResponse).GetProperties())
     .Concat(typeof(AccountSessionLogoutResponse).GetProperties())
     .Concat(typeof(SoftwareCatalogResponse).GetProperties())
@@ -56,6 +61,8 @@ var agentMethods = typeof(ILauncherAgentClient)
 
 Require(agentMethods.SetEquals([
     "StartAccountSessionAsync",
+    "GetNativeAccountSessionContextAsync",
+    "CompleteNativeAccountSessionAsync",
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
     "GetSoftwareCatalogAsync",
@@ -63,6 +70,30 @@ Require(agentMethods.SetEquals([
     "OpenSoftwareAsync",
     "RemoveSoftwareAsync"
 ]), "Launcher Agent client port drifted.");
+
+var authMethods = typeof(ILauncherAccountAuthClient)
+    .GetMethods()
+    .Select(method => method.Name)
+    .ToHashSet(StringComparer.Ordinal);
+Require(authMethods.SetEquals(["AuthenticateAsync"]), "Launcher native auth client port drifted.");
+
+var nativeResultProperties = typeof(LauncherNativeSignInResult)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(!nativeResultProperties.Contains("HandoffCode"), "Launcher presentation result exposes handoff code.");
+Require(!nativeResultProperties.Contains("Password"), "Launcher presentation result exposes password.");
+Require(!nativeResultProperties.Any(name => name.Contains("Token", StringComparison.OrdinalIgnoreCase)),
+    "Launcher presentation result exposes cloud token material.");
+
+var nativeAgentRequestProperties = typeof(AccountSessionNativeCompleteRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(nativeAgentRequestProperties.SetEquals(["CorrelationId", "HandoffCode"]),
+    "Launcher widened the Agent native-complete request.");
+Require(!nativeAgentRequestProperties.Contains("Email"), "Launcher sends email to Agent native completion.");
+Require(!nativeAgentRequestProperties.Contains("Password"), "Launcher sends password to Agent native completion.");
 
 var contextProperties = typeof(ILauncherContext)
     .GetProperties()
@@ -116,8 +147,46 @@ Require(removeTimeout == TimeSpan.FromMinutes(10),
 Require(removeTimeout > defaultTimeout,
     "Launcher remove operation does not have a dedicated long-running timeout.");
 
+var nativeAuthTimeoutField = typeof(NativeBkeAccountAuthClient).GetField(
+    "DefaultRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
+Require(nativeAuthTimeoutField?.GetValue(null) is TimeSpan nativeAuthTimeout &&
+        nativeAuthTimeout == TimeSpan.FromSeconds(20),
+    "Launcher native cloud-auth timeout drifted.");
+
+var rejectedInsecureCloud = false;
+try
+{
+    using var _ = new NativeBkeAccountAuthClient(
+        baseAddress: new Uri("http://example.com", UriKind.Absolute));
+}
+catch (ArgumentException)
+{
+    rejectedInsecureCloud = true;
+}
+Require(rejectedInsecureCloud, "Launcher native auth accepted insecure remote HTTP.");
+
+var fakeAgent = new FakeNativeAgentClient();
+var fakeAuth = new FakeNativeAccountAuthClient();
+var nativeController = new LauncherNativeSignInController(fakeAgent, fakeAuth);
+var nativeResult = await nativeController.SignInAsync(
+    "buyer@example.com",
+    "transient-password",
+    null,
+    CancellationToken.None);
+
+Require(nativeResult.Status == "AUTHENTICATED", "Launcher native sign-in did not authenticate.");
+Require(nativeResult.Account?.AccountId == "account-native", "Launcher native sign-in account drifted.");
+Require(fakeAuth.LastRequest?.Email == "buyer@example.com", "Launcher native auth did not forward email to Digital Solutions client.");
+Require(fakeAuth.LastRequest?.Password == "transient-password", "Launcher native auth credential transit drifted.");
+Require(fakeAuth.LastRequest?.DeviceId == "device-native-0123456789", "Launcher native auth did not use Agent device context.");
+Require(fakeAgent.LastHandoffCode == "opaque-native-handoff-0123456789ABCDE", "Launcher did not forward opaque handoff to Agent.");
+Require(!System.Text.Json.JsonSerializer.Serialize(nativeResult).Contains("opaque-native-handoff", StringComparison.Ordinal),
+    "Launcher native result leaked handoff material.");
+
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
+Console.WriteLine("Native BKE credential-to-handoff orchestration certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
 Console.WriteLine("Bounded long-running install transport certified");
@@ -126,6 +195,99 @@ Console.WriteLine("Agent-owned software Remove intent boundary certified");
 Console.WriteLine("Bounded long-running remove transport certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
+
+sealed class FakeNativeAccountAuthClient : ILauncherAccountAuthClient
+{
+    public NativeAccountLoginRequest? LastRequest { get; private set; }
+
+    public Task<NativeAccountLoginResponse> AuthenticateAsync(
+        NativeAccountLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        LastRequest = request;
+        return Task.FromResult(new NativeAccountLoginResponse(
+            "handoff_issued",
+            "opaque-native-handoff-0123456789ABCDE",
+            90,
+            new NativeAccountSummary(
+                "account-native",
+                "INDIVIDUAL",
+                "Native Buyer"),
+            null,
+            null));
+    }
+}
+
+sealed class FakeNativeAgentClient : ILauncherAgentClient
+{
+    public string? LastHandoffCode { get; private set; }
+
+    public Task<AccountSessionNativeContextResponse> GetNativeAccountSessionContextAsync(
+        AccountSessionNativeContextRequest request,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new AccountSessionNativeContextResponse(
+            AgentLocalContract.CapabilityId,
+            AgentLocalContract.ContractVersion,
+            "READY",
+            "device-native-0123456789",
+            "WIN-NATIVE",
+            "windows",
+            "x64",
+            null));
+
+    public Task<AccountSessionNativeCompleteResponse> CompleteNativeAccountSessionAsync(
+        AccountSessionNativeCompleteRequest request,
+        CancellationToken cancellationToken)
+    {
+        LastHandoffCode = request.HandoffCode;
+        return Task.FromResult(new AccountSessionNativeCompleteResponse(
+            AgentLocalContract.CapabilityId,
+            AgentLocalContract.ContractVersion,
+            "AUTHENTICATED",
+            new AccountSessionAccount(
+                "user-native",
+                "buyer@example.com",
+                "account-native",
+                "INDIVIDUAL",
+                "Native Buyer"),
+            null));
+    }
+
+    public Task<AccountSessionStartResponse> StartAccountSessionAsync(
+        AccountSessionStartRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountSessionStatusResponse> GetAccountSessionStatusAsync(
+        AccountSessionStatusRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountSessionLogoutResponse> LogoutAccountSessionAsync(
+        AccountSessionLogoutRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
+        SoftwareCatalogRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareInstallResponse> InstallSoftwareAsync(
+        SoftwareInstallRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareOpenResponse> OpenSoftwareAsync(
+        SoftwareOpenRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareRemoveResponse> RemoveSoftwareAsync(
+        SoftwareRemoveRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+}
 
 static void Require(bool condition, string message)
 {
