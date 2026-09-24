@@ -60,6 +60,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void RepairProduct(object? sender, RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: SoftwareProductViewModel product,
+            } &&
+            product.CanRepair)
+        {
+            await ViewModel.RepairProductAsync(
+                product.ProductId,
+                CancellationToken.None);
+        }
+    }
+
     private async void OpenProduct(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
