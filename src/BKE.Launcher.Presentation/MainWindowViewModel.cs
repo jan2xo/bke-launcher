@@ -817,6 +817,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             UserCode = string.Empty;
             VerificationUri = string.Empty;
             Password = string.Empty;
+            ClaimCode = string.Empty;
+            ClaimStatus = "AUTH_REQUIRED";
+            ClaimMessage = "Sign in to redeem a Claim Code.";
             AvailableAccounts.Clear();
             SelectedAccount = null;
             Raise(nameof(HasAccountChoices));
