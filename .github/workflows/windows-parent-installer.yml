@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/windows-parent-installer.yml"
+      - ".github/workflows/_launcher-contracts.yml"
       - "packaging/windows/**"
       - "src/**"
       - "tests/**"
@@ -12,20 +13,79 @@ on:
 permissions:
   contents: read
 
-jobs:
-  parent-installer:
-    name: BKE + Licensing Agent parent package
-    runs-on: windows-latest
-    timeout-minutes: 60
-    env:
-      BKE_VERSION: "0.1.0"
-      AGENT_VERSION: "2.0.0"
-      AGENT_SOURCE_SHA: "e69284fe354e9ccdaf43bcc27e97ceeece51b36e"
-      AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
+concurrency:
+  group: bke-parent-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
+env:
+  BKE_VERSION: "0.1.0"
+  AGENT_VERSION: "2.0.0"
+  AGENT_SOURCE_SHA: "e69284fe354e9ccdaf43bcc27e97ceeece51b36e"
+  AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  launcher-contracts:
+    name: Launcher contracts
+    uses: ./.github/workflows/_launcher-contracts.yml
+
+  agent-contracts:
+    name: Pinned Agent contracts
+    runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-      - name: Checkout BKE Launcher
+      - name: Checkout pinned Licensing Agent
         uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: e69284fe354e9ccdaf43bcc27e97ceeece51b36e
+          path: agent-src
+          fetch-depth: 1
+
+      - name: Verify pinned Licensing Agent commit
+        shell: pwsh
+        run: |
+          $actualAgentSourceSha = (git -C agent-src rev-parse HEAD).Trim()
+          if ($actualAgentSourceSha -ne $env:AGENT_SOURCE_SHA) {
+            throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
+          }
+          Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Certify pinned Licensing Agent source
+        shell: pwsh
+        working-directory: agent-src
+        run: |
+          dotnet build dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent bootstrap build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent runtime build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Desktop/BKE.LicensingAgent.Desktop.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent License Center build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Updater/BKE.LicensingAgent.Updater.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent updater build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Provisioner/BKE.LicensingAgent.Provisioner.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent provisioner build failed." }
+          dotnet run --project dotnet/certification/BKE.LicensingAgent.ContractCertification/BKE.LicensingAgent.ContractCertification.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent contract certification failed." }
+
+  parent-package:
+    name: Build immutable parent package
+    needs: [launcher-contracts, agent-contracts]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact BKE Launcher head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Checkout pinned Licensing Agent
         uses: actions/checkout@v4
@@ -48,21 +108,13 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
-
-      - name: Certify BKE Launcher contracts
-        shell: pwsh
-        run: |
-          dotnet restore BKE.Launcher.sln
-          if ($LASTEXITCODE -ne 0) { throw "Launcher restore failed." }
-          dotnet build BKE.Launcher.sln -c Release --no-restore
-          if ($LASTEXITCODE -ne 0) { throw "Launcher build failed." }
-          dotnet run --project tests/BKE.Launcher.ContractCertification/BKE.Launcher.ContractCertification.csproj -c Release --no-build
-          if ($LASTEXITCODE -ne 0) { throw "Launcher contract certification failed." }
-          dotnet run --project tests/BKE.Launcher.PluginCertification/BKE.Launcher.PluginCertification.csproj -c Release --no-build
-          if ($LASTEXITCODE -ne 0) { throw "Launcher plugin certification failed." }
 
       - name: Publish BKE x64 + ARM64 payloads
         shell: pwsh
@@ -78,23 +130,6 @@ jobs:
             -p:DebugType=None -p:DebugSymbols=false -p:Version=$env:BKE_VERSION `
             -o dist/windows-arm64
           if ($LASTEXITCODE -ne 0) { throw "BKE ARM64 publish failed." }
-
-      - name: Certify pinned Licensing Agent source
-        shell: pwsh
-        working-directory: agent-src
-        run: |
-          dotnet build dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "Agent bootstrap build failed." }
-          dotnet build dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "Agent runtime build failed." }
-          dotnet build dotnet/src/BKE.LicensingAgent.Desktop/BKE.LicensingAgent.Desktop.csproj --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "Agent License Center build failed." }
-          dotnet build dotnet/src/BKE.LicensingAgent.Updater/BKE.LicensingAgent.Updater.csproj --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "Agent updater build failed." }
-          dotnet build dotnet/src/BKE.LicensingAgent.Provisioner/BKE.LicensingAgent.Provisioner.csproj --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "Agent provisioner build failed." }
-          dotnet run --project dotnet/certification/BKE.LicensingAgent.ContractCertification/BKE.LicensingAgent.ContractCertification.csproj --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "Agent contract certification failed." }
 
       - name: Build pinned Agent support payloads
         shell: pwsh
@@ -184,7 +219,7 @@ jobs:
             schema = "bke.parent-installer-components.v1"
             status = "PREPRODUCTION"
             production_ready = $false
-            bke_source_sha = $env:GITHUB_SHA
+            bke_source_sha = $env:SOURCE_SHA
             bke_version = $env:BKE_VERSION
             agent_source_sha = $env:AGENT_SOURCE_SHA
             agent_version = $env:AGENT_VERSION
@@ -203,6 +238,29 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "BKE parent x64 compile failed." }
           & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-arm64.iss
           if ($LASTEXITCODE -ne 0) { throw "BKE parent ARM64 compile failed." }
+
+      - name: Upload immutable parent package boundary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bke-parent-package
+          path: |
+            dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-x64.exe
+            dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-arm64.exe
+            dist/parent/COMPONENT-MANIFEST.json
+          if-no-files-found: error
+          retention-days: 2
+
+  defender-scan:
+    name: Defender scan
+    needs: parent-package
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
 
       - name: Defender scan parent installers
         shell: pwsh
@@ -223,6 +281,18 @@ jobs:
             & $mp.FullName -Scan -ScanType 3 -File (Resolve-Path $path).Path -DisableRemediation
             if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
           }
+
+  fresh-install:
+    name: Fresh install + runtime health
+    needs: parent-package
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
 
       - name: Fresh-install x64 parent package
         shell: pwsh
@@ -310,6 +380,57 @@ jobs:
 
           Write-Host "BKE parent installer x64 fresh install: PASS"
 
+  root-uninstall:
+    name: Managed root uninstall
+    needs: [parent-package, fresh-install]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned Licensing Agent
+        uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: e69284fe354e9ccdaf43bcc27e97ceeece51b36e
+          path: agent-src
+          fetch-depth: 1
+
+      - name: Verify pinned Licensing Agent commit
+        shell: pwsh
+        run: |
+          $actualAgentSourceSha = (git -C agent-src rev-parse HEAD).Trim()
+          if ($actualAgentSourceSha -ne $env:AGENT_SOURCE_SHA) {
+            throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
+          }
+          Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
+
+      - name: Install x64 parent prerequisite for root-uninstall certification
+        shell: pwsh
+        run: |
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $log=Join-Path $env:RUNNER_TEMP "bke-parent-root-uninstall-install.log"
+          $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log }
+            throw "BKE parent prerequisite install failed: $($process.ExitCode)"
+          }
+          $service=Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue
+          if ($null -eq $service) { throw "Bundled Licensing Agent service is missing." }
+          $service.WaitForStatus("Running",[TimeSpan]::FromSeconds(30))
+
       - name: Certify full BKE root uninstall
         shell: pwsh
         run: |
@@ -384,6 +505,43 @@ jobs:
 
           Write-Host "BKE full root uninstall certification: PASS"
 
+  fail-closed-uninstall:
+    name: Fail-closed unknown provenance
+    needs: [parent-package, fresh-install]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned Licensing Agent
+        uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: e69284fe354e9ccdaf43bcc27e97ceeece51b36e
+          path: agent-src
+          fetch-depth: 1
+
+      - name: Verify pinned Licensing Agent commit
+        shell: pwsh
+        run: |
+          $actualAgentSourceSha = (git -C agent-src rev-parse HEAD).Trim()
+          if ($actualAgentSourceSha -ne $env:AGENT_SOURCE_SHA) {
+            throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
+          }
+          Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
+
       - name: Certify fail-closed BKE root uninstall
         shell: pwsh
         run: |
@@ -434,7 +592,10 @@ jobs:
           $legacyRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Certification Legacy Product"
           $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
           $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
-          $sentinel = Join-Path (Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data") "sentinel.txt"
+          $sentinelRoot = Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data"
+          $sentinel = Join-Path $sentinelRoot "sentinel.txt"
+          New-Item -ItemType Directory -Force $sentinelRoot | Out-Null
+          "preserve-me" | Set-Content $sentinel -Encoding utf8
           $bkeUninstaller = Resolve-InnoUninstaller "BKE" $bkeRoot
 
           $uninstall=Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART") -Wait -PassThru
@@ -456,6 +617,18 @@ jobs:
           if ($smoke.ExitCode -ne 0) { throw "BKE no longer works after fail-closed uninstall refusal." }
 
           Write-Host "BKE fail-closed root uninstall certification: PASS"
+
+  evidence:
+    name: Evidence + final candidates
+    needs: [parent-package, defender-scan, fresh-install, root-uninstall, fail-closed-uninstall]
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
 
       - name: Package parent-installer evidence
         shell: pwsh
@@ -486,3 +659,33 @@ jobs:
           path: dist/parent-evidence/**
           if-no-files-found: error
           retention-days: 14
+
+  required-certification:
+    name: Required parent certification
+    if: ${{ always() }}
+    needs:
+      - launcher-contracts
+      - agent-contracts
+      - parent-package
+      - defender-scan
+      - fresh-install
+      - root-uninstall
+      - fail-closed-uninstall
+      - evidence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every parent-installer module
+        env:
+          LAUNCHER_CONTRACTS: ${{ needs.launcher-contracts.result }}
+          AGENT_CONTRACTS: ${{ needs.agent-contracts.result }}
+          PACKAGE: ${{ needs.parent-package.result }}
+          DEFENDER: ${{ needs.defender-scan.result }}
+          FRESH_INSTALL: ${{ needs.fresh-install.result }}
+          ROOT_UNINSTALL: ${{ needs.root-uninstall.result }}
+          FAIL_CLOSED: ${{ needs.fail-closed-uninstall.result }}
+          EVIDENCE: ${{ needs.evidence.result }}
+        run: |
+          for value in "$LAUNCHER_CONTRACTS" "$AGENT_CONTRACTS" "$PACKAGE" "$DEFENDER" "$FRESH_INSTALL" "$ROOT_UNINSTALL" "$FAIL_CLOSED" "$EVIDENCE"; do
+            test "$value" = "success" || { echo "Required parent module did not pass: $value"; exit 1; }
+          done
+          echo "Required parent certification: PASS"
