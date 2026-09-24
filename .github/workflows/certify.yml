@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact commit SHA to certify
+        description: Exact Launcher commit SHA to certify
         required: true
         type: string
       targets:
-        description: Space/comma-separated certification targets
+        description: Space/comma-separated certification targets, or full
         required: true
         type: string
 
@@ -32,17 +32,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       source_sha: ${{ steps.plan.outputs.source_sha }}
+      agent_source_sha: ${{ steps.plan.outputs.agent_source_sha }}
       targets_json: ${{ steps.plan.outputs.targets_json }}
     steps:
       - id: plan
-        name: Resolve exact head and targets
+        name: Resolve exact head, upstream pin, and targets
         uses: actions/github-script@v7
         env:
           DISPATCH_SHA: ${{ inputs.source_sha }}
           DISPATCH_TARGETS: ${{ inputs.targets }}
         with:
           script: |
-            const allowedTargets = ["contracts"];
+            const allowedTargets = ["contracts", "core", "parent"];
+            const fullTargets = ["core", "parent"];
             let sourceSha;
             let requested;
 
@@ -73,23 +75,54 @@ jobs:
             }
 
             if (!/^[0-9a-f]{40}$/i.test(sourceSha ?? "")) {
-              core.setFailed("Certification requires an exact 40-character source SHA.");
+              core.setFailed("Certification requires an exact 40-character Launcher source SHA.");
               return;
             }
 
-            const tokens = [...new Set(
+            const rawTokens = [...new Set(
               requested.toLowerCase().split(/[\s,]+/).map(v => v.trim()).filter(Boolean),
             )];
-            const unknown = tokens.filter(target => !allowedTargets.includes(target));
-            if (tokens.length === 0 || unknown.length > 0) {
-              core.setFailed(
-                `Allowed certification target: contracts. Requested: ${tokens.join(", ") || "none"}.`,
-              );
+            if (rawTokens.length === 0) {
+              core.setFailed("No certification targets were declared.");
+              return;
+            }
+
+            let targets;
+            if (rawTokens.includes("full") || rawTokens.includes("all")) {
+              targets = fullTargets;
+            } else {
+              const unknown = rawTokens.filter(target => !allowedTargets.includes(target));
+              if (unknown.length > 0) {
+                core.setFailed(
+                  `Unknown certification target(s): ${unknown.join(", ")}. Allowed: ${allowedTargets.join(", ")}.`,
+                );
+                return;
+              }
+              targets = rawTokens;
+            }
+
+            const pin = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: "eng/licensing-agent-source.sha",
+              ref: sourceSha,
+            });
+            if (Array.isArray(pin.data) || pin.data.type !== "file" || typeof pin.data.content !== "string") {
+              core.setFailed("Licensing Agent source pin is not a regular file.");
+              return;
+            }
+            const agentSourceSha = Buffer
+              .from(pin.data.content.replace(/\s/g, ""), "base64")
+              .toString("utf8")
+              .trim();
+            if (!/^[0-9a-f]{40}$/i.test(agentSourceSha)) {
+              core.setFailed("Licensing Agent source pin must be an exact 40-character SHA.");
               return;
             }
 
             core.setOutput("source_sha", sourceSha);
-            core.setOutput("targets_json", JSON.stringify(tokens));
+            core.setOutput("agent_source_sha", agentSourceSha);
+            core.setOutput("targets_json", JSON.stringify(targets));
 
   contracts:
     needs: plan
@@ -98,32 +131,45 @@ jobs:
     with:
       source_sha: ${{ needs.plan.outputs.source_sha }}
 
+  core:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.targets_json), 'core')
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.source_sha }}
+
+  parent:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.targets_json), 'parent')
+    uses: ./.github/workflows/windows-parent-installer.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.source_sha }}
+      agent_source_sha: ${{ needs.plan.outputs.agent_source_sha }}
+
   required-certification:
     name: Required certification
     if: always() && needs.plan.result == 'success'
-    needs: [plan, contracts]
+    needs: [plan, contracts, core, parent]
     runs-on: ubuntu-latest
     env:
       SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
       TARGETS_JSON: ${{ needs.plan.outputs.targets_json }}
-      CONTRACTS_RESULT: ${{ needs.contracts.result }}
+      NEEDS_JSON: ${{ toJSON(needs) }}
     steps:
       - name: Verify declared certification plan
         shell: bash
         run: |
           node <<'NODE'
           const targets = JSON.parse(process.env.TARGETS_JSON);
-          const results = { contracts: process.env.CONTRACTS_RESULT };
-          const failed = targets
-            .filter(target => results[target] !== "success")
-            .map(target => `${target}=${results[target] ?? "missing"}`);
+          const needs = JSON.parse(process.env.NEEDS_JSON);
+          const failed = [];
+          for (const target of targets) {
+            const result = needs[target]?.result;
+            if (result !== "success") failed.push(`${target}=${result ?? "missing"}`);
+          }
           if (failed.length > 0) {
-            console.error(
-              `Required certification failed for ${process.env.SOURCE_SHA}: ${failed.join(", ")}`,
-            );
+            console.error(`Required certification failed for ${process.env.SOURCE_SHA}: ${failed.join(", ")}`);
             process.exit(1);
           }
-          console.log(
-            `Required certification PASS for ${process.env.SOURCE_SHA}: ${targets.join(", ")}`,
-          );
+          console.log(`Required certification PASS for ${process.env.SOURCE_SHA}: ${targets.join(", ")}`);
           NODE
