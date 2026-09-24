@@ -18,6 +18,8 @@ public static class AgentLocalContract
     public const int SoftwareOpenContractVersion = 1;
     public const string SoftwareRemoveCapabilityId = "bke.software-remove";
     public const int SoftwareRemoveContractVersion = 1;
+    public const string ClaimCodeRedemptionCapabilityId = "bke.claim-code-redemption";
+    public const int ClaimCodeRedemptionContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
     public const string AccountSessionDeviceContextPath = "/v1/account-session/device-context";
     public const string AccountSessionCompletePath = "/v1/account-session/complete";
@@ -30,6 +32,7 @@ public static class AgentLocalContract
     public const string SoftwareRepairPath = "/v1/software/repair";
     public const string SoftwareOpenPath = "/v1/software/open";
     public const string SoftwareRemovePath = "/v1/software/remove";
+    public const string ClaimCodeRedeemPath = "/v1/claims/redeem";
 }
 
 public sealed record AccountSessionDeviceContextRequest(

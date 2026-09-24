@@ -88,6 +88,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<ClaimCodeRedeemResponse> RedeemClaimCodeAsync(
+        ClaimCodeRedeemRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<ClaimCodeRedeemRequest, ClaimCodeRedeemResponse>(
+            AgentLocalContract.ClaimCodeRedeemPath,
+            request,
+            cancellationToken);
+
     public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken) =>

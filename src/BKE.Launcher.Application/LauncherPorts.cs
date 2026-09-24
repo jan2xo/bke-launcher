@@ -24,6 +24,10 @@ public interface ILauncherAgentClient
         AccountSessionLogoutRequest request,
         CancellationToken cancellationToken);
 
+    Task<ClaimCodeRedeemResponse> RedeemClaimCodeAsync(
+        ClaimCodeRedeemRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);

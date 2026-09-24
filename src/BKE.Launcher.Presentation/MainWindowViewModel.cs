@@ -16,6 +16,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherSoftwareRepairController _softwareRepair;
     private readonly LauncherSoftwareOpenController _softwareOpen;
     private readonly LauncherSoftwareRemoveController _softwareRemove;
+    private readonly LauncherClaimCodeRedemptionController _claimCodeRedemption;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
@@ -26,6 +27,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _message = "Connect this Launcher to the BKE Licensing Agent.";
     private string _catalogStatus = "AUTH_REQUIRED";
     private string _catalogMessage = "Sign in to load your BKE software.";
+    private string _claimCode = string.Empty;
+    private string _claimStatus = "AUTH_REQUIRED";
+    private string _claimMessage = "Sign in to redeem a Claim Code.";
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -35,7 +39,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherSoftwareUpdateController softwareUpdate,
         LauncherSoftwareRepairController softwareRepair,
         LauncherSoftwareOpenController softwareOpen,
-        LauncherSoftwareRemoveController softwareRemove)
+        LauncherSoftwareRemoveController softwareRemove,
+        LauncherClaimCodeRedemptionController claimCodeRedemption)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -45,6 +50,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _softwareRepair = softwareRepair;
         _softwareOpen = softwareOpen;
         _softwareRemove = softwareRemove;
+        _claimCodeRedemption = claimCodeRedemption;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -64,6 +70,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _password, value);
     }
 
+    public string ClaimCode
+    {
+        get => _claimCode;
+        set => SetField(ref _claimCode, value);
+    }
+
     public NativeBkeAccountChoice? SelectedAccount
     {
         get => _selectedAccount;
@@ -75,7 +87,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string SessionStatus
     {
         get => _sessionStatus;
-        private set => SetField(ref _sessionStatus, value);
+        private set
+        {
+            SetField(ref _sessionStatus, value);
+            Raise(nameof(CanRedeemClaimCode));
+        }
     }
 
     public string AccountDisplay
@@ -113,6 +129,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _catalogMessage;
         private set => SetField(ref _catalogMessage, value);
     }
+
+    public string ClaimStatus
+    {
+        get => _claimStatus;
+        private set => SetField(ref _claimStatus, value);
+    }
+
+    public string ClaimMessage
+    {
+        get => _claimMessage;
+        private set => SetField(ref _claimMessage, value);
+    }
+
+    public bool CanRedeemClaimCode =>
+        string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
 
     public bool ShowEmptyProducts => Products.Count == 0;
 
@@ -153,6 +184,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
 
             Password = string.Empty;
+            ClaimCode = string.Empty;
+            ClaimStatus = "AUTH_REQUIRED";
+            ClaimMessage = "Sign in to redeem a Claim Code.";
             AvailableAccounts.Clear();
             SelectedAccount = null;
             Raise(nameof(HasAccountChoices));
@@ -236,6 +270,80 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearCatalog(
                 "AGENT_UNAVAILABLE",
                 "Software catalog is unavailable while the Agent cannot be reached.");
+        }
+    }
+
+    public async Task RedeemClaimCodeAsync(CancellationToken cancellationToken)
+    {
+        if (!CanRedeemClaimCode)
+        {
+            ClaimStatus = "AUTH_REQUIRED";
+            ClaimMessage = "Sign in with BKE before redeeming a Claim Code.";
+            return;
+        }
+
+        var code = ClaimCode.Trim();
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            ClaimStatus = "INVALID_REQUEST";
+            ClaimMessage = "Enter a Claim Code.";
+            return;
+        }
+
+        ClaimStatus = "REDEEMING";
+        ClaimMessage = $"Redeeming this Claim Code to {AccountDisplay}…";
+
+        try
+        {
+            var response = await _claimCodeRedemption.RedeemAsync(
+                code,
+                cancellationToken);
+
+            switch (response.Status)
+            {
+                case "CLAIMED":
+                    ClaimCode = string.Empty;
+                    ClaimStatus = "CLAIMED";
+                    ClaimMessage =
+                        "Claim Code redeemed. Your BKE software is being refreshed.";
+                    await RefreshCatalogAsync(cancellationToken);
+                    return;
+
+                case "AUTH_REQUIRED":
+                    ClaimStatus = "AUTH_REQUIRED";
+                    ClaimMessage =
+                        response.Error?.Message ??
+                        "Sign in with BKE before redeeming a Claim Code.";
+                    return;
+
+                case "NOT_FOUND":
+                case "ALREADY_USED":
+                case "REVOKED":
+                case "EXPIRED":
+                case "ACCOUNT_FORBIDDEN":
+                case "ACCOUNT_UNAVAILABLE":
+                    ClaimStatus = response.Status;
+                    ClaimMessage =
+                        response.Error?.Message ??
+                        "The Claim Code could not be redeemed.";
+                    return;
+
+                default:
+                    ClaimStatus = "FAILED";
+                    ClaimMessage =
+                        response.Error?.Message ??
+                        "Claim Code redemption failed.";
+                    return;
+            }
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ClaimStatus = "AGENT_UNAVAILABLE";
+            ClaimMessage =
+                "The BKE Licensing Agent Claim Code capability is unavailable or invalid.";
         }
     }
 
@@ -709,6 +817,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             UserCode = string.Empty;
             VerificationUri = string.Empty;
             Password = string.Empty;
+            ClaimCode = string.Empty;
+            ClaimStatus = "AUTH_REQUIRED";
+            ClaimMessage = "Sign in to redeem a Claim Code.";
             AvailableAccounts.Clear();
             SelectedAccount = null;
             Raise(nameof(HasAccountChoices));

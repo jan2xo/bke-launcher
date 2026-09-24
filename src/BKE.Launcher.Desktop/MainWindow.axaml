@@ -48,6 +48,21 @@
           <Button Content="Sign in with BKE" Click="NativeSignIn" />
           <Button Content="Refresh account status" Click="RefreshStatus" />
           <Button Content="Sign out on this machine" Click="Logout" />
+
+          <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
+
+          <TextBlock Text="Redeem Claim Code" FontSize="18" FontWeight="SemiBold" />
+          <TextBlock Text="Codes redeem into the signed-in account shown above."
+                     TextWrapping="Wrap"
+                     Opacity="0.72" />
+          <TextBox Text="{Binding ClaimCode, Mode=TwoWay}"
+                   Watermark="BKE-CLM-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" />
+          <Button Content="Redeem Claim Code"
+                  IsEnabled="{Binding CanRedeemClaimCode}"
+                  Click="RedeemClaimCode" />
+          <TextBlock Text="{Binding ClaimMessage}"
+                     TextWrapping="Wrap"
+                     Opacity="0.72" />
         </StackPanel>
       </Border>
 
