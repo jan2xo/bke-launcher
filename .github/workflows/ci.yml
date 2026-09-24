@@ -7,112 +7,113 @@ on:
 permissions:
   contents: read
 
-jobs:
-  launcher-core:
-    name: .NET 10 Launcher core + contracts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-      - name: Restore
-        run: dotnet restore BKE.Launcher.sln
-      - name: Build
-        run: dotnet build BKE.Launcher.sln -c Release --no-restore
-      - name: Certify Launcher contracts
-        run: dotnet run --project tests/BKE.Launcher.ContractCertification/BKE.Launcher.ContractCertification.csproj -c Release --no-build
-      - name: Certify plugin contract
-        run: dotnet run --project tests/BKE.Launcher.PluginCertification/BKE.Launcher.PluginCertification.csproj -c Release --no-build
+concurrency:
+  group: bke-launcher-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
-  windows-candidates:
-    name: Windows x64 + ARM64 self-contained candidates
-    needs: launcher-core
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  launcher-contracts:
+    name: Fast contract gate
+    uses: ./.github/workflows/_launcher-contracts.yml
+
+  windows-candidate:
+    name: Windows ${{ matrix.arch }} candidate
+    needs: launcher-contracts
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
 
-      - name: Publish self-contained Windows Launchers
+      - name: Publish self-contained Windows Launcher
         shell: pwsh
         run: |
+          $runtime = "win-${{ matrix.arch }}"
+          $output = "dist/windows-${{ matrix.arch }}"
           dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
             -c Release `
-            -r win-x64 `
+            -r $runtime `
             --self-contained true `
             -p:DebugType=None `
             -p:DebugSymbols=false `
-            -o dist/windows-x64
-          if ($LASTEXITCODE -ne 0) { throw "Launcher Windows x64 publish failed." }
-
-          dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
-            -c Release `
-            -r win-arm64 `
-            --self-contained true `
-            -p:DebugType=None `
-            -p:DebugSymbols=false `
-            -o dist/windows-arm64
-          if ($LASTEXITCODE -ne 0) { throw "Launcher Windows ARM64 publish failed." }
+            -o $output
+          if ($LASTEXITCODE -ne 0) { throw "Launcher ${{ matrix.arch }} publish failed." }
 
       - name: Smoke published x64 Launcher
+        if: matrix.arch == 'x64'
         shell: pwsh
         run: |
           $exe = Resolve-Path ".\dist\windows-x64\bke-launcher.exe"
           $process = Start-Process -FilePath $exe -ArgumentList "--smoke" -Wait -PassThru
-          if ($process.ExitCode -ne 0) {
-            throw "Published Launcher x64 smoke failed: $($process.ExitCode)"
-          }
-          Write-Host "Published Launcher x64 smoke: PASS"
+          if ($process.ExitCode -ne 0) { throw "Published Launcher x64 smoke failed: $($process.ExitCode)" }
 
-      - name: Verify published PE architectures
+      - name: Verify published PE architecture
         shell: pwsh
         run: |
           function Assert-PeMachine([string]$Path,[int]$Expected) {
             $bytes=[IO.File]::ReadAllBytes((Resolve-Path $Path))
             $offset=[BitConverter]::ToInt32($bytes,0x3c)
             $signature="PE"+[char]0+[char]0
-            if ([Text.Encoding]::ASCII.GetString($bytes,$offset,4) -ne $signature) {
-              throw "invalid PE: $Path"
-            }
+            if ([Text.Encoding]::ASCII.GetString($bytes,$offset,4) -ne $signature) { throw "invalid PE: $Path" }
             $machine=[BitConverter]::ToUInt16($bytes,$offset+4)
-            if ($machine -ne $Expected) {
-              throw ("wrong PE machine {0}: 0x{1:X4}" -f $Path,$machine)
-            }
+            if ($machine -ne $Expected) { throw ("wrong PE machine {0}: 0x{1:X4}" -f $Path,$machine) }
           }
+          $expected = if ("${{ matrix.arch }}" -eq "x64") { 0x8664 } else { 0xAA64 }
+          Assert-PeMachine ".\dist\windows-${{ matrix.arch }}\bke-launcher.exe" $expected
 
-          Assert-PeMachine ".\dist\windows-x64\bke-launcher.exe" 0x8664
-          Assert-PeMachine ".\dist\windows-arm64\bke-launcher.exe" 0xAA64
-          Write-Host "Launcher PE architecture verification: PASS"
-
-      - name: Package candidates and SHA-256 evidence
+      - name: Package candidate and SHA-256 evidence
         shell: pwsh
         run: |
-          $targets = @(
-            @{ Directory = ".\dist\windows-x64"; Name = "BKE-Launcher-Windows-x64-Candidate.zip" },
-            @{ Directory = ".\dist\windows-arm64"; Name = "BKE-Launcher-Windows-arm64-Candidate.zip" }
-          )
-
-          foreach ($target in $targets) {
-            $archive = Join-Path ".\dist" $target.Name
-            if (Test-Path $archive) { Remove-Item $archive -Force }
-            Compress-Archive -Path (Join-Path $target.Directory "*") -DestinationPath $archive -CompressionLevel Optimal
-            if ((Get-Item $archive).Length -le 0) { throw "Launcher candidate archive is empty: $archive" }
-            $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($target.Name)" |
-              Set-Content ($archive + ".sha256.txt") -Encoding ascii
-            Write-Host "$($target.Name) SHA256=$hash"
+          $name = "BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.zip"
+          $archive = Join-Path ".\dist" $name
+          Compress-Archive -Path ".\dist\windows-${{ matrix.arch }}\*" -DestinationPath $archive -CompressionLevel Optimal -Force
+          if ((Get-Item $archive).Length -le 0) { throw "Launcher candidate archive is empty: $archive" }
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content ($archive + ".sha256.txt") -Encoding ascii
+          $manifest = [ordered]@{
+            schema = "bke.launcher-candidate.v1"
+            status = "PREPRODUCTION"
+            production_ready = $false
+            source_sha = $env:SOURCE_SHA
+            architecture = "${{ matrix.arch }}"
+            file = $name
+            sha256 = $hash
+            bytes = (Get-Item $archive).Length
           }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content ("dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.json") -Encoding utf8
 
-      - name: Upload Windows candidates
+      - name: Upload Windows candidate
         uses: actions/upload-artifact@v4
         with:
-          name: bke-launcher-windows-candidates
+          name: bke-launcher-windows-${{ matrix.arch }}
           path: |
-            dist/BKE-Launcher-Windows-x64-Candidate.zip
-            dist/BKE-Launcher-Windows-x64-Candidate.zip.sha256.txt
-            dist/BKE-Launcher-Windows-arm64-Candidate.zip
-            dist/BKE-Launcher-Windows-arm64-Candidate.zip.sha256.txt
+            dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.zip
+            dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.zip.sha256.txt
+            dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.json
           if-no-files-found: error
           retention-days: 7
+
+  required-certification:
+    name: Required certification
+    if: ${{ always() }}
+    needs: [launcher-contracts, windows-candidate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Launcher CI modules
+        env:
+          CONTRACTS: ${{ needs.launcher-contracts.result }}
+          WINDOWS: ${{ needs.windows-candidate.result }}
+        run: |
+          test "$CONTRACTS" = "success" || { echo "launcher-contracts=$CONTRACTS"; exit 1; }
+          test "$WINDOWS" = "success" || { echo "windows-candidate=$WINDOWS"; exit 1; }
+          echo "Required Launcher certification: PASS"
