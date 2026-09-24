@@ -239,6 +239,26 @@ jobs:
           & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-arm64.iss
           if ($LASTEXITCODE -ne 0) { throw "BKE parent ARM64 compile failed." }
 
+      - name: Build immutable package-boundary manifest
+        shell: pwsh
+        run: |
+          $x64 = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe"
+          $arm64 = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
+          $boundary = [ordered]@{
+            schema = "bke.parent-package-boundary.v1"
+            status = "PREPRODUCTION"
+            production_ready = $false
+            source_sha = $env:SOURCE_SHA
+            agent_source_sha = $env:AGENT_SOURCE_SHA
+            bke_version = $env:BKE_VERSION
+            agent_version = $env:AGENT_VERSION
+            installers = [ordered]@{
+              x64 = [ordered]@{ file = $x64.Name; sha256 = (Get-FileHash $x64.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $x64.Length }
+              arm64 = [ordered]@{ file = $arm64.Name; sha256 = (Get-FileHash $arm64.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $arm64.Length }
+            }
+          }
+          $boundary | ConvertTo-Json -Depth 8 | Set-Content dist/parent/PACKAGE-MANIFEST.json -Encoding utf8
+          Get-Content dist/parent/PACKAGE-MANIFEST.json
       - name: Upload immutable parent package boundary
         uses: actions/upload-artifact@v4
         with:
@@ -247,6 +267,7 @@ jobs:
             dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-x64.exe
             dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-arm64.exe
             dist/parent/COMPONENT-MANIFEST.json
+            dist/parent/PACKAGE-MANIFEST.json
           if-no-files-found: error
           retention-days: 2
 
@@ -261,6 +282,26 @@ jobs:
         with:
           name: bke-parent-package
           path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $entry = $manifest.installers.$arch
+            $path = Join-Path "dist/installer" ([string]$entry.file)
+            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
+            $item = Get-Item $path
+            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
+            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
+          }
+          Write-Host "Immutable parent package boundary: PASS"
 
       - name: Defender scan parent installers
         shell: pwsh
@@ -293,6 +334,26 @@ jobs:
         with:
           name: bke-parent-package
           path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $entry = $manifest.installers.$arch
+            $path = Join-Path "dist/installer" ([string]$entry.file)
+            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
+            $item = Get-Item $path
+            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
+            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
+          }
+          Write-Host "Immutable parent package boundary: PASS"
 
       - name: Fresh-install x64 parent package
         shell: pwsh
@@ -416,6 +477,26 @@ jobs:
         with:
           name: bke-parent-package
           path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $entry = $manifest.installers.$arch
+            $path = Join-Path "dist/installer" ([string]$entry.file)
+            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
+            $item = Get-Item $path
+            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
+            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
+          }
+          Write-Host "Immutable parent package boundary: PASS"
 
       - name: Install x64 parent prerequisite for root-uninstall certification
         shell: pwsh
@@ -541,6 +622,26 @@ jobs:
         with:
           name: bke-parent-package
           path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $entry = $manifest.installers.$arch
+            $path = Join-Path "dist/installer" ([string]$entry.file)
+            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
+            $item = Get-Item $path
+            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
+            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
+          }
+          Write-Host "Immutable parent package boundary: PASS"
 
       - name: Certify fail-closed BKE root uninstall
         shell: pwsh
@@ -629,6 +730,26 @@ jobs:
         with:
           name: bke-parent-package
           path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $entry = $manifest.installers.$arch
+            $path = Join-Path "dist/installer" ([string]$entry.file)
+            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
+            $item = Get-Item $path
+            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
+            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
+          }
+          Write-Host "Immutable parent package boundary: PASS"
 
       - name: Package parent-installer evidence
         shell: pwsh
