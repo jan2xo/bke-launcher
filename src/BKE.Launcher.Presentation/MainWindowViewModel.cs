@@ -16,6 +16,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
     private readonly LauncherStoreCheckoutStartService _storeCheckoutStart;
     private readonly LauncherStoreCheckoutStatusService _storeCheckoutStatus;
+    private readonly ILauncherCheckoutRecoveryStore _checkoutRecoveryStore;
     private readonly ILauncherExternalNavigator _externalNavigator;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareUpdateController _softwareUpdate;
@@ -55,6 +56,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _purchaseAttemptLocked;
     private string? _checkoutRecoveryCorrelationId;
     private string? _recoverableCheckoutUrl;
+    private bool _checkoutRecoveryStateBlocked;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -64,6 +66,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherStoreCheckoutReviewService storeCheckoutReview,
         LauncherStoreCheckoutStartService storeCheckoutStart,
         LauncherStoreCheckoutStatusService storeCheckoutStatus,
+        ILauncherCheckoutRecoveryStore checkoutRecoveryStore,
         ILauncherExternalNavigator externalNavigator,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareUpdateController softwareUpdate,
@@ -79,6 +82,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _storeCheckoutReview = storeCheckoutReview;
         _storeCheckoutStart = storeCheckoutStart;
         _storeCheckoutStatus = storeCheckoutStatus;
+        _checkoutRecoveryStore = checkoutRecoveryStore;
         _externalNavigator = externalNavigator;
         _softwareInstall = softwareInstall;
         _softwareUpdate = softwareUpdate;
@@ -86,6 +90,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _softwareOpen = softwareOpen;
         _softwareRemove = softwareRemove;
         _claimCodeRedemption = claimCodeRedemption;
+        RestoreCheckoutRecoveryState();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -128,6 +133,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SetField(ref _sessionStatus, value);
             Raise(nameof(CanRedeemClaimCode));
+            Raise(nameof(CanCheckCheckoutStatus));
         }
     }
 
@@ -287,11 +293,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _reviewedPurchaseModes.Contains("GIFT");
 
     public bool CanCheckCheckoutStatus =>
+        string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal) &&
         _purchaseAttemptLocked &&
+        !_checkoutRecoveryStateBlocked &&
         !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
 
     public bool CanOpenExistingCheckout =>
+        !_checkoutRecoveryStateBlocked &&
         !string.IsNullOrWhiteSpace(_recoverableCheckoutUrl);
+
+    public bool ShowPurchaseCheckoutState =>
+        ShowPurchaseActions ||
+        _checkoutRecoveryStateBlocked ||
+        !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
 
     public bool CanRedeemClaimCode =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
@@ -577,12 +591,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string purchasePlanId,
         CancellationToken cancellationToken)
     {
-        if (_purchaseAttemptLocked &&
-            !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId))
+        if (_checkoutRecoveryStateBlocked ||
+            (_purchaseAttemptLocked &&
+             !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId)))
         {
-            PurchaseCheckoutStatus = "RECOVERY_REQUIRED";
-            PurchaseCheckoutMessage =
-                "Resolve the existing checkout attempt before reviewing or starting another purchase.";
+            PurchaseCheckoutStatus = _checkoutRecoveryStateBlocked
+                ? "RECOVERY_STATE_INVALID"
+                : "RECOVERY_REQUIRED";
+            PurchaseCheckoutMessage = _checkoutRecoveryStateBlocked
+                ? "BKE cannot safely read the saved checkout recovery state, so a new checkout is blocked."
+                : "Resolve the existing checkout attempt before reviewing or starting another purchase.";
             RaiseCheckoutRecoveryState();
             return;
         }
@@ -753,9 +771,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        var correlationId = Guid.NewGuid().ToString("N");
+        try
+        {
+            _checkoutRecoveryStore.WriteCorrelationId(correlationId);
+        }
+        catch (Exception storageError) when (
+            storageError is IOException or
+            UnauthorizedAccessException or
+            InvalidDataException or
+            InvalidOperationException)
+        {
+            PurchaseCheckoutStatus = "RECOVERY_STORAGE_FAILED";
+            PurchaseCheckoutMessage =
+                "Checkout was not started because BKE could not persist its recovery correlation safely.";
+            return;
+        }
+
         _purchaseAttemptLocked = true;
-        _checkoutRecoveryCorrelationId = Guid.NewGuid().ToString("N");
+        _checkoutRecoveryCorrelationId = correlationId;
         _recoverableCheckoutUrl = null;
+        _checkoutRecoveryStateBlocked = false;
         RaisePurchaseActionState();
         RaiseCheckoutRecoveryState();
         PurchaseCheckoutStatus = "STARTING";
@@ -775,10 +811,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             var recoveryAvailable =
                 result.Status is "READY" or "RESULT_UNKNOWN" or "CHECKOUT_IN_PROGRESS";
-            _checkoutRecoveryCorrelationId =
-                recoveryAvailable ? result.CorrelationId : null;
-            _recoverableCheckoutUrl =
-                result.Status == "READY" ? result.CheckoutUrl : null;
+            if (recoveryAvailable)
+            {
+                _checkoutRecoveryCorrelationId = result.CorrelationId;
+                _recoverableCheckoutUrl =
+                    result.Status == "READY" ? result.CheckoutUrl : null;
+            }
+            else if (!TryClearCheckoutRecoveryState())
+            {
+                PurchaseCheckoutStatus = "RECOVERY_STATE_LOCKED";
+                PurchaseCheckoutMessage =
+                    "Checkout was not created, but BKE could not clear its recovery lock safely. Check the saved attempt before retrying.";
+                RaiseCheckoutRecoveryState();
+                return;
+            }
             RaiseCheckoutRecoveryState();
 
             PurchaseCheckoutStatus = result.Status;
@@ -830,9 +876,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 if (result.Complimentary == true)
                 {
-                    _checkoutRecoveryCorrelationId = null;
-                    _recoverableCheckoutUrl = null;
-                    RaiseCheckoutRecoveryState();
+                    TryClearCheckoutRecoveryState();
                     await RefreshCatalogAsync(cancellationToken);
                     await RefreshStoreAsync(cancellationToken);
                 }
@@ -851,9 +895,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             error is InvalidDataException or
             ArgumentException)
         {
-            _checkoutRecoveryCorrelationId = null;
-            _recoverableCheckoutUrl = null;
-            RaiseCheckoutRecoveryState();
+            if (!TryClearCheckoutRecoveryState())
+            {
+                PurchaseCheckoutStatus = "RECOVERY_STATE_LOCKED";
+                PurchaseCheckoutMessage =
+                    "The checkout response was invalid and BKE could not clear its durable recovery lock. Check the saved attempt before retrying.";
+                return;
+            }
+
             PurchaseCheckoutStatus = "FAILED";
             PurchaseCheckoutMessage =
                 "The checkout response was invalid. Review the purchase again.";
@@ -922,15 +971,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 if (result.PaymentStatus is "SETTLED" or "NOT_REQUIRED")
                 {
-                    _checkoutRecoveryCorrelationId = null;
-                    _recoverableCheckoutUrl = null;
+                    TryClearCheckoutRecoveryState();
                     await RefreshCatalogAsync(cancellationToken);
                     await RefreshStoreAsync(cancellationToken);
                 }
                 else if (result.PaymentStatus is "FAILED" or "CANCELLED")
                 {
-                    _checkoutRecoveryCorrelationId = null;
-                    _recoverableCheckoutUrl = null;
+                    TryClearCheckoutRecoveryState();
                 }
             }
             else if (result.Status == "NOT_FOUND")
@@ -1530,9 +1577,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ClearPurchaseReview()
     {
-        PurchaseReviewStatus = "IDLE";
-        PurchaseReviewMessage =
-            "Select a plan to review the current purchase terms.";
+        var preserveRecovery =
+            _checkoutRecoveryStateBlocked ||
+            !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
+
+        PurchaseReviewStatus = preserveRecovery
+            ? (_checkoutRecoveryStateBlocked
+                ? "RECOVERY_STATE_INVALID"
+                : "RECOVERY_REQUIRED")
+            : "IDLE";
+        PurchaseReviewMessage = preserveRecovery
+            ? (_checkoutRecoveryStateBlocked
+                ? "BKE cannot safely read the saved checkout recovery state. New checkout creation remains blocked."
+                : "A previous checkout attempt must be recovered before another purchase can be reviewed.")
+            : "Select a plan to review the current purchase terms.";
         PurchaseReviewProductLabel = string.Empty;
         PurchaseReviewEditionLabel = string.Empty;
         PurchaseReviewPriceLabel = string.Empty;
@@ -1541,14 +1599,90 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PurchaseLegalDocuments.Clear();
         _reviewedPurchasePlanId = null;
         _reviewedPurchaseModes = new HashSet<string>(StringComparer.Ordinal);
-        _purchaseAttemptLocked = false;
-        _checkoutRecoveryCorrelationId = null;
-        _recoverableCheckoutUrl = null;
-        PurchaseCheckoutStatus = "IDLE";
-        PurchaseCheckoutMessage = "Review a plan before starting checkout.";
-        ShowPurchaseReview = false;
+
+        if (!preserveRecovery)
+        {
+            _purchaseAttemptLocked = false;
+            PurchaseCheckoutStatus = "IDLE";
+            PurchaseCheckoutMessage = "Review a plan before starting checkout.";
+        }
+        else
+        {
+            _purchaseAttemptLocked = true;
+            _recoverableCheckoutUrl = null;
+            PurchaseCheckoutStatus = _checkoutRecoveryStateBlocked
+                ? "RECOVERY_STATE_INVALID"
+                : "RECOVERY_REQUIRED";
+            PurchaseCheckoutMessage = _checkoutRecoveryStateBlocked
+                ? "Saved checkout recovery state is invalid. BKE will not create another checkout."
+                : "Sign in with the same BKE account, then check the saved checkout attempt.";
+        }
+
+        ShowPurchaseReview = preserveRecovery;
         RaisePurchaseActionState();
         RaiseCheckoutRecoveryState();
+    }
+
+    private void RestoreCheckoutRecoveryState()
+    {
+        try
+        {
+            var correlationId = _checkoutRecoveryStore.ReadCorrelationId();
+            if (string.IsNullOrWhiteSpace(correlationId))
+            {
+                return;
+            }
+
+            _purchaseAttemptLocked = true;
+            _checkoutRecoveryCorrelationId = correlationId;
+            _recoverableCheckoutUrl = null;
+            _checkoutRecoveryStateBlocked = false;
+            ShowPurchaseReview = true;
+            PurchaseReviewStatus = "RECOVERY_REQUIRED";
+            PurchaseReviewMessage =
+                "A previous checkout attempt must be recovered before another purchase can be reviewed.";
+            PurchaseCheckoutStatus = "RECOVERY_REQUIRED";
+            PurchaseCheckoutMessage =
+                "Sign in with the same BKE account, then check this saved checkout attempt.";
+        }
+        catch (Exception storageError) when (
+            storageError is IOException or
+            UnauthorizedAccessException or
+            InvalidDataException or
+            InvalidOperationException)
+        {
+            _purchaseAttemptLocked = true;
+            _checkoutRecoveryCorrelationId = null;
+            _recoverableCheckoutUrl = null;
+            _checkoutRecoveryStateBlocked = true;
+            ShowPurchaseReview = true;
+            PurchaseReviewStatus = "RECOVERY_STATE_INVALID";
+            PurchaseReviewMessage =
+                "BKE cannot safely read the saved checkout recovery state. New checkout creation remains blocked.";
+            PurchaseCheckoutStatus = "RECOVERY_STATE_INVALID";
+            PurchaseCheckoutMessage =
+                "Saved checkout recovery state is invalid. BKE will not create another checkout.";
+        }
+    }
+
+    private bool TryClearCheckoutRecoveryState()
+    {
+        try
+        {
+            _checkoutRecoveryStore.Clear();
+            _checkoutRecoveryCorrelationId = null;
+            _recoverableCheckoutUrl = null;
+            _checkoutRecoveryStateBlocked = false;
+            RaiseCheckoutRecoveryState();
+            return true;
+        }
+        catch (Exception storageError) when (
+            storageError is IOException or
+            UnauthorizedAccessException or
+            InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     private void RaisePurchaseActionState()
@@ -1556,12 +1690,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowPurchaseActions));
         Raise(nameof(CanBuySelf));
         Raise(nameof(CanBuyGift));
+        Raise(nameof(ShowPurchaseCheckoutState));
     }
 
     private void RaiseCheckoutRecoveryState()
     {
         Raise(nameof(CanCheckCheckoutStatus));
         Raise(nameof(CanOpenExistingCheckout));
+        Raise(nameof(ShowPurchaseCheckoutState));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

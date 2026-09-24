@@ -416,6 +416,7 @@ Require(mainWindowMarkup.Contains("Content=\"Check checkout status\"", StringCom
 Require(mainWindowMarkup.Contains("Content=\"Open existing checkout\"", StringComparison.Ordinal), "BKE Store existing-checkout action is missing.");
 Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanCheckCheckoutStatus}\"", StringComparison.Ordinal), "BKE Store checkout-status action is not recovery-state-bound.");
 Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanOpenExistingCheckout}\"", StringComparison.Ordinal), "BKE Store existing-checkout action is not URL-state-bound.");
+Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowPurchaseCheckoutState}\"", StringComparison.Ordinal), "BKE Store checkout recovery is not visible independently of the current purchase review.");
 Require(mainWindowSource.Contains("CheckPurchaseCheckoutStatus", StringComparison.Ordinal), "BKE Store checkout-status click handler is missing.");
 Require(mainWindowSource.Contains("OpenExistingCheckout", StringComparison.Ordinal), "BKE Store existing-checkout click handler is missing.");
 Require(mainWindowSource.Contains("OpenPurchaseLegalDocument", StringComparison.Ordinal), "BKE Store Legal document navigation is missing.");
@@ -515,9 +516,23 @@ Require(normalizedViewModelSource.Contains(
     StringComparison.Ordinal),
     "Launcher Store UX does not recover checkout state through the Agent.");
 Require(normalizedViewModelSource.Contains(
-    "_checkoutRecoveryCorrelationId = Guid.NewGuid().ToString(\"N\")",
+    "var correlationId = Guid.NewGuid().ToString(\"N\")",
     StringComparison.Ordinal),
-    "Launcher does not retain the original checkout correlation before mutation.");
+    "Launcher does not create a durable checkout correlation before mutation.");
+Require(normalizedViewModelSource.Contains(
+    "_checkoutRecoveryStore.WriteCorrelationId(correlationId);",
+    StringComparison.Ordinal),
+    "Launcher does not persist the checkout correlation before mutation.");
+var recoveryWriteIndex = normalizedViewModelSource.IndexOf(
+    "_checkoutRecoveryStore.WriteCorrelationId(correlationId);",
+    StringComparison.Ordinal);
+var checkoutMutationIndex = normalizedViewModelSource.IndexOf(
+    "await _storeCheckoutStart.StartAsync(",
+    StringComparison.Ordinal);
+Require(
+    recoveryWriteIndex >= 0 &&
+    checkoutMutationIndex > recoveryWriteIndex,
+    "Launcher can start checkout before durable recovery state is written.");
 Require(normalizedViewModelSource.Contains(
     "_storeCheckoutStart.StartAsync(\n                _checkoutRecoveryCorrelationId,",
     StringComparison.Ordinal),
@@ -536,9 +551,29 @@ Require(normalizedViewModelSource.Contains(
     StringComparison.Ordinal),
     "Launcher can discard an unresolved checkout correlation by re-reviewing.");
 Require(normalizedViewModelSource.Contains(
+    "RestoreCheckoutRecoveryState();",
+    StringComparison.Ordinal),
+    "Launcher does not restore unresolved checkout recovery state after restart.");
+Require(normalizedViewModelSource.Contains(
     "Opened the existing secure checkout. No new order or payment attempt was created.",
     StringComparison.Ordinal),
     "Launcher existing-checkout resume UX does not state its no-new-mutation boundary.");
+
+
+var checkoutRecoveryStoreSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Infrastructure", "FileLauncherCheckoutRecoveryStore.cs"));
+Require(checkoutRecoveryStoreSource.Contains("LauncherStoragePaths.UserDataRoot()", StringComparison.Ordinal),
+    "Launcher checkout recovery state is not stored under the Launcher-owned user-data root.");
+Require(checkoutRecoveryStoreSource.Contains("checkout-recovery.id", StringComparison.Ordinal),
+    "Launcher checkout recovery correlation store is missing.");
+Require(checkoutRecoveryStoreSource.Contains("Guid.TryParseExact", StringComparison.Ordinal),
+    "Launcher checkout recovery store does not validate correlation identity.");
+Require(!checkoutRecoveryStoreSource.Contains("checkout_url", StringComparison.OrdinalIgnoreCase),
+    "Launcher persisted checkout URL material in recovery state.");
+Require(!checkoutRecoveryStoreSource.Contains("payment", StringComparison.OrdinalIgnoreCase),
+    "Launcher persisted payment data in recovery state.");
+Require(!checkoutRecoveryStoreSource.Contains("provider", StringComparison.OrdinalIgnoreCase),
+    "Launcher persisted provider data in recovery state.");
 
 var externalNavigatorSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Infrastructure", "ExternalBrowserNavigator.cs"));

@@ -229,6 +229,11 @@
                                 IsEnabled="{Binding CanBuyGift}" />
                       </StackPanel>
 
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowPurchaseCheckoutState}"
+                                Spacing="8"
+                                Margin="0,8,0,0">
                       <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="{Binding PurchaseCheckoutMessage}"
                                    TextWrapping="Wrap"

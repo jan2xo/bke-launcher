@@ -100,3 +100,10 @@ public interface ILauncherExternalNavigator
     void OpenCheckout(string absoluteUrl);
     void OpenLegalDocument(string slug);
 }
+
+public interface ILauncherCheckoutRecoveryStore
+{
+    string? ReadCorrelationId();
+    void WriteCorrelationId(string correlationId);
+    void Clear();
+}
