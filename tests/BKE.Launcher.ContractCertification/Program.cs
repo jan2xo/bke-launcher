@@ -30,6 +30,9 @@ Require(AgentLocalContract.SoftwareRepairContractVersion == 1, "software Repair 
 Require(AgentLocalContract.SoftwareOpenPath == "/v1/software/open", "software open path drifted");
 Require(AgentLocalContract.SoftwareOpenCapabilityId == "bke.software-open", "software open capability id drifted");
 Require(AgentLocalContract.SoftwareOpenContractVersion == 1, "software open contract version drifted");
+Require(AgentLocalContract.ClaimCodeRedeemPath == "/v1/claims/redeem", "Claim Code redemption path drifted");
+Require(AgentLocalContract.ClaimCodeRedemptionCapabilityId == "bke.claim-code-redemption", "Claim Code redemption capability id drifted");
+Require(AgentLocalContract.ClaimCodeRedemptionContractVersion == 1, "Claim Code redemption contract version drifted");
 
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.LauncherPlugin) == "LAUNCHER_PLUGIN", "launcher plugin execution type drifted");
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.Standalone) == "STANDALONE", "standalone execution type drifted");
@@ -51,6 +54,8 @@ var localResponseProperties = typeof(AccountSessionDeviceContextResponse).GetPro
     .Concat(typeof(SoftwareOpenError).GetProperties())
     .Concat(typeof(SoftwareRemoveResponse).GetProperties())
     .Concat(typeof(SoftwareRemoveError).GetProperties())
+    .Concat(typeof(ClaimCodeRedeemResponse).GetProperties())
+    .Concat(typeof(ClaimCodeRedeemError).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -78,6 +83,7 @@ Require(agentMethods.SetEquals([
     "StartAccountSessionAsync",
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
+    "RedeemClaimCodeAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
@@ -98,6 +104,35 @@ Require(
         name.Contains("Password", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Email", StringComparison.OrdinalIgnoreCase)),
     "Launcher Agent native-complete request contains credentials.");
+
+var claimRequestProperties = typeof(ClaimCodeRedeemRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    claimRequestProperties.SequenceEqual(["CorrelationId", "Code"]),
+    "Launcher widened the Agent Claim Code redemption request.");
+
+using (var claimRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new ClaimCodeRedeemRequest(
+            "cert-claim-correlation",
+            "BKE-CLM-AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-FFFFF"))))
+{
+    var claimRequestWireFields = claimRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        claimRequestWireFields.SequenceEqual(["correlation_id", "code"]),
+        "Launcher Claim Code redemption wire request widened.");
+}
+
+Require(
+    typeof(ClaimCodeRedeemResponse)
+        .GetProperties()
+        .All(property => !string.Equals(property.Name, "Code", StringComparison.OrdinalIgnoreCase)),
+    "Launcher Claim Code response reflects the one-time code.");
 
 var updateRequestProperties = typeof(SoftwareUpdateRequest)
     .GetProperties()
@@ -181,6 +216,9 @@ Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "S
 Require(mainWindowMarkup.Contains("Content=\"Repair\"", StringComparison.Ordinal), "Software Repair action is missing.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanRepair}\"", StringComparison.Ordinal), "Software Repair visibility is not state-bound.");
 Require(mainWindowSource.Contains("RepairProduct", StringComparison.Ordinal), "Software Repair click handler is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Redeem Claim Code\"", StringComparison.Ordinal), "Claim Code redemption action is missing.");
+Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRedeemClaimCode}\"", StringComparison.Ordinal), "Claim Code redemption action is not session-bound.");
+Require(mainWindowSource.Contains("RedeemClaimCode", StringComparison.Ordinal), "Claim Code redemption click handler is missing.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -197,6 +235,28 @@ Require(!normalizedViewModelSource.Contains(
     "CanRepair = product.State == LauncherProductState.InstalledNotEntitled",
     StringComparison.Ordinal),
     "Launcher Repair action was exposed for installed-but-not-entitled software.");
+
+Require(normalizedViewModelSource.Contains(
+    "ClaimCode = string.Empty;",
+    StringComparison.Ordinal),
+    "Launcher does not clear the transient Claim Code after successful redemption or logout.");
+Require(normalizedViewModelSource.Contains(
+    "await _claimCodeRedemption.RedeemAsync(",
+    StringComparison.Ordinal),
+    "Launcher Claim Code UX does not delegate redemption to the Agent.");
+Require(normalizedViewModelSource.Contains(
+    "await RefreshCatalogAsync(cancellationToken);",
+    StringComparison.Ordinal),
+    "Launcher does not refresh My Software after redemption.");
+
+var claimControllerSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherClaimCodeRedemptionController.cs"));
+Require(!claimControllerSource.Contains("account_id", StringComparison.OrdinalIgnoreCase),
+    "Launcher Claim Code intent can choose the destination account.");
+Require(!claimControllerSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
+    "Launcher Claim Code controller bypasses the Agent loopback boundary.");
+Require(!claimControllerSource.Contains("File.", StringComparison.Ordinal),
+    "Launcher Claim Code controller persists one-time code material.");
 
 var launcherSource = string.Join(
     "\n",
@@ -215,6 +275,9 @@ var forbiddenUpdateAuthorityMarkers = new[]
     "install_root",
     "bke.privileged-update-request",
     "/api/agent-sessions/repair/standalone",
+    "/api/agent-sessions/claims/redeem",
+    "CLAIM_ENTITLEMENT",
+    "CLAIM_CODE_CHECKOUT_ENABLED",
     "bke.repair-policy.v1",
     "repair_policy_sha256",
     "bke.privileged-repair-request",
@@ -303,6 +366,7 @@ Require(removeTimeout > defaultTimeout,
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
+Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Native Launcher credential -> DS -> one-time Agent handoff boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
