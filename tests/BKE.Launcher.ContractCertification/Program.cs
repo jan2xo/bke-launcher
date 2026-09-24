@@ -33,6 +33,9 @@ Require(AgentLocalContract.SoftwareOpenContractVersion == 1, "software open cont
 Require(AgentLocalContract.ClaimCodeRedeemPath == "/v1/claims/redeem", "Claim Code redemption path drifted");
 Require(AgentLocalContract.ClaimCodeRedemptionCapabilityId == "bke.claim-code-redemption", "Claim Code redemption capability id drifted");
 Require(AgentLocalContract.ClaimCodeRedemptionContractVersion == 1, "Claim Code redemption contract version drifted");
+Require(AgentLocalContract.StoreCatalogPath == "/v1/store/catalog", "Store catalog path drifted");
+Require(AgentLocalContract.StoreCatalogCapabilityId == "bke.store-catalog", "Store catalog capability id drifted");
+Require(AgentLocalContract.StoreCatalogContractVersion == 1, "Store catalog contract version drifted");
 
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.LauncherPlugin) == "LAUNCHER_PLUGIN", "launcher plugin execution type drifted");
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.Standalone) == "STANDALONE", "standalone execution type drifted");
@@ -56,6 +59,11 @@ var localResponseProperties = typeof(AccountSessionDeviceContextResponse).GetPro
     .Concat(typeof(SoftwareRemoveError).GetProperties())
     .Concat(typeof(ClaimCodeRedeemResponse).GetProperties())
     .Concat(typeof(ClaimCodeRedeemError).GetProperties())
+    .Concat(typeof(StoreCatalogResponse).GetProperties())
+    .Concat(typeof(StoreCatalogProduct).GetProperties())
+    .Concat(typeof(StoreCatalogEdition).GetProperties())
+    .Concat(typeof(StoreCatalogPlan).GetProperties())
+    .Concat(typeof(StoreCatalogError).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -84,6 +92,7 @@ Require(agentMethods.SetEquals([
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
     "RedeemClaimCodeAsync",
+    "GetStoreCatalogAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
@@ -133,6 +142,36 @@ Require(
         .GetProperties()
         .All(property => !string.Equals(property.Name, "Code", StringComparison.OrdinalIgnoreCase)),
     "Launcher Claim Code response reflects the one-time code.");
+
+var storeRequestProperties = typeof(StoreCatalogRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    storeRequestProperties.SequenceEqual(["CorrelationId"]),
+    "Launcher widened the Agent Store request.");
+
+using (var storeRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new StoreCatalogRequest("cert-store-correlation"))))
+{
+    var storeRequestWireFields = storeRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        storeRequestWireFields.SequenceEqual(["correlation_id"]),
+        "Launcher Store wire request widened.");
+}
+
+Require(
+    typeof(StoreCatalogResponse)
+        .GetProperties()
+        .All(property =>
+            !property.Name.Contains("CheckoutUrl", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("AccountId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Payment", StringComparison.OrdinalIgnoreCase)),
+    "Launcher Store response absorbed cloud checkout/payment/account authority.");
 
 var updateRequestProperties = typeof(SoftwareUpdateRequest)
     .GetProperties()
@@ -219,6 +258,10 @@ Require(mainWindowSource.Contains("RepairProduct", StringComparison.Ordinal), "S
 Require(mainWindowMarkup.Contains("Content=\"Redeem Claim Code\"", StringComparison.Ordinal), "Claim Code redemption action is missing.");
 Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRedeemClaimCode}\"", StringComparison.Ordinal), "Claim Code redemption action is not session-bound.");
 Require(mainWindowSource.Contains("RedeemClaimCode", StringComparison.Ordinal), "Claim Code redemption click handler is missing.");
+Require(mainWindowMarkup.Contains("Header=\"Store\"", StringComparison.Ordinal), "BKE Store tab is missing.");
+Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
+Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -249,6 +292,17 @@ Require(normalizedViewModelSource.Contains(
     StringComparison.Ordinal),
     "Launcher does not refresh My Software after redemption.");
 
+var storeServiceSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreService.cs"));
+Require(storeServiceSource.Contains("GetStoreCatalogAsync", StringComparison.Ordinal),
+    "Launcher Store does not delegate catalog authority to the Agent.");
+Require(!storeServiceSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store bypasses the Agent loopback boundary.");
+Require(!storeServiceSource.Contains("PAYMONGO", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store absorbed payment-provider authority.");
+Require(!storeServiceSource.Contains("checkout_url", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store absorbed checkout URL authority.");
+
 var claimControllerSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherClaimCodeRedemptionController.cs"));
 Require(!claimControllerSource.Contains("account_id", StringComparison.OrdinalIgnoreCase),
@@ -276,6 +330,9 @@ var forbiddenUpdateAuthorityMarkers = new[]
     "bke.privileged-update-request",
     "/api/agent-sessions/repair/standalone",
     "/api/agent-sessions/claims/redeem",
+    "/api/agent-sessions/store",
+    "PAYMONGO",
+    "checkout_url",
     "CLAIM_ENTITLEMENT",
     "CLAIM_CODE_CHECKOUT_ENABLED",
     "bke.repair-policy.v1",
@@ -367,6 +424,7 @@ Require(removeTimeout > defaultTimeout,
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
+Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
 Console.WriteLine("Native Launcher credential -> DS -> one-time Agent handoff boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
