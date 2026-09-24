@@ -7,6 +7,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: bke-launcher-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   launcher-contracts:
     name: Fast contract gate
@@ -23,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
@@ -73,6 +80,17 @@ jobs:
           if ((Get-Item $archive).Length -le 0) { throw "Launcher candidate archive is empty: $archive" }
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $name" | Set-Content ($archive + ".sha256.txt") -Encoding ascii
+          $manifest = [ordered]@{
+            schema = "bke.launcher-candidate.v1"
+            status = "PREPRODUCTION"
+            production_ready = $false
+            source_sha = $env:SOURCE_SHA
+            architecture = "${{ matrix.arch }}"
+            file = $name
+            sha256 = $hash
+            bytes = (Get-Item $archive).Length
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content ("dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.json") -Encoding utf8
 
       - name: Upload Windows candidate
         uses: actions/upload-artifact@v4
@@ -81,6 +99,7 @@ jobs:
           path: |
             dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.zip
             dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.zip.sha256.txt
+            dist/BKE-Launcher-Windows-${{ matrix.arch }}-Candidate.json
           if-no-files-found: error
           retention-days: 7
 
