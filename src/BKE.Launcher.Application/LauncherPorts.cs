@@ -36,6 +36,10 @@ public interface ILauncherAgentClient
         StoreCheckoutReviewRequest request,
         CancellationToken cancellationToken);
 
+    Task<StoreCheckoutStartResponse> StartStoreCheckoutAsync(
+        StoreCheckoutStartRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);
@@ -85,3 +89,10 @@ public sealed record LauncherNativeSignInResult(
     AccountSessionAccount? Account,
     string? ErrorCode,
     string? ErrorMessage);
+
+
+public interface ILauncherExternalNavigator
+{
+    void OpenCheckout(string absoluteUrl);
+    void OpenLegalDocument(string slug);
+}
