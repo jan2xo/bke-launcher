@@ -37,6 +37,11 @@ public sealed partial class MainWindow : Window
         await ViewModel.RefreshCatalogAsync(CancellationToken.None);
     }
 
+    private async void RefreshStore(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.RefreshStoreAsync(CancellationToken.None);
+    }
+
     private async void InstallProduct(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
