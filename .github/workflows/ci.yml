@@ -2,22 +2,37 @@ name: BKE Launcher CI
 
 on:
   pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact Launcher commit SHA to certify
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact Launcher commit SHA to certify
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: bke-launcher-ci-${{ github.event.pull_request.number || github.ref }}
+  group: bke-launcher-ci-${{ inputs.source_sha || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
-  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  SOURCE_SHA: ${{ inputs.source_sha || github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   launcher-contracts:
     name: Fast contract gate
     uses: ./.github/workflows/_launcher-contracts.yml
+    with:
+      source_sha: ${{ inputs.source_sha || github.event.pull_request.head.sha || github.sha }}
 
   windows-candidate:
     name: Windows ${{ matrix.arch }} candidate
