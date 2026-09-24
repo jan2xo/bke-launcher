@@ -104,6 +104,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<StoreCheckoutReviewResponse> ReviewStoreCheckoutAsync(
+        StoreCheckoutReviewRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<StoreCheckoutReviewRequest, StoreCheckoutReviewResponse>(
+            AgentLocalContract.StoreCheckoutReviewPath,
+            request,
+            cancellationToken);
+
     public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken) =>
