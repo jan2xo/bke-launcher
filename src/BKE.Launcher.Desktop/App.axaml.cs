@@ -27,6 +27,7 @@ public sealed partial class App : Avalonia.Application
             var catalog = new LauncherCatalogService(catalogSource);
             var softwareInstall = new LauncherSoftwareInstallController(agentClient);
             var softwareUpdate = new LauncherSoftwareUpdateController(agentClient);
+            var softwareRepair = new LauncherSoftwareRepairController(agentClient);
             var softwareOpen = new LauncherSoftwareOpenController(agentClient);
             var softwareRemove = new LauncherSoftwareRemoveController(agentClient);
             var viewModel = new MainWindowViewModel(
@@ -35,6 +36,7 @@ public sealed partial class App : Avalonia.Application
                 catalog,
                 softwareInstall,
                 softwareUpdate,
+                softwareRepair,
                 softwareOpen,
                 softwareRemove);
 

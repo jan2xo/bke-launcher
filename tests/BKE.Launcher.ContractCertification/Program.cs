@@ -24,6 +24,9 @@ Require(AgentLocalContract.SoftwareInstallContractVersion == 1, "software instal
 Require(AgentLocalContract.SoftwareUpdatePath == "/v1/software/update", "software update path drifted");
 Require(AgentLocalContract.SoftwareUpdateCapabilityId == "bke.software-update", "software update capability id drifted");
 Require(AgentLocalContract.SoftwareUpdateContractVersion == 1, "software update contract version drifted");
+Require(AgentLocalContract.SoftwareRepairPath == "/v1/software/repair", "software Repair path drifted");
+Require(AgentLocalContract.SoftwareRepairCapabilityId == "bke.software-repair", "software Repair capability id drifted");
+Require(AgentLocalContract.SoftwareRepairContractVersion == 1, "software Repair contract version drifted");
 Require(AgentLocalContract.SoftwareOpenPath == "/v1/software/open", "software open path drifted");
 Require(AgentLocalContract.SoftwareOpenCapabilityId == "bke.software-open", "software open capability id drifted");
 Require(AgentLocalContract.SoftwareOpenContractVersion == 1, "software open contract version drifted");
@@ -42,6 +45,8 @@ var localResponseProperties = typeof(AccountSessionDeviceContextResponse).GetPro
     .Concat(typeof(SoftwareInstallError).GetProperties())
     .Concat(typeof(SoftwareUpdateResponse).GetProperties())
     .Concat(typeof(SoftwareUpdateError).GetProperties())
+    .Concat(typeof(SoftwareRepairResponse).GetProperties())
+    .Concat(typeof(SoftwareRepairError).GetProperties())
     .Concat(typeof(SoftwareOpenResponse).GetProperties())
     .Concat(typeof(SoftwareOpenError).GetProperties())
     .Concat(typeof(SoftwareRemoveResponse).GetProperties())
@@ -76,6 +81,7 @@ Require(agentMethods.SetEquals([
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
+    "RepairSoftwareAsync",
     "OpenSoftwareAsync",
     "RemoveSoftwareAsync"
 ]), "Launcher Agent client port drifted.");
@@ -116,6 +122,30 @@ using (var updateRequestDocument = JsonDocument.Parse(
         "Launcher software-update wire request widened.");
 }
 
+
+var repairRequestProperties = typeof(SoftwareRepairRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    repairRequestProperties.SequenceEqual(["CorrelationId", "ProductId"]),
+    "Launcher widened the Agent software-Repair request.");
+
+using (var repairRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new SoftwareRepairRequest(
+            "cert-repair-correlation",
+            "bke-cert-product"))))
+{
+    var repairRequestWireFields = repairRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        repairRequestWireFields.SequenceEqual(["correlation_id", "product_id"]),
+        "Launcher software-Repair wire request widened.");
+}
+
 var nativeLoginResponseProperties = typeof(NativeBkeLoginResponse)
     .GetProperties()
     .Select(property => property.Name)
@@ -148,6 +178,9 @@ Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Na
 Require(mainWindowMarkup.Contains("Content=\"Update\"", StringComparison.Ordinal), "Software Update action is missing.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanUpdate}\"", StringComparison.Ordinal), "Software Update visibility is not state-bound.");
 Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "Software Update click handler is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Repair\"", StringComparison.Ordinal), "Software Repair action is missing.");
+Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanRepair}\"", StringComparison.Ordinal), "Software Repair visibility is not state-bound.");
+Require(mainWindowSource.Contains("RepairProduct", StringComparison.Ordinal), "Software Repair click handler is missing.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -155,6 +188,15 @@ Require(normalizedViewModelSource.Contains(
     "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
     StringComparison.Ordinal),
     "Launcher Update action is not restricted to STANDALONE + UPDATE_AVAILABLE.");
+
+Require(normalizedViewModelSource.Contains(
+    "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State is LauncherProductState.Installed\n                or LauncherProductState.UpdateAvailable\n                or LauncherProductState.RepairRequired,",
+    StringComparison.Ordinal),
+    "Launcher Repair action is not restricted to entitled installed standalone states.");
+Require(!normalizedViewModelSource.Contains(
+    "CanRepair = product.State == LauncherProductState.InstalledNotEntitled",
+    StringComparison.Ordinal),
+    "Launcher Repair action was exposed for installed-but-not-entitled software.");
 
 var launcherSource = string.Join(
     "\n",
@@ -172,6 +214,10 @@ var forbiddenUpdateAuthorityMarkers = new[]
     "artifact_size",
     "install_root",
     "bke.privileged-update-request",
+    "/api/agent-sessions/repair/standalone",
+    "bke.repair-policy.v1",
+    "repair_policy_sha256",
+    "bke.privileged-repair-request",
     "privileged_arguments",
 };
 foreach (var marker in forbiddenUpdateAuthorityMarkers)
@@ -210,12 +256,16 @@ var installTimeoutField = typeof(AgentLoopbackClient).GetField(
 var updateTimeoutField = typeof(AgentLoopbackClient).GetField(
     "UpdateRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
+var repairTimeoutField = typeof(AgentLoopbackClient).GetField(
+    "RepairRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
 var removeTimeoutField = typeof(AgentLoopbackClient).GetField(
     "RemoveRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
 var defaultTimeoutValue = defaultTimeoutField?.GetValue(null);
 var installTimeoutValue = installTimeoutField?.GetValue(null);
 var updateTimeoutValue = updateTimeoutField?.GetValue(null);
+var repairTimeoutValue = repairTimeoutField?.GetValue(null);
 var removeTimeoutValue = removeTimeoutField?.GetValue(null);
 Require(defaultTimeoutValue is TimeSpan,
     "Launcher default loopback timeout field is unavailable.");
@@ -223,11 +273,14 @@ Require(installTimeoutValue is TimeSpan,
     "Launcher install-operation timeout field is unavailable.");
 Require(updateTimeoutValue is TimeSpan,
     "Launcher update-operation timeout field is unavailable.");
+Require(repairTimeoutValue is TimeSpan,
+    "Launcher Repair-operation timeout field is unavailable.");
 Require(removeTimeoutValue is TimeSpan,
     "Launcher remove-operation timeout field is unavailable.");
 var defaultTimeout = (TimeSpan)defaultTimeoutValue!;
 var installTimeout = (TimeSpan)installTimeoutValue!;
 var updateTimeout = (TimeSpan)updateTimeoutValue!;
+var repairTimeout = (TimeSpan)repairTimeoutValue!;
 var removeTimeout = (TimeSpan)removeTimeoutValue!;
 Require(defaultTimeout == TimeSpan.FromSeconds(5),
     "Launcher default loopback timeout drifted.");
@@ -239,6 +292,10 @@ Require(updateTimeout == TimeSpan.FromMinutes(10),
     "Launcher update-operation timeout drifted.");
 Require(updateTimeout > defaultTimeout,
     "Launcher update operation does not have a dedicated long-running timeout.");
+Require(repairTimeout == TimeSpan.FromMinutes(10),
+    "Launcher Repair-operation timeout drifted.");
+Require(repairTimeout > defaultTimeout,
+    "Launcher Repair operation does not have a dedicated long-running timeout.");
 Require(removeTimeout == TimeSpan.FromMinutes(10),
     "Launcher remove-operation timeout drifted.");
 Require(removeTimeout > defaultTimeout,
@@ -252,6 +309,8 @@ Console.WriteLine("Agent-owned standalone install intent boundary certified");
 Console.WriteLine("Bounded long-running install transport certified");
 Console.WriteLine("Agent-owned software Update intent boundary certified");
 Console.WriteLine("Bounded long-running update transport certified");
+Console.WriteLine("Agent-owned same-version software Repair intent boundary certified");
+Console.WriteLine("Bounded long-running Repair transport certified");
 Console.WriteLine("Agent-owned standalone Open intent boundary certified");
 Console.WriteLine("Agent-owned software Remove intent boundary certified");
 Console.WriteLine("Bounded long-running remove transport certified");

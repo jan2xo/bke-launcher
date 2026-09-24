@@ -12,6 +12,8 @@ public static class AgentLocalContract
     public const int SoftwareInstallContractVersion = 1;
     public const string SoftwareUpdateCapabilityId = "bke.software-update";
     public const int SoftwareUpdateContractVersion = 1;
+    public const string SoftwareRepairCapabilityId = "bke.software-repair";
+    public const int SoftwareRepairContractVersion = 1;
     public const string SoftwareOpenCapabilityId = "bke.software-open";
     public const int SoftwareOpenContractVersion = 1;
     public const string SoftwareRemoveCapabilityId = "bke.software-remove";
@@ -25,6 +27,7 @@ public static class AgentLocalContract
     public const string SoftwareCatalogPath = "/v1/software/catalog";
     public const string SoftwareInstallPath = "/v1/software/install";
     public const string SoftwareUpdatePath = "/v1/software/update";
+    public const string SoftwareRepairPath = "/v1/software/repair";
     public const string SoftwareOpenPath = "/v1/software/open";
     public const string SoftwareRemovePath = "/v1/software/remove";
 }
