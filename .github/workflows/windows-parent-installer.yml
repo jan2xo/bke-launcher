@@ -55,10 +55,6 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
       - name: Certify pinned Licensing Agent source
         shell: pwsh
         working-directory: agent-src
@@ -103,10 +99,6 @@ jobs:
             throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
           }
           Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -468,10 +460,6 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
       - name: Download exact parent package
         uses: actions/download-artifact@v4
         with:
@@ -608,10 +596,6 @@ jobs:
             throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
           }
           Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
 
       - uses: actions/setup-dotnet@v4
         with:
