@@ -97,6 +97,9 @@
                           <Button Content="Update"
                                   IsVisible="{Binding CanUpdate}"
                                   Click="UpdateProduct" />
+                          <Button Content="Repair"
+                                  IsVisible="{Binding CanRepair}"
+                                  Click="RepairProduct" />
                           <Button Content="Open"
                                   IsVisible="{Binding CanOpen}"
                                   Click="OpenProduct" />
