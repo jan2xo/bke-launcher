@@ -20,7 +20,7 @@ concurrency:
 env:
   BKE_VERSION: "0.1.0"
   AGENT_VERSION: "2.0.0"
-  AGENT_SOURCE_SHA: "6bf7949bd77fc738191c820b17bc12108354246f"
+  AGENT_SOURCE_SHA: "379e76f9a69d41ea8d4cd950ca62728511bde8e2"
   AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
   SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: 6bf7949bd77fc738191c820b17bc12108354246f
+          ref: 379e76f9a69d41ea8d4cd950ca62728511bde8e2
           path: agent-src
           fetch-depth: 1
 
@@ -87,7 +87,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: 6bf7949bd77fc738191c820b17bc12108354246f
+          ref: 379e76f9a69d41ea8d4cd950ca62728511bde8e2
           path: agent-src
           fetch-depth: 1
 
@@ -443,7 +443,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: 6bf7949bd77fc738191c820b17bc12108354246f
+          ref: 379e76f9a69d41ea8d4cd950ca62728511bde8e2
           path: agent-src
           fetch-depth: 1
 
@@ -584,7 +584,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: 6bf7949bd77fc738191c820b17bc12108354246f
+          ref: 379e76f9a69d41ea8d4cd950ca62728511bde8e2
           path: agent-src
           fetch-depth: 1
 
