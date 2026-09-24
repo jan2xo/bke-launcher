@@ -190,10 +190,59 @@
                     <TextBlock Text="{Binding PurchaseReviewLegalLabel}"
                                TextWrapping="Wrap"
                                Opacity="0.78" />
-                    <TextBlock Text="Review only — no order, payment, or checkout has been created."
+                    <TextBlock Text="Review only — no order, payment, or checkout has been created yet."
                                TextWrapping="Wrap"
                                FontSize="11"
                                Opacity="0.62" />
+
+                    <StackPanel IsVisible="{Binding ShowPurchaseActions}"
+                                Spacing="8"
+                                Margin="0,8,0,0">
+                      <TextBlock Text="Required Legal documents"
+                                 FontWeight="SemiBold" />
+                      <ItemsControl ItemsSource="{Binding PurchaseLegalDocuments}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:PurchaseLegalDocumentViewModel">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,2">
+                              <CheckBox Content="{Binding Label}"
+                                        IsChecked="{Binding IsAccepted, Mode=TwoWay}"
+                                        VerticalAlignment="Center" />
+                              <Button Grid.Column="1"
+                                      Content="Open"
+                                      Click="OpenPurchaseLegalDocument" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+
+                      <TextBlock Text="SELF binds the paid software right to this signed-in account. GIFT creates an unbound one-time Claim Code after confirmed payment."
+                                 TextWrapping="Wrap"
+                                 FontSize="11"
+                                 Opacity="0.72" />
+
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Buy for myself"
+                                Click="BuyForSelf"
+                                IsEnabled="{Binding CanBuySelf}" />
+                        <Button Content="Buy as gift / Claim Code"
+                                Click="BuyAsGift"
+                                IsEnabled="{Binding CanBuyGift}" />
+                      </StackPanel>
+
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding PurchaseCheckoutMessage}"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.78" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding PurchaseCheckoutStatus}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold" />
+                      </Grid>
+                      <TextBlock Text="Secure payment opens from a Digital Solutions-created checkout target. BKE never chooses the price, payment provider, destination account, or gift recipient."
+                                 TextWrapping="Wrap"
+                                 FontSize="11"
+                                 Opacity="0.62" />
+                    </StackPanel>
                   </StackPanel>
                 </Border>
               </StackPanel>
