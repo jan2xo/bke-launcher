@@ -26,6 +26,7 @@ public sealed partial class App : Avalonia.Application
             var catalogSource = new AgentSoftwareCatalogSource(agentClient);
             var catalog = new LauncherCatalogService(catalogSource);
             var store = new LauncherStoreService(agentClient);
+            var storeCheckoutReview = new LauncherStoreCheckoutReviewService(agentClient);
             var softwareInstall = new LauncherSoftwareInstallController(agentClient);
             var softwareUpdate = new LauncherSoftwareUpdateController(agentClient);
             var softwareRepair = new LauncherSoftwareRepairController(agentClient);
@@ -37,6 +38,7 @@ public sealed partial class App : Avalonia.Application
                 nativeSignIn,
                 catalog,
                 store,
+                storeCheckoutReview,
                 softwareInstall,
                 softwareUpdate,
                 softwareRepair,
