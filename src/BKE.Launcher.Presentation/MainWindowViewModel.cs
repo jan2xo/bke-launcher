@@ -577,6 +577,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string purchasePlanId,
         CancellationToken cancellationToken)
     {
+        if (_purchaseAttemptLocked &&
+            !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId))
+        {
+            PurchaseCheckoutStatus = "RECOVERY_REQUIRED";
+            PurchaseCheckoutMessage =
+                "Resolve the existing checkout attempt before reviewing or starting another purchase.";
+            RaiseCheckoutRecoveryState();
+            return;
+        }
+
         ShowPurchaseReview = true;
         PurchaseReviewProductLabel = string.Empty;
         PurchaseReviewEditionLabel = string.Empty;
@@ -820,6 +830,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 if (result.Complimentary == true)
                 {
+                    _checkoutRecoveryCorrelationId = null;
+                    _recoverableCheckoutUrl = null;
+                    RaiseCheckoutRecoveryState();
                     await RefreshCatalogAsync(cancellationToken);
                     await RefreshStoreAsync(cancellationToken);
                 }
@@ -909,8 +922,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 if (result.PaymentStatus is "SETTLED" or "NOT_REQUIRED")
                 {
+                    _checkoutRecoveryCorrelationId = null;
+                    _recoverableCheckoutUrl = null;
                     await RefreshCatalogAsync(cancellationToken);
                     await RefreshStoreAsync(cancellationToken);
+                }
+                else if (result.PaymentStatus is "FAILED" or "CANCELLED")
+                {
+                    _checkoutRecoveryCorrelationId = null;
+                    _recoverableCheckoutUrl = null;
                 }
             }
             else if (result.Status == "NOT_FOUND")

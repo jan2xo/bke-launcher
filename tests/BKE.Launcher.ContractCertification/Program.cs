@@ -532,6 +532,10 @@ Require(normalizedViewModelSource.Contains(
     StringComparison.Ordinal),
     "Launcher checkout recovery does not preserve the no-second-order boundary.");
 Require(normalizedViewModelSource.Contains(
+    "Resolve the existing checkout attempt before reviewing or starting another purchase.",
+    StringComparison.Ordinal),
+    "Launcher can discard an unresolved checkout correlation by re-reviewing.");
+Require(normalizedViewModelSource.Contains(
     "Opened the existing secure checkout. No new order or payment attempt was created.",
     StringComparison.Ordinal),
     "Launcher existing-checkout resume UX does not state its no-new-mutation boundary.");
