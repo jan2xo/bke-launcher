@@ -13,6 +13,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareUpdateController _softwareUpdate;
+    private readonly LauncherSoftwareRepairController _softwareRepair;
     private readonly LauncherSoftwareOpenController _softwareOpen;
     private readonly LauncherSoftwareRemoveController _softwareRemove;
     private string _sessionStatus = "SIGNED_OUT";
@@ -32,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherCatalogService catalog,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareUpdateController softwareUpdate,
+        LauncherSoftwareRepairController softwareRepair,
         LauncherSoftwareOpenController softwareOpen,
         LauncherSoftwareRemoveController softwareRemove)
     {
@@ -40,6 +42,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _catalog = catalog;
         _softwareInstall = softwareInstall;
         _softwareUpdate = softwareUpdate;
+        _softwareRepair = softwareRepair;
         _softwareOpen = softwareOpen;
         _softwareRemove = softwareRemove;
     }
@@ -388,6 +391,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             StateLabel = "Updating",
             CanInstall = false,
             CanUpdate = false,
+            CanRepair = false,
             CanOpen = false,
             CanRemove = false,
         };
@@ -453,6 +457,94 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CatalogStatus = "AGENT_UNAVAILABLE";
             CatalogMessage =
                 "The BKE Licensing Agent update capability is unavailable or invalid.";
+        }
+    }
+
+    public async Task RepairProductAsync(
+        string productId,
+        CancellationToken cancellationToken)
+    {
+        var index = Products
+            .Select((product, index) => (product, index))
+            .Where(item =>
+                string.Equals(
+                    item.product.ProductId,
+                    productId,
+                    StringComparison.Ordinal))
+            .Select(item => item.index)
+            .DefaultIfEmpty(-1)
+            .First();
+
+        if (index < 0 || !Products[index].CanRepair)
+        {
+            return;
+        }
+
+        var previous = Products[index];
+        Products[index] = previous with
+        {
+            StateLabel = "Repairing",
+            CanInstall = false,
+            CanUpdate = false,
+            CanRepair = false,
+            CanOpen = false,
+            CanRemove = false,
+        };
+        CatalogStatus = "REPAIRING";
+        CatalogMessage =
+            $"Starting verified Repair for {previous.DisplayName}…";
+
+        try
+        {
+            var response = await _softwareRepair.RepairAsync(
+                productId,
+                cancellationToken);
+
+            switch (response.Status)
+            {
+                case "STARTED":
+                case "IN_PROGRESS":
+                    CatalogStatus = "REPAIRING";
+                    CatalogMessage = response.Status == "STARTED"
+                        ? $"Verified Repair started for {previous.DisplayName}. Refresh software after the elevation step completes."
+                        : $"Repair is already in progress for {previous.DisplayName}.";
+                    return;
+
+                case "NOT_INSTALLED":
+                    await RefreshCatalogAsync(cancellationToken);
+                    CatalogMessage =
+                        $"{previous.DisplayName} is no longer installed on this machine.";
+                    return;
+
+                case "AUTH_REQUIRED":
+                    Products[index] = previous with
+                    {
+                        CanRepair = false,
+                    };
+                    CatalogStatus = "AUTH_REQUIRED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        "Sign in with BKE before repairing software.";
+                    return;
+
+                default:
+                    Products[index] = previous;
+                    CatalogStatus = "FAILED";
+                    CatalogMessage =
+                        response.Error?.Message ??
+                        $"Repair failed: {response.State}.";
+                    return;
+            }
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            Products[index] = previous;
+            CatalogStatus = "AGENT_UNAVAILABLE";
+            CatalogMessage =
+                "The BKE Licensing Agent Repair capability is unavailable or invalid.";
         }
     }
 
@@ -550,6 +642,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             StateLabel = "Removing",
             CanInstall = false,
             CanUpdate = false,
+            CanRepair = false,
             CanOpen = false,
             CanRemove = false,
         };
@@ -687,6 +780,7 @@ public sealed record SoftwareProductViewModel(
     string VersionLabel,
     bool CanInstall,
     bool CanUpdate,
+    bool CanRepair,
     bool CanOpen,
     bool CanRemove)
 {
@@ -733,6 +827,10 @@ public sealed record SoftwareProductViewModel(
             product.State == LauncherProductState.Installable,
             product.ExecutionType == ProductExecutionType.Standalone &&
             product.State == LauncherProductState.UpdateAvailable,
+            product.ExecutionType == ProductExecutionType.Standalone &&
+            product.State is LauncherProductState.Installed
+                or LauncherProductState.UpdateAvailable
+                or LauncherProductState.RepairRequired,
             product.ExecutionType == ProductExecutionType.Standalone &&
             product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable,
             product.ExecutionType == ProductExecutionType.Standalone &&
