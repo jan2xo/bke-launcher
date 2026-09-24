@@ -13,6 +13,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherNativeSignInController _nativeSignIn;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherStoreService _store;
+    private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareUpdateController _softwareUpdate;
     private readonly LauncherSoftwareRepairController _softwareRepair;
@@ -35,12 +36,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _storeStatus = "AUTH_REQUIRED";
     private string _storeMessage = "Sign in to browse the BKE Store.";
     private bool _giftCheckoutEnabled;
+    private string _purchaseReviewStatus = "IDLE";
+    private string _purchaseReviewMessage = "Select a plan to review the current purchase terms.";
+    private string _purchaseReviewProductLabel = string.Empty;
+    private string _purchaseReviewEditionLabel = string.Empty;
+    private string _purchaseReviewPriceLabel = string.Empty;
+    private string _purchaseReviewModesLabel = string.Empty;
+    private string _purchaseReviewLegalLabel = string.Empty;
+    private bool _showPurchaseReview;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
         LauncherNativeSignInController nativeSignIn,
         LauncherCatalogService catalog,
         LauncherStoreService store,
+        LauncherStoreCheckoutReviewService storeCheckoutReview,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareUpdateController softwareUpdate,
         LauncherSoftwareRepairController softwareRepair,
@@ -52,6 +62,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _nativeSignIn = nativeSignIn;
         _catalog = catalog;
         _store = store;
+        _storeCheckoutReview = storeCheckoutReview;
         _softwareInstall = softwareInstall;
         _softwareUpdate = softwareUpdate;
         _softwareRepair = softwareRepair;
@@ -175,6 +186,54 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string GiftCheckoutLabel => GiftCheckoutEnabled
         ? "Gift purchase option: Claim Code delivery available"
         : "Gift purchase option: not available in this environment";
+
+    public string PurchaseReviewStatus
+    {
+        get => _purchaseReviewStatus;
+        private set => SetField(ref _purchaseReviewStatus, value);
+    }
+
+    public string PurchaseReviewMessage
+    {
+        get => _purchaseReviewMessage;
+        private set => SetField(ref _purchaseReviewMessage, value);
+    }
+
+    public string PurchaseReviewProductLabel
+    {
+        get => _purchaseReviewProductLabel;
+        private set => SetField(ref _purchaseReviewProductLabel, value);
+    }
+
+    public string PurchaseReviewEditionLabel
+    {
+        get => _purchaseReviewEditionLabel;
+        private set => SetField(ref _purchaseReviewEditionLabel, value);
+    }
+
+    public string PurchaseReviewPriceLabel
+    {
+        get => _purchaseReviewPriceLabel;
+        private set => SetField(ref _purchaseReviewPriceLabel, value);
+    }
+
+    public string PurchaseReviewModesLabel
+    {
+        get => _purchaseReviewModesLabel;
+        private set => SetField(ref _purchaseReviewModesLabel, value);
+    }
+
+    public string PurchaseReviewLegalLabel
+    {
+        get => _purchaseReviewLegalLabel;
+        private set => SetField(ref _purchaseReviewLegalLabel, value);
+    }
+
+    public bool ShowPurchaseReview
+    {
+        get => _showPurchaseReview;
+        private set => SetField(ref _showPurchaseReview, value);
+    }
 
     public bool CanRedeemClaimCode =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
@@ -453,6 +512,125 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearStore(
                 "AGENT_UNAVAILABLE",
                 "BKE Licensing Agent Store catalog is unavailable or invalid.");
+        }
+    }
+
+    public async Task ReviewPurchaseAsync(
+        string purchasePlanId,
+        CancellationToken cancellationToken)
+    {
+        ShowPurchaseReview = true;
+        PurchaseReviewProductLabel = string.Empty;
+        PurchaseReviewEditionLabel = string.Empty;
+        PurchaseReviewPriceLabel = string.Empty;
+        PurchaseReviewModesLabel = string.Empty;
+        PurchaseReviewLegalLabel = string.Empty;
+
+        if (!string.Equals(
+                SessionStatus,
+                "AUTHENTICATED",
+                StringComparison.Ordinal))
+        {
+            PurchaseReviewStatus = "AUTH_REQUIRED";
+            PurchaseReviewMessage =
+                "Sign in with BKE before reviewing a purchase.";
+            return;
+        }
+
+        try
+        {
+            PurchaseReviewStatus = "REVIEWING";
+            PurchaseReviewMessage =
+                "Refreshing canonical price, purchase modes, and Legal requirements…";
+
+            var review = await _storeCheckoutReview.ReviewAsync(
+                purchasePlanId,
+                cancellationToken);
+
+            PurchaseReviewStatus = review.Status;
+            PurchaseReviewMessage = review.Message ?? review.Status switch
+            {
+                "READY" => "Purchase review is current. No payment has been started.",
+                "LEGAL_REACCEPTANCE_REQUIRED" =>
+                    "Current BKE Legal documents must be accepted before this purchase can continue.",
+                "LEGAL_ACCEPTANCE_REQUIRED" =>
+                    "This purchase requires Legal acceptance before checkout can continue.",
+                "PLAN_NOT_AVAILABLE" =>
+                    "The selected plan is no longer available. Refresh the Store.",
+                "ACCOUNT_FORBIDDEN" =>
+                    "This account cannot make this purchase.",
+                "ACCOUNT_UNAVAILABLE" =>
+                    "This account is not currently available for purchases.",
+                "AUTH_REQUIRED" =>
+                    "Sign in with BKE before reviewing a purchase.",
+                _ => "Purchase review is currently unavailable.",
+            };
+
+            if (review.Product is not null)
+            {
+                PurchaseReviewProductLabel =
+                    $"Product: {review.Product.DisplayName}";
+            }
+
+            if (review.Edition is not null)
+            {
+                PurchaseReviewEditionLabel =
+                    $"Edition: {review.Edition.Name} · up to {review.Edition.MaxUsers} user(s) · {review.Edition.MaxDevicesPerUser} device(s) per user";
+            }
+
+            if (review.Plan is not null)
+            {
+                PurchaseReviewPriceLabel =
+                    $"Canonical price: {StorePlanViewModel.From(review.Plan).PriceLabel}";
+            }
+
+            if (review.PurchaseModes.Count > 0)
+            {
+                PurchaseReviewModesLabel =
+                    "Purchase modes: " +
+                    string.Join(" · ", review.PurchaseModes);
+            }
+
+            if (review.PendingLegal.Count > 0)
+            {
+                PurchaseReviewLegalLabel =
+                    "Legal reacceptance required: " +
+                    string.Join(
+                        " · ",
+                        review.PendingLegal.Select(document =>
+                            $"{document.Title} v{document.Version}"));
+            }
+            else if (review.LegalDocuments.Count > 0)
+            {
+                PurchaseReviewLegalLabel =
+                    "Legal requirements: " +
+                    string.Join(
+                        " · ",
+                        review.LegalDocuments.Select(document =>
+                            document.RequiresReacceptance
+                                ? $"{document.Title} v{document.Version} (reacceptance required)"
+                                : $"{document.Title} v{document.Version}"));
+            }
+            else if (review.Status == "READY")
+            {
+                PurchaseReviewLegalLabel =
+                    "Legal requirements: none returned for this plan.";
+            }
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            PurchaseReviewStatus = "AGENT_UNAVAILABLE";
+            PurchaseReviewMessage =
+                "BKE Licensing Agent purchase review is unavailable or invalid.";
+            PurchaseReviewProductLabel = string.Empty;
+            PurchaseReviewEditionLabel = string.Empty;
+            PurchaseReviewPriceLabel = string.Empty;
+            PurchaseReviewModesLabel = string.Empty;
+            PurchaseReviewLegalLabel = string.Empty;
         }
     }
 
@@ -962,6 +1140,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         GiftCheckoutEnabled = false;
         StoreProducts.Clear();
         Raise(nameof(ShowEmptyStore));
+        ClearPurchaseReview();
+    }
+
+    private void ClearPurchaseReview()
+    {
+        PurchaseReviewStatus = "IDLE";
+        PurchaseReviewMessage =
+            "Select a plan to review the current purchase terms.";
+        PurchaseReviewProductLabel = string.Empty;
+        PurchaseReviewEditionLabel = string.Empty;
+        PurchaseReviewPriceLabel = string.Empty;
+        PurchaseReviewModesLabel = string.Empty;
+        PurchaseReviewLegalLabel = string.Empty;
+        ShowPurchaseReview = false;
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

@@ -22,6 +22,8 @@ public static class AgentLocalContract
     public const int ClaimCodeRedemptionContractVersion = 1;
     public const string StoreCatalogCapabilityId = "bke.store-catalog";
     public const int StoreCatalogContractVersion = 1;
+    public const string StoreCheckoutReviewCapabilityId = "bke.store-checkout-review";
+    public const int StoreCheckoutReviewContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
     public const string AccountSessionDeviceContextPath = "/v1/account-session/device-context";
     public const string AccountSessionCompletePath = "/v1/account-session/complete";
@@ -36,6 +38,7 @@ public static class AgentLocalContract
     public const string SoftwareRemovePath = "/v1/software/remove";
     public const string ClaimCodeRedeemPath = "/v1/claims/redeem";
     public const string StoreCatalogPath = "/v1/store/catalog";
+    public const string StoreCheckoutReviewPath = "/v1/store/checkout-review";
 }
 
 public sealed record AccountSessionDeviceContextRequest(

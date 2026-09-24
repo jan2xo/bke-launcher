@@ -36,6 +36,9 @@ Require(AgentLocalContract.ClaimCodeRedemptionContractVersion == 1, "Claim Code 
 Require(AgentLocalContract.StoreCatalogPath == "/v1/store/catalog", "Store catalog path drifted");
 Require(AgentLocalContract.StoreCatalogCapabilityId == "bke.store-catalog", "Store catalog capability id drifted");
 Require(AgentLocalContract.StoreCatalogContractVersion == 1, "Store catalog contract version drifted");
+Require(AgentLocalContract.StoreCheckoutReviewPath == "/v1/store/checkout-review", "Store checkout-review path drifted");
+Require(AgentLocalContract.StoreCheckoutReviewCapabilityId == "bke.store-checkout-review", "Store checkout-review capability id drifted");
+Require(AgentLocalContract.StoreCheckoutReviewContractVersion == 1, "Store checkout-review contract version drifted");
 
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.LauncherPlugin) == "LAUNCHER_PLUGIN", "launcher plugin execution type drifted");
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.Standalone) == "STANDALONE", "standalone execution type drifted");
@@ -64,6 +67,12 @@ var localResponseProperties = typeof(AccountSessionDeviceContextResponse).GetPro
     .Concat(typeof(StoreCatalogEdition).GetProperties())
     .Concat(typeof(StoreCatalogPlan).GetProperties())
     .Concat(typeof(StoreCatalogError).GetProperties())
+    .Concat(typeof(StoreCheckoutReviewResponse).GetProperties())
+    .Concat(typeof(StoreCheckoutReviewProduct).GetProperties())
+    .Concat(typeof(StoreCheckoutReviewEdition).GetProperties())
+    .Concat(typeof(StoreCheckoutReviewLegalDocument).GetProperties())
+    .Concat(typeof(StoreCheckoutReviewPendingLegalDocument).GetProperties())
+    .Concat(typeof(StoreCheckoutReviewError).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -93,6 +102,7 @@ Require(agentMethods.SetEquals([
     "LogoutAccountSessionAsync",
     "RedeemClaimCodeAsync",
     "GetStoreCatalogAsync",
+    "ReviewStoreCheckoutAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
@@ -172,6 +182,42 @@ Require(
             !property.Name.Contains("AccountId", StringComparison.OrdinalIgnoreCase) &&
             !property.Name.Contains("Payment", StringComparison.OrdinalIgnoreCase)),
     "Launcher Store response absorbed cloud checkout/payment/account authority.");
+
+var checkoutReviewRequestProperties = typeof(StoreCheckoutReviewRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    checkoutReviewRequestProperties.SequenceEqual(["CorrelationId", "PurchasePlanId"]),
+    "Launcher widened the Agent Store checkout-review request.");
+
+using (var checkoutReviewRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new StoreCheckoutReviewRequest(
+            "cert-review-correlation",
+            "plan-perpetual"))))
+{
+    var checkoutReviewWireFields = checkoutReviewRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        checkoutReviewWireFields.SequenceEqual([
+            "correlation_id",
+            "purchase_plan_id"
+        ]),
+        "Launcher Store checkout-review wire request widened.");
+}
+
+Require(
+    typeof(StoreCheckoutReviewResponse)
+        .GetProperties()
+        .All(property =>
+            !property.Name.Contains("CheckoutUrl", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("AccountId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Payment", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Provider", StringComparison.OrdinalIgnoreCase)),
+    "Launcher checkout review absorbed cloud payment/account/provider authority.");
 
 var updateRequestProperties = typeof(SoftwareUpdateRequest)
     .GetProperties()
@@ -262,6 +308,12 @@ Require(mainWindowMarkup.Contains("Header=\"Store\"", StringComparison.Ordinal),
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
 Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Review purchase\"", StringComparison.Ordinal), "BKE Store purchase review action is missing.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewPriceLabel}\"", StringComparison.Ordinal), "BKE Store canonical review price is not presentation-bound.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewModesLabel}\"", StringComparison.Ordinal), "BKE Store purchase modes are not presentation-bound.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewLegalLabel}\"", StringComparison.Ordinal), "BKE Store Legal requirements are not presentation-bound.");
+Require(mainWindowMarkup.Contains("no order, payment, or checkout has been created", StringComparison.OrdinalIgnoreCase), "BKE Store review does not state its read-only boundary.");
+Require(mainWindowSource.Contains("ReviewPurchase", StringComparison.Ordinal), "BKE Store purchase review click handler is missing.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -302,6 +354,28 @@ Require(!storeServiceSource.Contains("PAYMONGO", StringComparison.OrdinalIgnoreC
     "Launcher Store absorbed payment-provider authority.");
 Require(!storeServiceSource.Contains("checkout_url", StringComparison.OrdinalIgnoreCase),
     "Launcher Store absorbed checkout URL authority.");
+
+var checkoutReviewServiceSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreCheckoutReviewService.cs"));
+Require(checkoutReviewServiceSource.Contains("ReviewStoreCheckoutAsync", StringComparison.Ordinal),
+    "Launcher Store checkout review does not delegate authority to the Agent.");
+Require(!checkoutReviewServiceSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout review bypasses the Agent loopback boundary.");
+Require(!checkoutReviewServiceSource.Contains("PAYMONGO", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout review absorbed payment-provider authority.");
+Require(!checkoutReviewServiceSource.Contains("checkout_url", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout review absorbed checkout URL authority.");
+Require(!checkoutReviewServiceSource.Contains("amount_minor =", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout review hardcoded authoritative pricing.");
+
+Require(normalizedViewModelSource.Contains(
+    "await _storeCheckoutReview.ReviewAsync(",
+    StringComparison.Ordinal),
+    "Launcher Store UX does not delegate purchase review to the Agent.");
+Require(!normalizedViewModelSource.Contains(
+    "PayMongo",
+    StringComparison.OrdinalIgnoreCase),
+    "Launcher Store UX absorbed payment-provider behavior.");
 
 var claimControllerSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherClaimCodeRedemptionController.cs"));
@@ -425,6 +499,7 @@ Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
+Console.WriteLine("Agent-owned Store checkout-review presentation boundary certified");
 Console.WriteLine("Native Launcher credential -> DS -> one-time Agent handoff boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
