@@ -66,77 +66,164 @@
         </StackPanel>
       </Border>
 
-      <Border Grid.Column="1" Padding="22" CornerRadius="12">
-        <Grid RowDefinitions="Auto,Auto,*">
-          <Grid ColumnDefinitions="*,Auto">
-            <StackPanel Spacing="3">
-              <TextBlock Text="My Software" FontSize="20" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding CatalogMessage}" TextWrapping="Wrap" Opacity="0.72" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-              <Border Padding="10,6" CornerRadius="8">
-                <TextBlock Text="{Binding CatalogStatus}" FontSize="11" FontWeight="SemiBold" />
-              </Border>
-              <Button Content="Refresh software" Click="RefreshCatalog" />
-            </StackPanel>
-          </Grid>
+      <Border Grid.Column="1" Padding="18" CornerRadius="12">
+        <TabControl>
+          <TabItem Header="My Software">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="My Software" FontSize="20" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding CatalogMessage}" TextWrapping="Wrap" Opacity="0.72" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                  <Border Padding="10,6" CornerRadius="8">
+                    <TextBlock Text="{Binding CatalogStatus}" FontSize="11" FontWeight="SemiBold" />
+                  </Border>
+                  <Button Content="Refresh software" Click="RefreshCatalog" />
+                </StackPanel>
+              </Grid>
 
-          <TextBlock Grid.Row="1"
-                     Text="Execution policy comes from Digital Solutions; installed state comes from the Licensing Agent."
-                     TextWrapping="Wrap"
-                     Opacity="0.62"
-                     Margin="0,12,0,14" />
+              <TextBlock Grid.Row="1"
+                         Text="Execution policy comes from Digital Solutions; installed state comes from the Licensing Agent."
+                         TextWrapping="Wrap"
+                         Opacity="0.62"
+                         Margin="0,12,0,14" />
 
-          <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="10">
-              <ItemsControl ItemsSource="{Binding Products}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:SoftwareProductViewModel">
-                    <Border Padding="14" CornerRadius="10" Margin="0,0,0,8">
-                      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
-                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="15" />
-                        <TextBlock Grid.Column="1" Text="{Binding StateLabel}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Row="1" Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.72" Margin="0,4,18,0" />
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
-                          <TextBlock Text="{Binding ExecutionLabel}" FontSize="11" Opacity="0.72" />
-                          <TextBlock Text="{Binding VersionLabel}" FontSize="11" Opacity="0.72" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="2"
-                                    Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    Margin="16,6,0,0">
-                          <Button Content="Install"
-                                  IsVisible="{Binding CanInstall}"
-                                  Click="InstallProduct" />
-                          <Button Content="Update"
-                                  IsVisible="{Binding CanUpdate}"
-                                  Click="UpdateProduct" />
-                          <Button Content="Repair"
-                                  IsVisible="{Binding CanRepair}"
-                                  Click="RepairProduct" />
-                          <Button Content="Open"
-                                  IsVisible="{Binding CanOpen}"
-                                  Click="OpenProduct" />
-                          <Button Content="Remove"
-                                  IsVisible="{Binding CanRemove}"
-                                  Click="RemoveProduct" />
-                        </StackPanel>
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                  <ItemsControl ItemsSource="{Binding Products}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:SoftwareProductViewModel">
+                        <Border Padding="14" CornerRadius="10" Margin="0,0,0,8">
+                          <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="15" />
+                            <TextBlock Grid.Column="1" Text="{Binding StateLabel}" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.72" Margin="0,4,18,0" />
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                              <TextBlock Text="{Binding ExecutionLabel}" FontSize="11" Opacity="0.72" />
+                              <TextBlock Text="{Binding VersionLabel}" FontSize="11" Opacity="0.72" />
+                            </StackPanel>
+                            <StackPanel Grid.Row="2"
+                                        Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Spacing="8"
+                                        Margin="16,6,0,0">
+                              <Button Content="Install"
+                                      IsVisible="{Binding CanInstall}"
+                                      Click="InstallProduct" />
+                              <Button Content="Update"
+                                      IsVisible="{Binding CanUpdate}"
+                                      Click="UpdateProduct" />
+                              <Button Content="Repair"
+                                      IsVisible="{Binding CanRepair}"
+                                      Click="RepairProduct" />
+                              <Button Content="Open"
+                                      IsVisible="{Binding CanOpen}"
+                                      Click="OpenProduct" />
+                              <Button Content="Remove"
+                                      IsVisible="{Binding CanRemove}"
+                                      Click="RemoveProduct" />
+                            </StackPanel>
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
 
-              <Border IsVisible="{Binding ShowEmptyProducts}" Padding="18" CornerRadius="10">
-                <TextBlock Text="No Agent-projected software is available yet."
+                  <Border IsVisible="{Binding ShowEmptyProducts}" Padding="18" CornerRadius="10">
+                    <TextBlock Text="No Agent-projected software is available yet."
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Opacity="0.68" />
+                  </Border>
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+          </TabItem>
+
+          <TabItem Header="Store">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="Store" FontSize="20" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding StoreMessage}" TextWrapping="Wrap" Opacity="0.72" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                  <Border Padding="10,6" CornerRadius="8">
+                    <TextBlock Text="{Binding StoreStatus}" FontSize="11" FontWeight="SemiBold" />
+                  </Border>
+                  <Button Content="Refresh Store" Click="RefreshStore" />
+                </StackPanel>
+              </Grid>
+
+              <StackPanel Grid.Row="1" Spacing="4" Margin="0,12,0,14">
+                <TextBlock Text="{Binding GiftCheckoutLabel}"
                            TextWrapping="Wrap"
-                           TextAlignment="Center"
-                           Opacity="0.68" />
-              </Border>
-            </StackPanel>
-          </ScrollViewer>
-        </Grid>
+                           FontWeight="SemiBold" />
+                <TextBlock Text="Plans and prices are catalog presentation only in this pre-production build. Secure checkout authority remains with BKE Digital Solutions."
+                           TextWrapping="Wrap"
+                           Opacity="0.62" />
+              </StackPanel>
+
+              <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                  <ItemsControl ItemsSource="{Binding StoreProducts}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:StoreProductViewModel">
+                        <Border Padding="14" CornerRadius="10" Margin="0,0,0,8">
+                          <StackPanel Spacing="8">
+                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="16" />
+                            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.78" />
+                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Opacity="0.62" />
+
+                            <ItemsControl ItemsSource="{Binding Editions}">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:StoreEditionViewModel">
+                                  <Border Padding="12" CornerRadius="8" Margin="0,4,0,4">
+                                    <StackPanel Spacing="5">
+                                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                      <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Opacity="0.72" />
+                                      <TextBlock Text="{Binding UsageLabel}" TextWrapping="Wrap" FontSize="11" Opacity="0.68" />
+                                      <TextBlock Text="{Binding FeatureSummary}" TextWrapping="Wrap" FontSize="11" Opacity="0.68" />
+
+                                      <ItemsControl ItemsSource="{Binding Plans}">
+                                        <ItemsControl.ItemTemplate>
+                                          <DataTemplate x:DataType="vm:StorePlanViewModel">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+                                              <StackPanel Spacing="2">
+                                                <TextBlock Text="{Binding TypeLabel}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding DetailLabel}" FontSize="11" Opacity="0.68" />
+                                              </StackPanel>
+                                              <TextBlock Grid.Column="1"
+                                                         Text="{Binding PriceLabel}"
+                                                         FontWeight="SemiBold"
+                                                         VerticalAlignment="Center" />
+                                            </Grid>
+                                          </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                      </ItemsControl>
+                                    </StackPanel>
+                                  </Border>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+
+                  <Border IsVisible="{Binding ShowEmptyStore}" Padding="18" CornerRadius="10">
+                    <TextBlock Text="No purchasable products are currently available."
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Opacity="0.68" />
+                  </Border>
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+          </TabItem>
+        </TabControl>
       </Border>
     </Grid>
   </Grid>

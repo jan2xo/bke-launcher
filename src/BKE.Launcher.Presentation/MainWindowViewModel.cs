@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using BKE.Launcher.Application;
 using BKE.Launcher.Contracts;
@@ -11,6 +12,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountSessionController _accountSession;
     private readonly LauncherNativeSignInController _nativeSignIn;
     private readonly LauncherCatalogService _catalog;
+    private readonly LauncherStoreService _store;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareUpdateController _softwareUpdate;
     private readonly LauncherSoftwareRepairController _softwareRepair;
@@ -30,11 +32,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _claimCode = string.Empty;
     private string _claimStatus = "AUTH_REQUIRED";
     private string _claimMessage = "Sign in to redeem a Claim Code.";
+    private string _storeStatus = "AUTH_REQUIRED";
+    private string _storeMessage = "Sign in to browse the BKE Store.";
+    private bool _giftCheckoutEnabled;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
         LauncherNativeSignInController nativeSignIn,
         LauncherCatalogService catalog,
+        LauncherStoreService store,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareUpdateController softwareUpdate,
         LauncherSoftwareRepairController softwareRepair,
@@ -45,6 +51,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
         _catalog = catalog;
+        _store = store;
         _softwareInstall = softwareInstall;
         _softwareUpdate = softwareUpdate;
         _softwareRepair = softwareRepair;
@@ -56,6 +63,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
+    public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
     public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
 
     public string Email
@@ -142,10 +150,37 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _claimMessage, value);
     }
 
+    public string StoreStatus
+    {
+        get => _storeStatus;
+        private set => SetField(ref _storeStatus, value);
+    }
+
+    public string StoreMessage
+    {
+        get => _storeMessage;
+        private set => SetField(ref _storeMessage, value);
+    }
+
+    public bool GiftCheckoutEnabled
+    {
+        get => _giftCheckoutEnabled;
+        private set
+        {
+            SetField(ref _giftCheckoutEnabled, value);
+            Raise(nameof(GiftCheckoutLabel));
+        }
+    }
+
+    public string GiftCheckoutLabel => GiftCheckoutEnabled
+        ? "Gift purchase option: Claim Code delivery available"
+        : "Gift purchase option: not available in this environment";
+
     public bool CanRedeemClaimCode =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
 
     public bool ShowEmptyProducts => Products.Count == 0;
+    public bool ShowEmptyStore => StoreProducts.Count == 0;
 
     public async Task NativeSignInAsync(CancellationToken cancellationToken)
     {
@@ -197,12 +232,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
                 Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
                 await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
                 return;
             }
 
             AccountDisplay = "Not signed in";
             Message = result.ErrorMessage ?? "BKE account sign-in failed.";
             ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+            ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
         }
         catch (Exception error) when (
             error is HttpRequestException or
@@ -235,6 +272,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (response.Status == "AUTHENTICATED")
             {
                 await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
             }
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
@@ -254,6 +292,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (response.Status == "AUTHENTICATED")
             {
                 await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
             }
             else
             {
@@ -270,6 +309,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearCatalog(
                 "AGENT_UNAVAILABLE",
                 "Software catalog is unavailable while the Agent cannot be reached.");
+            ClearStore(
+                "AGENT_UNAVAILABLE",
+                "BKE Store is unavailable while the Agent cannot be reached.");
         }
     }
 
@@ -307,6 +349,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     ClaimMessage =
                         "Claim Code redeemed. Your BKE software is being refreshed.";
                     await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
                     return;
 
                 case "AUTH_REQUIRED":
@@ -375,6 +418,41 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearCatalog(
                 "AGENT_UNAVAILABLE",
                 "BKE Licensing Agent software catalog is unavailable or invalid.");
+        }
+    }
+
+    public async Task RefreshStoreAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var snapshot = await _store.GetProductsAsync(cancellationToken);
+            StoreStatus = snapshot.Status;
+            GiftCheckoutEnabled = snapshot.GiftCheckoutEnabled;
+            StoreMessage = snapshot.Message ?? snapshot.Status switch
+            {
+                "READY" => snapshot.Products.Count == 0
+                    ? "No purchasable software is currently published."
+                    : "Products, editions, plans, and prices are supplied through the BKE Licensing Agent.",
+                "AUTH_REQUIRED" => "Sign in to browse the BKE Store.",
+                _ => "The BKE Store is currently unavailable.",
+            };
+
+            StoreProducts.Clear();
+            foreach (var product in snapshot.Products)
+            {
+                StoreProducts.Add(StoreProductViewModel.From(product));
+            }
+
+            Raise(nameof(ShowEmptyStore));
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ClearStore(
+                "AGENT_UNAVAILABLE",
+                "BKE Licensing Agent Store catalog is unavailable or invalid.");
         }
     }
 
@@ -525,6 +603,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 case "UP_TO_DATE":
                     await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
                     CatalogStatus = "READY";
                     CatalogMessage =
                         $"{previous.DisplayName} is already up to date.";
@@ -532,6 +611,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 case "NOT_INSTALLED":
                     await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
                     CatalogMessage =
                         $"{previous.DisplayName} is no longer installed on this machine.";
                     return;
@@ -620,6 +700,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 case "NOT_INSTALLED":
                     await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
                     CatalogMessage =
                         $"{previous.DisplayName} is no longer installed on this machine.";
                     return;
@@ -773,6 +854,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                         ? $"{previous.DisplayName} was removed from this machine."
                         : $"{previous.DisplayName} is no longer installed on this machine.";
                     await RefreshCatalogAsync(cancellationToken);
+                await RefreshStoreAsync(cancellationToken);
                     return;
 
                 case "AUTH_REQUIRED":
@@ -827,6 +909,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearCatalog(
                 "AUTH_REQUIRED",
                 "Sign in to load your BKE software.");
+            ClearStore(
+                "AUTH_REQUIRED",
+                "Sign in to browse the BKE Store.");
+            ClearStore(
+                "AUTH_REQUIRED",
+                "Sign in to browse the BKE Store.");
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
         {
@@ -867,6 +955,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowEmptyProducts));
     }
 
+    private void ClearStore(string status, string message)
+    {
+        StoreStatus = status;
+        StoreMessage = message;
+        GiftCheckoutEnabled = false;
+        StoreProducts.Clear();
+        Raise(nameof(ShowEmptyStore));
+    }
+
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
@@ -880,6 +977,85 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void Raise(string? propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+public sealed record StoreProductViewModel(
+    string ProductId,
+    string DisplayName,
+    string Summary,
+    string Description,
+    IReadOnlyList<StoreEditionViewModel> Editions)
+{
+    public static StoreProductViewModel From(StoreCatalogProduct product) =>
+        new(
+            product.ProductId,
+            product.DisplayName,
+            product.Summary,
+            product.Description,
+            product.Editions.Select(StoreEditionViewModel.From).ToArray());
+}
+
+public sealed record StoreEditionViewModel(
+    string Name,
+    string Description,
+    string UsageLabel,
+    string FeatureSummary,
+    IReadOnlyList<StorePlanViewModel> Plans)
+{
+    public static StoreEditionViewModel From(StoreCatalogEdition edition) =>
+        new(
+            edition.Name,
+            edition.Description ?? string.Empty,
+            $"Up to {edition.MaxUsers} user(s) · {edition.MaxDevicesPerUser} device(s) per user · updates {edition.UpdatePolicy.Replace("_", " ").ToLowerInvariant()}",
+            edition.Features.Count == 0
+                ? "No capability summary supplied."
+                : string.Join(" · ", edition.Features),
+            edition.Plans.Select(StorePlanViewModel.From).ToArray());
+}
+
+public sealed record StorePlanViewModel(
+    string PurchasePlanId,
+    string TypeLabel,
+    string PriceLabel,
+    string DetailLabel)
+{
+    public static StorePlanViewModel From(StoreCatalogPlan plan)
+    {
+        var culture = CultureInfo.GetCultureInfo("en-PH");
+        var amount = string.Format(
+            culture,
+            "{0:C}",
+            plan.AmountMinor / 100m);
+
+        var type = plan.Type switch
+        {
+            "PERPETUAL" => "Perpetual",
+            "MONTHLY" => "Monthly",
+            "ANNUAL" => "Annual",
+            _ => plan.Type,
+        };
+
+        var suffix = plan.IntervalUnit switch
+        {
+            "MONTH" => " / month",
+            "YEAR" => " / year",
+            _ => string.Empty,
+        };
+
+        var renewal = plan.RenewalBehavior == "NONE"
+            ? "No renewal"
+            : "Customer-authorized renewal";
+
+        var savings = plan.SavingsMinor > 0
+            ? $" · saves {string.Format(culture, "{0:C}", plan.SavingsMinor / 100m)}"
+            : string.Empty;
+
+        return new StorePlanViewModel(
+            plan.PurchasePlanId,
+            type,
+            amount + suffix,
+            renewal + savings);
+    }
 }
 
 public sealed record SoftwareProductViewModel(

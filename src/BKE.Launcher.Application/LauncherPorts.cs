@@ -28,6 +28,10 @@ public interface ILauncherAgentClient
         ClaimCodeRedeemRequest request,
         CancellationToken cancellationToken);
 
+    Task<StoreCatalogResponse> GetStoreCatalogAsync(
+        StoreCatalogRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);
