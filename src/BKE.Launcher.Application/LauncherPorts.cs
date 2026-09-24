@@ -32,6 +32,10 @@ public interface ILauncherAgentClient
         StoreCatalogRequest request,
         CancellationToken cancellationToken);
 
+    Task<StoreCheckoutReviewResponse> ReviewStoreCheckoutAsync(
+        StoreCheckoutReviewRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);
