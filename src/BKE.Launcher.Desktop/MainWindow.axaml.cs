@@ -69,6 +69,17 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void CheckPurchaseCheckoutStatus(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.CheckPurchaseCheckoutStatusAsync(
+            CancellationToken.None);
+    }
+
+    private void OpenExistingCheckout(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.OpenExistingCheckout();
+    }
+
     private void OpenPurchaseLegalDocument(object? sender, RoutedEventArgs args)
     {
         if (sender is Button

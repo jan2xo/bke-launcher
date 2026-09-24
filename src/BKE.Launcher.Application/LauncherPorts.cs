@@ -40,6 +40,10 @@ public interface ILauncherAgentClient
         StoreCheckoutStartRequest request,
         CancellationToken cancellationToken);
 
+    Task<StoreCheckoutStatusResponse> CheckStoreCheckoutStatusAsync(
+        StoreCheckoutStatusRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);

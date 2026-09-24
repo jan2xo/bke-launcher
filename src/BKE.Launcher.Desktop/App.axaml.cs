@@ -28,6 +28,7 @@ public sealed partial class App : Avalonia.Application
             var store = new LauncherStoreService(agentClient);
             var storeCheckoutReview = new LauncherStoreCheckoutReviewService(agentClient);
             var storeCheckoutStart = new LauncherStoreCheckoutStartService(agentClient);
+            var storeCheckoutStatus = new LauncherStoreCheckoutStatusService(agentClient);
             var externalNavigator = new ExternalBrowserNavigator();
             var softwareInstall = new LauncherSoftwareInstallController(agentClient);
             var softwareUpdate = new LauncherSoftwareUpdateController(agentClient);
@@ -42,6 +43,7 @@ public sealed partial class App : Avalonia.Application
                 store,
                 storeCheckoutReview,
                 storeCheckoutStart,
+                storeCheckoutStatus,
                 externalNavigator,
                 softwareInstall,
                 softwareUpdate,

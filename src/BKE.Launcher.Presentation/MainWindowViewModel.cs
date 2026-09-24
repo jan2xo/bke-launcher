@@ -15,6 +15,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherStoreService _store;
     private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
     private readonly LauncherStoreCheckoutStartService _storeCheckoutStart;
+    private readonly LauncherStoreCheckoutStatusService _storeCheckoutStatus;
     private readonly ILauncherExternalNavigator _externalNavigator;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareUpdateController _softwareUpdate;
@@ -52,6 +53,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private IReadOnlySet<string> _reviewedPurchaseModes =
         new HashSet<string>(StringComparer.Ordinal);
     private bool _purchaseAttemptLocked;
+    private string? _checkoutRecoveryCorrelationId;
+    private string? _recoverableCheckoutUrl;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -60,6 +63,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherStoreService store,
         LauncherStoreCheckoutReviewService storeCheckoutReview,
         LauncherStoreCheckoutStartService storeCheckoutStart,
+        LauncherStoreCheckoutStatusService storeCheckoutStatus,
         ILauncherExternalNavigator externalNavigator,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareUpdateController softwareUpdate,
@@ -74,6 +78,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _store = store;
         _storeCheckoutReview = storeCheckoutReview;
         _storeCheckoutStart = storeCheckoutStart;
+        _storeCheckoutStatus = storeCheckoutStatus;
         _externalNavigator = externalNavigator;
         _softwareInstall = softwareInstall;
         _softwareUpdate = softwareUpdate;
@@ -280,6 +285,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ShowPurchaseActions &&
         !_purchaseAttemptLocked &&
         _reviewedPurchaseModes.Contains("GIFT");
+
+    public bool CanCheckCheckoutStatus =>
+        _purchaseAttemptLocked &&
+        !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
+
+    public bool CanOpenExistingCheckout =>
+        !string.IsNullOrWhiteSpace(_recoverableCheckoutUrl);
 
     public bool CanRedeemClaimCode =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
@@ -574,11 +586,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _reviewedPurchasePlanId = null;
         _reviewedPurchaseModes = new HashSet<string>(StringComparer.Ordinal);
         _purchaseAttemptLocked = false;
+        _checkoutRecoveryCorrelationId = null;
+        _recoverableCheckoutUrl = null;
         PurchaseLegalDocuments.Clear();
         PurchaseCheckoutStatus = "IDLE";
         PurchaseCheckoutMessage =
             "Review the required Legal documents before starting checkout.";
         RaisePurchaseActionState();
+        RaiseCheckoutRecoveryState();
 
         if (!string.Equals(
                 SessionStatus,
@@ -729,7 +744,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         _purchaseAttemptLocked = true;
+        _checkoutRecoveryCorrelationId = Guid.NewGuid().ToString("N");
+        _recoverableCheckoutUrl = null;
         RaisePurchaseActionState();
+        RaiseCheckoutRecoveryState();
         PurchaseCheckoutStatus = "STARTING";
         PurchaseCheckoutMessage =
             "Creating a secure checkout through the BKE Licensing Agent…";
@@ -737,12 +755,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var result = await _storeCheckoutStart.StartAsync(
+                _checkoutRecoveryCorrelationId,
                 _reviewedPurchasePlanId,
                 purchaseMode,
                 PurchaseLegalDocuments
                     .Select(document => document.DocumentVersionId)
                     .ToArray(),
                 cancellationToken);
+
+            var recoveryAvailable =
+                result.Status is "READY" or "RESULT_UNKNOWN" or "CHECKOUT_IN_PROGRESS";
+            _checkoutRecoveryCorrelationId =
+                recoveryAvailable ? result.CorrelationId : null;
+            _recoverableCheckoutUrl =
+                result.Status == "READY" ? result.CheckoutUrl : null;
+            RaiseCheckoutRecoveryState();
 
             PurchaseCheckoutStatus = result.Status;
             PurchaseCheckoutMessage = result.Message ?? result.Status switch
@@ -766,9 +793,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "ACCOUNT_UNAVAILABLE" =>
                     "This BKE account is not currently available for purchases.",
                 "CHECKOUT_IN_PROGRESS" =>
-                    "A checkout creation attempt already exists. Do not start another checkout.",
+                    "A checkout creation attempt already exists. Check this attempt instead of creating another checkout.",
                 "RESULT_UNKNOWN" =>
-                    "Checkout status is uncertain. Do not retry automatically; verify the purchase before trying again.",
+                    "Checkout status is uncertain. Check this attempt before trying anything else; do not retry checkout creation.",
                 _ =>
                     "Checkout could not be started. Review the purchase again before another attempt.",
             };
@@ -776,7 +803,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (result.Status == "READY" &&
                 !string.IsNullOrWhiteSpace(result.CheckoutUrl))
             {
-                _externalNavigator.OpenCheckout(result.CheckoutUrl);
+                try
+                {
+                    _externalNavigator.OpenCheckout(result.CheckoutUrl);
+                }
+                catch (Exception navigationError) when (
+                    navigationError is InvalidDataException or
+                    System.ComponentModel.Win32Exception or
+                    InvalidOperationException)
+                {
+                    PurchaseCheckoutStatus = "NAVIGATION_FAILED";
+                    PurchaseCheckoutMessage =
+                        "Checkout already exists, but the secure payment page could not be opened. Reopen this existing checkout or check its status; do not create another checkout.";
+                    return;
+                }
 
                 if (result.Complimentary == true)
                 {
@@ -791,22 +831,154 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             PurchaseCheckoutStatus = "RESULT_UNKNOWN";
             PurchaseCheckoutMessage =
-                "The Agent checkout result could not be confirmed. Do not retry automatically; verify the purchase first.";
+                "The Agent checkout result could not be confirmed. Check this exact attempt; do not retry checkout creation.";
+            RaiseCheckoutRecoveryState();
         }
         catch (Exception error) when (
             error is InvalidDataException or
-            ArgumentException or
+            ArgumentException)
+        {
+            _checkoutRecoveryCorrelationId = null;
+            _recoverableCheckoutUrl = null;
+            RaiseCheckoutRecoveryState();
+            PurchaseCheckoutStatus = "FAILED";
+            PurchaseCheckoutMessage =
+                "The checkout response was invalid. Review the purchase again.";
+        }
+    }
+
+    public async Task CheckPurchaseCheckoutStatusAsync(
+        CancellationToken cancellationToken)
+    {
+        var correlationId = _checkoutRecoveryCorrelationId;
+        if (string.IsNullOrWhiteSpace(correlationId))
+        {
+            PurchaseCheckoutStatus = "RECOVERY_UNAVAILABLE";
+            PurchaseCheckoutMessage =
+                "There is no recoverable checkout attempt in this purchase review.";
+            return;
+        }
+
+        PurchaseCheckoutStatus = "CHECKING";
+        PurchaseCheckoutMessage =
+            "Checking the existing checkout attempt through the BKE Licensing Agent…";
+
+        try
+        {
+            var result = await _storeCheckoutStatus.CheckAsync(
+                correlationId,
+                cancellationToken);
+
+            PurchaseCheckoutStatus = result.Status;
+
+            if (result.Status == "FOUND")
+            {
+                _checkoutRecoveryCorrelationId = result.CorrelationId;
+                _recoverableCheckoutUrl =
+                    result.PaymentStatus is "NOT_STARTED" or "CREATING" or "PENDING"
+                        ? result.CheckoutUrl
+                        : null;
+
+                var orderLabel = string.IsNullOrWhiteSpace(result.OrderNumber)
+                    ? "The existing order"
+                    : $"Order {result.OrderNumber}";
+
+                PurchaseCheckoutMessage = result.PaymentStatus switch
+                {
+                    "SETTLED" =>
+                        $"{orderLabel} is settled. Refreshing your BKE software and Store.",
+                    "NOT_REQUIRED" =>
+                        $"{orderLabel} completed without payment. Refreshing your BKE software and Store.",
+                    "PENDING" when !string.IsNullOrWhiteSpace(result.CheckoutUrl) =>
+                        $"{orderLabel} is awaiting payment. Open the existing secure checkout; this does not create another order.",
+                    "PENDING" =>
+                        $"{orderLabel} is awaiting payment. Check again later; do not create another checkout.",
+                    "CREATING" =>
+                        $"{orderLabel} is still preparing its secure checkout. Check again; do not create another checkout.",
+                    "NOT_STARTED" when !string.IsNullOrWhiteSpace(result.CheckoutUrl) =>
+                        $"{orderLabel} exists and is ready to resume through the existing secure checkout.",
+                    "NOT_STARTED" =>
+                        $"{orderLabel} exists, but its secure checkout is not available yet. Check again.",
+                    "FAILED" =>
+                        $"{orderLabel} has a failed payment state. Review the current plan again before starting a new checkout.",
+                    "CANCELLED" =>
+                        $"{orderLabel} is cancelled. Review the current plan again before starting a new checkout.",
+                    _ =>
+                        $"{orderLabel} was recovered with status {result.OrderStatus ?? result.PaymentStatus ?? "UNKNOWN"}.",
+                };
+
+                if (result.PaymentStatus is "SETTLED" or "NOT_REQUIRED")
+                {
+                    await RefreshCatalogAsync(cancellationToken);
+                    await RefreshStoreAsync(cancellationToken);
+                }
+            }
+            else if (result.Status == "NOT_FOUND")
+            {
+                _recoverableCheckoutUrl = null;
+                PurchaseCheckoutMessage =
+                    "No durable checkout is visible for this correlation yet. This read-only check may be repeated; do not start a second checkout.";
+            }
+            else
+            {
+                PurchaseCheckoutMessage = result.Message ?? result.Status switch
+                {
+                    "AUTH_REQUIRED" =>
+                        "Sign in again before checking this checkout attempt.",
+                    "ACCOUNT_FORBIDDEN" =>
+                        "This account cannot read the existing checkout state.",
+                    "UNAVAILABLE" =>
+                        "Checkout status is temporarily unavailable. This read-only check may be repeated; do not start another checkout.",
+                    _ =>
+                        "The existing checkout state could not be verified. Do not start another checkout.",
+                };
+            }
+
+            RaiseCheckoutRecoveryState();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException)
+        {
+            PurchaseCheckoutStatus = "UNAVAILABLE";
+            PurchaseCheckoutMessage =
+                "The read-only checkout-status check is temporarily unavailable. Check again; do not start another checkout.";
+            RaiseCheckoutRecoveryState();
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or
+            ArgumentException)
+        {
+            PurchaseCheckoutStatus = "FAILED";
+            PurchaseCheckoutMessage =
+                "The Agent checkout-status response was invalid. Do not start another checkout.";
+            RaiseCheckoutRecoveryState();
+        }
+    }
+
+    public void OpenExistingCheckout()
+    {
+        if (string.IsNullOrWhiteSpace(_recoverableCheckoutUrl))
+        {
+            PurchaseCheckoutMessage =
+                "Check the existing checkout status before trying to reopen payment.";
+            return;
+        }
+
+        try
+        {
+            _externalNavigator.OpenCheckout(_recoverableCheckoutUrl);
+            PurchaseCheckoutMessage =
+                "Opened the existing secure checkout. No new order or payment attempt was created.";
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or
             System.ComponentModel.Win32Exception or
             InvalidOperationException)
         {
-            PurchaseCheckoutStatus =
-                error is System.ComponentModel.Win32Exception or InvalidOperationException
-                    ? "NAVIGATION_FAILED"
-                    : "FAILED";
+            PurchaseCheckoutStatus = "NAVIGATION_FAILED";
             PurchaseCheckoutMessage =
-                PurchaseCheckoutStatus == "NAVIGATION_FAILED"
-                    ? "Checkout was created, but the secure payment page could not be opened. Do not create another checkout."
-                    : "The checkout response was invalid. Review the purchase again.";
+                "The existing secure checkout could not be opened. Its correlation remains recoverable.";
         }
     }
 
@@ -1350,10 +1522,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _reviewedPurchasePlanId = null;
         _reviewedPurchaseModes = new HashSet<string>(StringComparer.Ordinal);
         _purchaseAttemptLocked = false;
+        _checkoutRecoveryCorrelationId = null;
+        _recoverableCheckoutUrl = null;
         PurchaseCheckoutStatus = "IDLE";
         PurchaseCheckoutMessage = "Review a plan before starting checkout.";
         ShowPurchaseReview = false;
         RaisePurchaseActionState();
+        RaiseCheckoutRecoveryState();
     }
 
     private void RaisePurchaseActionState()
@@ -1361,6 +1536,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowPurchaseActions));
         Raise(nameof(CanBuySelf));
         Raise(nameof(CanBuyGift));
+    }
+
+    private void RaiseCheckoutRecoveryState()
+    {
+        Raise(nameof(CanCheckCheckoutStatus));
+        Raise(nameof(CanOpenExistingCheckout));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
