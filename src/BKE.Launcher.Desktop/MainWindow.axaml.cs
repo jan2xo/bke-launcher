@@ -55,6 +55,31 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void BuyForSelf(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.StartPurchaseAsync(
+            "SELF",
+            CancellationToken.None);
+    }
+
+    private async void BuyAsGift(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.StartPurchaseAsync(
+            "GIFT",
+            CancellationToken.None);
+    }
+
+    private void OpenPurchaseLegalDocument(object? sender, RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: PurchaseLegalDocumentViewModel document,
+            })
+        {
+            ViewModel.OpenLegalDocument(document);
+        }
+    }
+
     private async void InstallProduct(object? sender, RoutedEventArgs args)
     {
         if (sender is Button

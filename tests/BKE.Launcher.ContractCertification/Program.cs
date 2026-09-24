@@ -39,6 +39,9 @@ Require(AgentLocalContract.StoreCatalogContractVersion == 1, "Store catalog cont
 Require(AgentLocalContract.StoreCheckoutReviewPath == "/v1/store/checkout-review", "Store checkout-review path drifted");
 Require(AgentLocalContract.StoreCheckoutReviewCapabilityId == "bke.store-checkout-review", "Store checkout-review capability id drifted");
 Require(AgentLocalContract.StoreCheckoutReviewContractVersion == 1, "Store checkout-review contract version drifted");
+Require(AgentLocalContract.StoreCheckoutStartPath == "/v1/store/checkout-start", "Store checkout-start path drifted");
+Require(AgentLocalContract.StoreCheckoutStartCapabilityId == "bke.store-checkout-start", "Store checkout-start capability id drifted");
+Require(AgentLocalContract.StoreCheckoutStartContractVersion == 1, "Store checkout-start contract version drifted");
 
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.LauncherPlugin) == "LAUNCHER_PLUGIN", "launcher plugin execution type drifted");
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.Standalone) == "STANDALONE", "standalone execution type drifted");
@@ -73,6 +76,8 @@ var localResponseProperties = typeof(AccountSessionDeviceContextResponse).GetPro
     .Concat(typeof(StoreCheckoutReviewLegalDocument).GetProperties())
     .Concat(typeof(StoreCheckoutReviewPendingLegalDocument).GetProperties())
     .Concat(typeof(StoreCheckoutReviewError).GetProperties())
+    .Concat(typeof(StoreCheckoutStartResponse).GetProperties())
+    .Concat(typeof(StoreCheckoutStartError).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -103,6 +108,7 @@ Require(agentMethods.SetEquals([
     "RedeemClaimCodeAsync",
     "GetStoreCatalogAsync",
     "ReviewStoreCheckoutAsync",
+    "StartStoreCheckoutAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
@@ -219,6 +225,52 @@ Require(
             !property.Name.Contains("Provider", StringComparison.OrdinalIgnoreCase)),
     "Launcher checkout review absorbed cloud payment/account/provider authority.");
 
+
+var checkoutStartRequestProperties = typeof(StoreCheckoutStartRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    checkoutStartRequestProperties.SequenceEqual([
+        "CorrelationId",
+        "PurchasePlanId",
+        "PurchaseMode",
+        "LegalVersionIds"
+    ]),
+    "Launcher widened the Agent Store checkout-start request.");
+
+using (var checkoutStartRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new StoreCheckoutStartRequest(
+            "cert-checkout-correlation",
+            "plan-perpetual",
+            "GIFT",
+            ["terms-v3", "privacy-v2"]))))
+{
+    var checkoutStartWireFields = checkoutStartRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        checkoutStartWireFields.SequenceEqual([
+            "correlation_id",
+            "purchase_plan_id",
+            "purchase_mode",
+            "legal_version_ids"
+        ]),
+        "Launcher Store checkout-start wire request widened.");
+}
+
+Require(
+    typeof(StoreCheckoutStartResponse)
+        .GetProperties()
+        .All(property =>
+            !property.Name.Contains("AccountId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Payment", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Provider", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Price", StringComparison.OrdinalIgnoreCase)),
+    "Launcher checkout-start response absorbed cloud account/payment/provider/pricing authority.");
+
 var updateRequestProperties = typeof(SoftwareUpdateRequest)
     .GetProperties()
     .Select(property => property.Name)
@@ -314,6 +366,13 @@ Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewModesLabel}\"",
 Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewLegalLabel}\"", StringComparison.Ordinal), "BKE Store Legal requirements are not presentation-bound.");
 Require(mainWindowMarkup.Contains("no order, payment, or checkout has been created", StringComparison.OrdinalIgnoreCase), "BKE Store review does not state its read-only boundary.");
 Require(mainWindowSource.Contains("ReviewPurchase", StringComparison.Ordinal), "BKE Store purchase review click handler is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Buy for myself\"", StringComparison.Ordinal), "BKE Store SELF purchase action is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Buy as gift / Claim Code\"", StringComparison.Ordinal), "BKE Store GIFT purchase action is missing.");
+Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding PurchaseLegalDocuments}\"", StringComparison.Ordinal), "BKE Store Legal acceptance list is missing.");
+Require(mainWindowMarkup.Contains("IsChecked=\"{Binding IsAccepted, Mode=TwoWay}\"", StringComparison.Ordinal), "BKE Store Legal acceptance is not explicit per document.");
+Require(mainWindowSource.Contains("BuyForSelf", StringComparison.Ordinal), "BKE Store SELF purchase handler is missing.");
+Require(mainWindowSource.Contains("BuyAsGift", StringComparison.Ordinal), "BKE Store GIFT purchase handler is missing.");
+Require(mainWindowSource.Contains("OpenPurchaseLegalDocument", StringComparison.Ordinal), "BKE Store Legal document navigation is missing.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -377,6 +436,58 @@ Require(!normalizedViewModelSource.Contains(
     StringComparison.OrdinalIgnoreCase),
     "Launcher Store UX absorbed payment-provider behavior.");
 
+
+var checkoutStartServiceSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreCheckoutStartService.cs"));
+Require(checkoutStartServiceSource.Contains("StartStoreCheckoutAsync", StringComparison.Ordinal),
+    "Launcher Store checkout start does not delegate mutation authority to the Agent.");
+Require(!checkoutStartServiceSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout start bypasses the Agent loopback boundary.");
+Require(!checkoutStartServiceSource.Contains("PAYMONGO", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout start absorbed payment-provider authority.");
+Require(!checkoutStartServiceSource.Contains("amount_minor", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout start hardcoded authoritative pricing.");
+Require(!checkoutStartServiceSource.Contains("account_id", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout start can choose a cloud destination account.");
+Require(!checkoutStartServiceSource.Contains("recipient", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store checkout start introduced gift recipient identity.");
+
+var externalNavigatorSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Infrastructure", "ExternalBrowserNavigator.cs"));
+Require(externalNavigatorSource.Contains("OpenCheckout", StringComparison.Ordinal),
+    "Launcher secure checkout navigation is missing.");
+Require(externalNavigatorSource.Contains("Uri.UriSchemeHttps", StringComparison.Ordinal),
+    "Launcher secure checkout navigation does not require HTTPS.");
+Require(!externalNavigatorSource.Contains("PayMongo", StringComparison.OrdinalIgnoreCase),
+    "Launcher external navigator contains provider-specific authority.");
+Require(!externalNavigatorSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
+    "Launcher external navigator calls a Digital Solutions Agent API directly.");
+
+Require(normalizedViewModelSource.Contains(
+    "await _storeCheckoutStart.StartAsync(",
+    StringComparison.Ordinal),
+    "Launcher Store UX does not delegate checkout start to the Agent.");
+Require(normalizedViewModelSource.Contains(
+    "_externalNavigator.OpenCheckout(result.CheckoutUrl)",
+    StringComparison.Ordinal),
+    "Launcher does not navigate only from the Agent-returned checkout target.");
+Require(normalizedViewModelSource.Contains(
+    "\"RESULT_UNKNOWN\"",
+    StringComparison.Ordinal),
+    "Launcher does not surface ambiguous checkout mutation results.");
+Require(normalizedViewModelSource.Contains(
+    "Do not retry automatically",
+    StringComparison.OrdinalIgnoreCase),
+    "Launcher checkout UX does not preserve the no-blind-retry mutation rule.");
+Require(!normalizedViewModelSource.Contains(
+    "/api/checkout",
+    StringComparison.OrdinalIgnoreCase),
+    "Launcher Store UX directly calls Digital Solutions checkout.");
+Require(!normalizedViewModelSource.Contains(
+    "PayMongo",
+    StringComparison.OrdinalIgnoreCase),
+    "Launcher Store UX absorbed payment-provider behavior.");
+
 var claimControllerSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherClaimCodeRedemptionController.cs"));
 Require(!claimControllerSource.Contains("account_id", StringComparison.OrdinalIgnoreCase),
@@ -406,7 +517,6 @@ var forbiddenUpdateAuthorityMarkers = new[]
     "/api/agent-sessions/claims/redeem",
     "/api/agent-sessions/store",
     "PAYMONGO",
-    "checkout_url",
     "CLAIM_ENTITLEMENT",
     "CLAIM_CODE_CHECKOUT_ENABLED",
     "bke.repair-policy.v1",

@@ -14,6 +14,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherStoreService _store;
     private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
+    private readonly LauncherStoreCheckoutStartService _storeCheckoutStart;
+    private readonly ILauncherExternalNavigator _externalNavigator;
     private readonly LauncherSoftwareInstallController _softwareInstall;
     private readonly LauncherSoftwareUpdateController _softwareUpdate;
     private readonly LauncherSoftwareRepairController _softwareRepair;
@@ -44,6 +46,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _purchaseReviewModesLabel = string.Empty;
     private string _purchaseReviewLegalLabel = string.Empty;
     private bool _showPurchaseReview;
+    private string _purchaseCheckoutStatus = "IDLE";
+    private string _purchaseCheckoutMessage = "Review a plan before starting checkout.";
+    private string? _reviewedPurchasePlanId;
+    private IReadOnlySet<string> _reviewedPurchaseModes =
+        new HashSet<string>(StringComparer.Ordinal);
+    private bool _purchaseAttemptLocked;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -51,6 +59,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherCatalogService catalog,
         LauncherStoreService store,
         LauncherStoreCheckoutReviewService storeCheckoutReview,
+        LauncherStoreCheckoutStartService storeCheckoutStart,
+        ILauncherExternalNavigator externalNavigator,
         LauncherSoftwareInstallController softwareInstall,
         LauncherSoftwareUpdateController softwareUpdate,
         LauncherSoftwareRepairController softwareRepair,
@@ -63,6 +73,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _catalog = catalog;
         _store = store;
         _storeCheckoutReview = storeCheckoutReview;
+        _storeCheckoutStart = storeCheckoutStart;
+        _externalNavigator = externalNavigator;
         _softwareInstall = softwareInstall;
         _softwareUpdate = softwareUpdate;
         _softwareRepair = softwareRepair;
@@ -75,6 +87,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
+    public ObservableCollection<PurchaseLegalDocumentViewModel> PurchaseLegalDocuments { get; } = [];
     public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
 
     public string Email
@@ -190,7 +203,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string PurchaseReviewStatus
     {
         get => _purchaseReviewStatus;
-        private set => SetField(ref _purchaseReviewStatus, value);
+        private set
+        {
+            SetField(ref _purchaseReviewStatus, value);
+            Raise(nameof(ShowPurchaseActions));
+            Raise(nameof(CanBuySelf));
+            Raise(nameof(CanBuyGift));
+        }
     }
 
     public string PurchaseReviewMessage
@@ -234,6 +253,33 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _showPurchaseReview;
         private set => SetField(ref _showPurchaseReview, value);
     }
+
+    public string PurchaseCheckoutStatus
+    {
+        get => _purchaseCheckoutStatus;
+        private set => SetField(ref _purchaseCheckoutStatus, value);
+    }
+
+    public string PurchaseCheckoutMessage
+    {
+        get => _purchaseCheckoutMessage;
+        private set => SetField(ref _purchaseCheckoutMessage, value);
+    }
+
+    public bool ShowPurchaseActions =>
+        PurchaseReviewStatus == "READY" &&
+        _reviewedPurchasePlanId is not null &&
+        PurchaseLegalDocuments.Count is >= 2 and <= 3;
+
+    public bool CanBuySelf =>
+        ShowPurchaseActions &&
+        !_purchaseAttemptLocked &&
+        _reviewedPurchaseModes.Contains("SELF");
+
+    public bool CanBuyGift =>
+        ShowPurchaseActions &&
+        !_purchaseAttemptLocked &&
+        _reviewedPurchaseModes.Contains("GIFT");
 
     public bool CanRedeemClaimCode =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
@@ -525,6 +571,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PurchaseReviewPriceLabel = string.Empty;
         PurchaseReviewModesLabel = string.Empty;
         PurchaseReviewLegalLabel = string.Empty;
+        _reviewedPurchasePlanId = null;
+        _reviewedPurchaseModes = new HashSet<string>(StringComparer.Ordinal);
+        _purchaseAttemptLocked = false;
+        PurchaseLegalDocuments.Clear();
+        PurchaseCheckoutStatus = "IDLE";
+        PurchaseCheckoutMessage =
+            "Review the required Legal documents before starting checkout.";
+        RaisePurchaseActionState();
 
         if (!string.Equals(
                 SessionStatus,
@@ -591,6 +645,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     string.Join(" · ", review.PurchaseModes);
             }
 
+            if (review.Status == "READY")
+            {
+                _reviewedPurchasePlanId = purchasePlanId;
+                _reviewedPurchaseModes =
+                    review.PurchaseModes.ToHashSet(StringComparer.Ordinal);
+                foreach (var document in review.LegalDocuments)
+                {
+                    PurchaseLegalDocuments.Add(
+                        PurchaseLegalDocumentViewModel.From(document));
+                }
+                PurchaseCheckoutStatus = "READY";
+                PurchaseCheckoutMessage =
+                    PurchaseLegalDocuments.Count is >= 2 and <= 3
+                        ? "Review each required Legal document, accept it, then choose how to buy."
+                        : "Checkout is blocked because the required Legal document set is incomplete.";
+                RaisePurchaseActionState();
+            }
+
             if (review.PendingLegal.Count > 0)
             {
                 PurchaseReviewLegalLabel =
@@ -631,6 +703,127 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PurchaseReviewPriceLabel = string.Empty;
             PurchaseReviewModesLabel = string.Empty;
             PurchaseReviewLegalLabel = string.Empty;
+        }
+    }
+
+    public async Task StartPurchaseAsync(
+        string purchaseMode,
+        CancellationToken cancellationToken)
+    {
+        if (!ShowPurchaseActions ||
+            _reviewedPurchasePlanId is null ||
+            !_reviewedPurchaseModes.Contains(purchaseMode))
+        {
+            PurchaseCheckoutStatus = "REVIEW_REQUIRED";
+            PurchaseCheckoutMessage =
+                "Review the current plan and purchase options again before checkout.";
+            return;
+        }
+
+        if (PurchaseLegalDocuments.Any(document => !document.IsAccepted))
+        {
+            PurchaseCheckoutStatus = "LEGAL_ACCEPTANCE_REQUIRED";
+            PurchaseCheckoutMessage =
+                "Open, review, and accept every required Legal document before checkout.";
+            return;
+        }
+
+        _purchaseAttemptLocked = true;
+        RaisePurchaseActionState();
+        PurchaseCheckoutStatus = "STARTING";
+        PurchaseCheckoutMessage =
+            "Creating a secure checkout through the BKE Licensing Agent…";
+
+        try
+        {
+            var result = await _storeCheckoutStart.StartAsync(
+                _reviewedPurchasePlanId,
+                purchaseMode,
+                PurchaseLegalDocuments
+                    .Select(document => document.DocumentVersionId)
+                    .ToArray(),
+                cancellationToken);
+
+            PurchaseCheckoutStatus = result.Status;
+            PurchaseCheckoutMessage = result.Message ?? result.Status switch
+            {
+                "READY" when result.Complimentary == true =>
+                    "Purchase completed without payment. Refreshing your BKE software.",
+                "READY" =>
+                    purchaseMode == "GIFT"
+                        ? "Secure payment opened. After confirmed payment, the purchaser account receives an unbound Claim Code."
+                        : "Secure payment opened. Your entitlement is issued only after confirmed payment.",
+                "LEGAL_REACCEPTANCE_REQUIRED" =>
+                    "Current BKE Legal documents changed. Review the purchase again.",
+                "LEGAL_ACCEPTANCE_REQUIRED" =>
+                    "The required Legal acceptance was not accepted by Digital Solutions. Review the purchase again.",
+                "GIFT_CHECKOUT_DISABLED" =>
+                    "Gift Claim Code purchase is no longer available in this environment.",
+                "PLAN_NOT_AVAILABLE" =>
+                    "The selected plan changed or is no longer available. Refresh the Store.",
+                "ACCOUNT_FORBIDDEN" =>
+                    "This BKE account cannot make this purchase.",
+                "ACCOUNT_UNAVAILABLE" =>
+                    "This BKE account is not currently available for purchases.",
+                "CHECKOUT_IN_PROGRESS" =>
+                    "A checkout creation attempt already exists. Do not start another checkout.",
+                "RESULT_UNKNOWN" =>
+                    "Checkout status is uncertain. Do not retry automatically; verify the purchase before trying again.",
+                _ =>
+                    "Checkout could not be started. Review the purchase again before another attempt.",
+            };
+
+            if (result.Status == "READY" &&
+                !string.IsNullOrWhiteSpace(result.CheckoutUrl))
+            {
+                _externalNavigator.OpenCheckout(result.CheckoutUrl);
+
+                if (result.Complimentary == true)
+                {
+                    await RefreshCatalogAsync(cancellationToken);
+                    await RefreshStoreAsync(cancellationToken);
+                }
+            }
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException)
+        {
+            PurchaseCheckoutStatus = "RESULT_UNKNOWN";
+            PurchaseCheckoutMessage =
+                "The Agent checkout result could not be confirmed. Do not retry automatically; verify the purchase first.";
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or
+            ArgumentException or
+            System.ComponentModel.Win32Exception or
+            InvalidOperationException)
+        {
+            PurchaseCheckoutStatus =
+                error is System.ComponentModel.Win32Exception or InvalidOperationException
+                    ? "NAVIGATION_FAILED"
+                    : "FAILED";
+            PurchaseCheckoutMessage =
+                PurchaseCheckoutStatus == "NAVIGATION_FAILED"
+                    ? "Checkout was created, but the secure payment page could not be opened. Do not create another checkout."
+                    : "The checkout response was invalid. Review the purchase again.";
+        }
+    }
+
+    public void OpenLegalDocument(PurchaseLegalDocumentViewModel document)
+    {
+        try
+        {
+            _externalNavigator.OpenLegalDocument(document.Slug);
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or
+            ArgumentException or
+            System.ComponentModel.Win32Exception)
+        {
+            PurchaseCheckoutStatus = "NAVIGATION_FAILED";
+            PurchaseCheckoutMessage =
+                "The authoritative Legal document could not be opened.";
         }
     }
 
@@ -1153,7 +1346,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PurchaseReviewPriceLabel = string.Empty;
         PurchaseReviewModesLabel = string.Empty;
         PurchaseReviewLegalLabel = string.Empty;
+        PurchaseLegalDocuments.Clear();
+        _reviewedPurchasePlanId = null;
+        _reviewedPurchaseModes = new HashSet<string>(StringComparer.Ordinal);
+        _purchaseAttemptLocked = false;
+        PurchaseCheckoutStatus = "IDLE";
+        PurchaseCheckoutMessage = "Review a plan before starting checkout.";
         ShowPurchaseReview = false;
+        RaisePurchaseActionState();
+    }
+
+    private void RaisePurchaseActionState()
+    {
+        Raise(nameof(ShowPurchaseActions));
+        Raise(nameof(CanBuySelf));
+        Raise(nameof(CanBuyGift));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -1169,6 +1376,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void Raise(string? propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+public sealed class PurchaseLegalDocumentViewModel : INotifyPropertyChanged
+{
+    private bool _isAccepted;
+
+    private PurchaseLegalDocumentViewModel(
+        string title,
+        string version,
+        string slug,
+        string documentVersionId)
+    {
+        Title = title;
+        Version = version;
+        Slug = slug;
+        DocumentVersionId = documentVersionId;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string Title { get; }
+    public string Version { get; }
+    public string Slug { get; }
+    public string DocumentVersionId { get; }
+    public string Label => $"{Title} v{Version}";
+
+    public bool IsAccepted
+    {
+        get => _isAccepted;
+        set
+        {
+            if (_isAccepted == value)
+            {
+                return;
+            }
+
+            _isAccepted = value;
+            PropertyChanged?.Invoke(
+                this,
+                new PropertyChangedEventArgs(nameof(IsAccepted)));
+        }
+    }
+
+    public static PurchaseLegalDocumentViewModel From(
+        StoreCheckoutReviewLegalDocument document) =>
+        new(
+            document.Title,
+            document.Version,
+            document.Slug,
+            document.DocumentVersionId);
 }
 
 public sealed record StoreProductViewModel(

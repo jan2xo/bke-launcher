@@ -12,6 +12,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RepairRequestTimeout = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan StoreCheckoutRequestTimeout = TimeSpan.FromSeconds(40);
     internal static readonly TimeSpan RemoveRequestTimeout = TimeSpan.FromMinutes(10);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -110,6 +111,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
         PostAsync<StoreCheckoutReviewRequest, StoreCheckoutReviewResponse>(
             AgentLocalContract.StoreCheckoutReviewPath,
             request,
+            cancellationToken);
+
+    public Task<StoreCheckoutStartResponse> StartStoreCheckoutAsync(
+        StoreCheckoutStartRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<StoreCheckoutStartRequest, StoreCheckoutStartResponse>(
+            AgentLocalContract.StoreCheckoutStartPath,
+            request,
+            StoreCheckoutRequestTimeout,
             cancellationToken);
 
     public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
