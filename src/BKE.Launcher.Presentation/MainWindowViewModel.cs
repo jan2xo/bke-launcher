@@ -795,11 +795,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception error) when (
             error is InvalidDataException or
-            ArgumentException)
+            ArgumentException or
+            System.ComponentModel.Win32Exception or
+            InvalidOperationException)
         {
-            PurchaseCheckoutStatus = "FAILED";
+            PurchaseCheckoutStatus =
+                error is System.ComponentModel.Win32Exception or InvalidOperationException
+                    ? "NAVIGATION_FAILED"
+                    : "FAILED";
             PurchaseCheckoutMessage =
-                "The checkout response was invalid. Review the purchase again.";
+                PurchaseCheckoutStatus == "NAVIGATION_FAILED"
+                    ? "Checkout was created, but the secure payment page could not be opened. Do not create another checkout."
+                    : "The checkout response was invalid. Review the purchase again.";
         }
     }
 
