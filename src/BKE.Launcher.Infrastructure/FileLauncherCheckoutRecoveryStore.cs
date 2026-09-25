@@ -115,7 +115,7 @@ public sealed class FileLauncherCheckoutRecoveryStore : ILauncherCheckoutRecover
         var hasAnyIntent =
             state.PurchasePlanId is not null ||
             state.PurchaseMode is not null ||
-            state.LegalVersionIds.Count > 0;
+            state.LegalVersionIds is { Count: > 0 };
         if (!hasAnyIntent)
         {
             return;
