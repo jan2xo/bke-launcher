@@ -51,6 +51,7 @@ public static class AgentLocalContract
     public const string StoreCheckoutStatusPath = "/v1/store/checkout-status";
     public const string StoreGiftClaimRevealPath = "/v1/store/gift-claim-code";
     public const string AccountNotificationFeedPath = "/v1/notifications/account-feed";
+    public const string AccountNotificationReceiptPath = "/v1/notifications/account-receipt";
 }
 
 public sealed record AccountSessionDeviceContextRequest(
