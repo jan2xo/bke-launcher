@@ -110,6 +110,7 @@ Require(agentMethods.SetEquals([
     "StartAccountSessionAsync",
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
+    "GetAccountNotificationsAsync",
     "RedeemClaimCodeAsync",
     "GetStoreCatalogAsync",
     "ReviewStoreCheckoutAsync",
