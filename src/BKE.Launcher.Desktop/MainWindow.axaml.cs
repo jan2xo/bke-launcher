@@ -75,6 +75,11 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private void CompleteGiftClaimDelivery(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.CompleteGiftClaimDelivery();
+    }
+
     private void OpenExistingCheckout(object? sender, RoutedEventArgs args)
     {
         ViewModel.OpenExistingCheckout();
