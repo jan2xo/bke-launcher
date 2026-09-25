@@ -17,6 +17,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherStoreCheckoutStartService _storeCheckoutStart;
     private readonly LauncherStoreCheckoutStatusService _storeCheckoutStatus;
     private readonly LauncherStoreGiftClaimRevealService _storeGiftClaimReveal;
+    private readonly LauncherNotificationInboxService _notifications;
     private readonly ILauncherCheckoutRecoveryStore _checkoutRecoveryStore;
     private readonly ILauncherExternalNavigator _externalNavigator;
     private readonly LauncherSoftwareInstallController _softwareInstall;
@@ -40,6 +41,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _claimMessage = "Sign in to redeem a Claim Code.";
     private string _storeStatus = "AUTH_REQUIRED";
     private string _storeMessage = "Sign in to browse the BKE Store.";
+    private string _notificationStatus = "AUTH_REQUIRED";
+    private string _notificationMessage = "Sign in to view BKE notifications.";
     private bool _giftCheckoutEnabled;
     private string _purchaseReviewStatus = "IDLE";
     private string _purchaseReviewMessage = "Select a plan to review the current purchase terms.";
@@ -70,6 +73,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherStoreCheckoutStartService storeCheckoutStart,
         LauncherStoreCheckoutStatusService storeCheckoutStatus,
         LauncherStoreGiftClaimRevealService storeGiftClaimReveal,
+        LauncherNotificationInboxService notifications,
         ILauncherCheckoutRecoveryStore checkoutRecoveryStore,
         ILauncherExternalNavigator externalNavigator,
         LauncherSoftwareInstallController softwareInstall,
@@ -87,6 +91,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _storeCheckoutStart = storeCheckoutStart;
         _storeCheckoutStatus = storeCheckoutStatus;
         _storeGiftClaimReveal = storeGiftClaimReveal;
+        _notifications = notifications;
         _checkoutRecoveryStore = checkoutRecoveryStore;
         _externalNavigator = externalNavigator;
         _softwareInstall = softwareInstall;
@@ -102,6 +107,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
+    public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
     public ObservableCollection<PurchaseLegalDocumentViewModel> PurchaseLegalDocuments { get; } = [];
     public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
 
@@ -138,6 +144,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SetField(ref _sessionStatus, value);
             Raise(nameof(CanRedeemClaimCode));
+            Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
             Raise(nameof(CanRetryOriginalCheckout));
         }
@@ -201,6 +208,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _storeMessage;
         private set => SetField(ref _storeMessage, value);
+    }
+
+    public string NotificationStatus
+    {
+        get => _notificationStatus;
+        private set => SetField(ref _notificationStatus, value);
+    }
+
+    public string NotificationMessage
+    {
+        get => _notificationMessage;
+        private set => SetField(ref _notificationMessage, value);
     }
 
     public bool GiftCheckoutEnabled
@@ -351,8 +370,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool CanRedeemClaimCode =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
 
+    public bool CanRefreshNotifications =>
+        string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
+
     public bool ShowEmptyProducts => Products.Count == 0;
     public bool ShowEmptyStore => StoreProducts.Count == 0;
+    public bool ShowEmptyNotifications => Notifications.Count == 0;
 
     public async Task NativeSignInAsync(CancellationToken cancellationToken)
     {
@@ -366,6 +389,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             SessionStatus = "SIGNING_IN";
+            ClearNotifications(
+                "AUTH_REQUIRED",
+                "Sign in to view BKE notifications.");
             Message = "Authenticating directly with BKE Digital Solutions…";
 
             var result = await _nativeSignIn.SignInAsync(
@@ -405,6 +431,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
                 await RefreshCatalogAsync(cancellationToken);
                 await RefreshStoreAsync(cancellationToken);
+                await RefreshNotificationsAsync(cancellationToken);
                 return;
             }
 
@@ -412,6 +439,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Message = result.ErrorMessage ?? "BKE account sign-in failed.";
             ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
             ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
+            ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
         }
         catch (Exception error) when (
             error is HttpRequestException or
@@ -423,6 +451,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             AccountDisplay = "Not signed in";
             Message = "BKE native sign-in is unavailable or returned an invalid response.";
             ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+            ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
+            ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
         }
     }
 
@@ -445,6 +475,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 await RefreshCatalogAsync(cancellationToken);
                 await RefreshStoreAsync(cancellationToken);
+                await RefreshNotificationsAsync(cancellationToken);
+            }
+            else
+            {
+                ClearNotifications(
+                    "AUTH_REQUIRED",
+                    "Sign in to view BKE notifications.");
             }
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
@@ -465,12 +502,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 await RefreshCatalogAsync(cancellationToken);
                 await RefreshStoreAsync(cancellationToken);
+                await RefreshNotificationsAsync(cancellationToken);
             }
             else
             {
                 ClearCatalog(
                     "AUTH_REQUIRED",
                     "Sign in to load your BKE software.");
+                ClearStore(
+                    "AUTH_REQUIRED",
+                    "Sign in to browse the BKE Store.");
+                ClearNotifications(
+                    "AUTH_REQUIRED",
+                    "Sign in to view BKE notifications.");
             }
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
@@ -484,6 +528,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearStore(
                 "AGENT_UNAVAILABLE",
                 "BKE Store is unavailable while the Agent cannot be reached.");
+            ClearNotifications(
+                "AGENT_UNAVAILABLE",
+                "Notifications are unavailable while the Agent cannot be reached.");
+        }
+    }
+
+    public async Task RefreshNotificationsAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanRefreshNotifications)
+        {
+            ClearNotifications(
+                "AUTH_REQUIRED",
+                "Sign in to view BKE notifications.");
+            return;
+        }
+
+        NotificationStatus = "LOADING";
+        NotificationMessage =
+            "Loading notifications through the BKE Licensing Agent…";
+
+        try
+        {
+            var snapshot = await _notifications.GetAsync(
+                100,
+                cancellationToken);
+
+            Notifications.Clear();
+            foreach (var item in snapshot.Items)
+            {
+                Notifications.Add(NotificationViewModel.From(item));
+            }
+
+            NotificationStatus = snapshot.Status;
+            NotificationMessage = snapshot.Status == "Succeeded"
+                ? Notifications.Count == 0
+                    ? "No notifications for this BKE account."
+                    : $"{Notifications.Count} notification(s) for this BKE account."
+                : snapshot.Message ?? "Notifications are unavailable.";
+            Raise(nameof(ShowEmptyNotifications));
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentOutOfRangeException)
+        {
+            ClearNotifications(
+                "AGENT_UNAVAILABLE",
+                "Notifications are unavailable or the Agent returned an invalid feed.");
         }
     }
 
@@ -1763,6 +1857,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearStore(
                 "AUTH_REQUIRED",
                 "Sign in to browse the BKE Store.");
+            ClearNotifications(
+                "AUTH_REQUIRED",
+                "Sign in to view BKE notifications.");
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
         {
@@ -1811,6 +1908,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         StoreProducts.Clear();
         Raise(nameof(ShowEmptyStore));
         ClearPurchaseReview();
+    }
+
+    private void ClearNotifications(string status, string message)
+    {
+        NotificationStatus = status;
+        NotificationMessage = message;
+        Notifications.Clear();
+        Raise(nameof(ShowEmptyNotifications));
     }
 
     private void ClearPurchaseReview()
@@ -1957,6 +2062,38 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void Raise(string? propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+public sealed record NotificationViewModel(
+    string Id,
+    string Title,
+    string Body,
+    string SourceLabel,
+    string CategoryLabel,
+    string SeverityLabel,
+    string StateLabel,
+    string CreatedLabel,
+    string ProductLabel)
+{
+    public static NotificationViewModel From(AccountNotificationItem item)
+    {
+        var created = DateTimeOffset.TryParse(item.CreatedAt, out var parsed)
+            ? parsed.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+            : item.CreatedAt;
+
+        return new NotificationViewModel(
+            item.Id,
+            item.Title,
+            item.Body,
+            item.Source,
+            item.Category,
+            item.Severity,
+            item.State,
+            created,
+            string.IsNullOrWhiteSpace(item.ProductId)
+                ? "BKE"
+                : item.ProductId);
+    }
 }
 
 public sealed class PurchaseLegalDocumentViewModel : INotifyPropertyChanged

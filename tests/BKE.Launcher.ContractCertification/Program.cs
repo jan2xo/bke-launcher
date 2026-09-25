@@ -110,6 +110,7 @@ Require(agentMethods.SetEquals([
     "StartAccountSessionAsync",
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
+    "GetAccountNotificationsAsync",
     "RedeemClaimCodeAsync",
     "GetStoreCatalogAsync",
     "ReviewStoreCheckoutAsync",
@@ -409,6 +410,18 @@ Require(mainWindowSource.Contains("RepairProduct", StringComparison.Ordinal), "S
 Require(mainWindowMarkup.Contains("Content=\"Redeem Claim Code\"", StringComparison.Ordinal), "Claim Code redemption action is missing.");
 Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRedeemClaimCode}\"", StringComparison.Ordinal), "Claim Code redemption action is not session-bound.");
 Require(mainWindowSource.Contains("RedeemClaimCode", StringComparison.Ordinal), "Claim Code redemption click handler is missing.");
+Require(mainWindowMarkup.Contains("Header=\"Notifications\"", StringComparison.Ordinal),
+    "BKE Notifications tab is missing.");
+Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding Notifications}\"", StringComparison.Ordinal),
+    "BKE Notifications are not Agent-projected into the UI.");
+Require(mainWindowMarkup.Contains("Content=\"Refresh notifications\"", StringComparison.Ordinal),
+    "BKE Notifications refresh action is missing.");
+Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRefreshNotifications}\"", StringComparison.Ordinal),
+    "BKE Notifications refresh action is not session-bound.");
+Require(mainWindowMarkup.Contains("This first Launcher surface is read-only.", StringComparison.Ordinal),
+    "BKE Notifications UI does not state the read-only boundary.");
+Require(mainWindowSource.Contains("RefreshNotifications", StringComparison.Ordinal),
+    "BKE Notifications refresh click handler is missing.");
 Require(mainWindowMarkup.Contains("Header=\"Store\"", StringComparison.Ordinal), "BKE Store tab is missing.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
@@ -437,6 +450,23 @@ var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
 Require(normalizedViewModelSource.Contains(
+    "await _notifications.GetAsync(",
+    StringComparison.Ordinal),
+    "Launcher Notifications UX does not delegate feed authority to its Agent-backed service.");
+Require(normalizedViewModelSource.Contains(
+    "await RefreshNotificationsAsync(cancellationToken);",
+    StringComparison.Ordinal),
+    "Launcher does not refresh Notifications after authenticated session refresh.");
+Require(normalizedViewModelSource.Contains(
+    "ClearNotifications(",
+    StringComparison.Ordinal),
+    "Launcher does not clear account notification presentation across session changes.");
+Require(!normalizedViewModelSource.Contains(
+    "/api/agent-sessions/",
+    StringComparison.OrdinalIgnoreCase),
+    "Launcher Notifications UX bypasses the Agent loopback boundary.");
+
+Require(normalizedViewModelSource.Contains(
     "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
     StringComparison.Ordinal),
     "Launcher Update action is not restricted to STANDALONE + UPDATE_AVAILABLE.");
@@ -462,6 +492,41 @@ Require(normalizedViewModelSource.Contains(
     "await RefreshCatalogAsync(cancellationToken);",
     StringComparison.Ordinal),
     "Launcher does not refresh My Software after redemption.");
+
+var notificationServiceSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherNotificationInboxService.cs"));
+Require(notificationServiceSource.Contains("GetAccountNotificationsAsync", StringComparison.Ordinal),
+    "Launcher Notifications does not delegate to the Agent account inbox.");
+Require(notificationServiceSource.Contains("AccountNotificationInboxCapabilityId", StringComparison.Ordinal),
+    "Launcher Notifications does not verify Agent capability identity.");
+Require(notificationServiceSource.Contains("AllowedAudienceKinds", StringComparison.Ordinal),
+    "Launcher Notifications lacks audience defense-in-depth.");
+Require(notificationServiceSource.Contains("ALL_ACTIVE_CLIENTS", StringComparison.Ordinal),
+    "Launcher Notifications active-client audience support drifted.");
+Require(!notificationServiceSource.Contains("ADMINISTRATORS", StringComparison.Ordinal),
+    "Launcher Notifications widened into administrator audience authority.");
+Require(!notificationServiceSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
+    "Launcher Notifications bypasses the Agent loopback boundary.");
+Require(!notificationServiceSource.Contains("account_id", StringComparison.OrdinalIgnoreCase),
+    "Launcher Notifications can choose or consume a cloud account identifier.");
+Require(!notificationServiceSource.Contains("access_token", StringComparison.OrdinalIgnoreCase) &&
+        !notificationServiceSource.Contains("refresh_token", StringComparison.OrdinalIgnoreCase),
+    "Launcher Notifications absorbed Agent-owned cloud session secrets.");
+
+var accountNotificationRequestProperties = typeof(AccountNotificationFeedRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(accountNotificationRequestProperties.SequenceEqual(["Limit"]),
+    "Launcher account notification request widened beyond limit.");
+var accountNotificationResponseProperties = typeof(AccountNotificationFeedResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(!accountNotificationResponseProperties.Contains("AccountId"),
+    "Launcher account notification response exposes cloud account authority.");
+Require(!accountNotificationResponseProperties.Contains("Data"),
+    "Launcher account notification response exposes arbitrary cloud notification data.");
 
 var storeServiceSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreService.cs"));
@@ -810,6 +875,12 @@ Require(AgentLocalContract.StoreGiftClaimRevealCapabilityId == "bke.store-gift-c
     "Launcher Agent gift Claim Code capability id drifted.");
 Require(AgentLocalContract.StoreGiftClaimRevealContractVersion == 1,
     "Launcher Agent gift Claim Code contract version drifted.");
+Require(AgentLocalContract.AccountNotificationFeedPath == "/v1/notifications/account-feed",
+    "Launcher Agent account notification loopback path drifted.");
+Require(AgentLocalContract.AccountNotificationInboxCapabilityId == "bke.account-notifications",
+    "Launcher Agent account notification capability id drifted.");
+Require(AgentLocalContract.AccountNotificationInboxContractVersion == 1,
+    "Launcher Agent account notification contract version drifted.");
 
 var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
     "DefaultRequestTimeout",
@@ -867,6 +938,7 @@ Require(removeTimeout > defaultTimeout,
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
+Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
 Console.WriteLine("Agent-owned Store checkout-review presentation boundary certified");

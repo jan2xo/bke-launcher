@@ -30,6 +30,8 @@ public static class AgentLocalContract
     public const int StoreCheckoutStatusContractVersion = 1;
     public const string StoreGiftClaimRevealCapabilityId = "bke.store-gift-claim-reveal";
     public const int StoreGiftClaimRevealContractVersion = 1;
+    public const string AccountNotificationInboxCapabilityId = "bke.account-notifications";
+    public const int AccountNotificationInboxContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
     public const string AccountSessionDeviceContextPath = "/v1/account-session/device-context";
     public const string AccountSessionCompletePath = "/v1/account-session/complete";
@@ -48,6 +50,7 @@ public static class AgentLocalContract
     public const string StoreCheckoutStartPath = "/v1/store/checkout-start";
     public const string StoreCheckoutStatusPath = "/v1/store/checkout-status";
     public const string StoreGiftClaimRevealPath = "/v1/store/gift-claim-code";
+    public const string AccountNotificationFeedPath = "/v1/notifications/account-feed";
 }
 
 public sealed record AccountSessionDeviceContextRequest(
