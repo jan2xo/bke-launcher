@@ -798,13 +798,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (purchaseMode == "GIFT" && !GiftClaimCodeDeliverySupported)
-        {
-            PurchaseCheckoutStatus = "GIFT_DELIVERY_UNAVAILABLE";
-            PurchaseCheckoutMessage =
-                "Gift checkout is blocked in this Launcher build until one-time Claim Code delivery can be completed safely.";
-            return;
-        }
+        GiftClaimCode = string.Empty;
 
         var correlationId = Guid.NewGuid().ToString("N");
         try
@@ -890,6 +884,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 _ =>
                     "Checkout could not be started. Review the purchase again before another attempt.",
             };
+
+            if (result.Status == "READY" &&
+                result.Complimentary == true &&
+                purchaseMode == "GIFT")
+            {
+                _recoverableCheckoutUrl = null;
+                await RevealGiftClaimCodeAsync(
+                    _checkoutRecoveryCorrelationId,
+                    cancellationToken);
+                return;
+            }
 
             if (result.Status == "READY" &&
                 !string.IsNullOrWhiteSpace(result.CheckoutUrl))
@@ -997,12 +1002,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                         $"{orderLabel} was recovered with status {result.OrderStatus ?? result.PaymentStatus ?? "UNKNOWN"}.",
                 };
 
-                if (result.FulfillmentMode == "GIFT" &&
+                if (result.FulfillmentMode == "CLAIM_CODE" &&
                     (result.PaymentStatus is "SETTLED" or "NOT_REQUIRED"))
                 {
-                    PurchaseCheckoutStatus = "GIFT_FULFILLMENT_PENDING";
-                    PurchaseCheckoutMessage =
-                        $"{orderLabel} is settled, but this Launcher build cannot retrieve the one-time Claim Code yet. Recovery remains locked so fulfillment context is not discarded.";
+                    await RevealGiftClaimCodeAsync(
+                        result.CorrelationId,
+                        cancellationToken);
                 }
                 else if (result.PaymentStatus is "SETTLED" or "NOT_REQUIRED")
                 {
@@ -1056,6 +1061,138 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "The Agent checkout-status response was invalid. Do not start another checkout.";
             RaiseCheckoutRecoveryState();
         }
+    }
+
+    private async Task RevealGiftClaimCodeAsync(
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        PurchaseCheckoutStatus = "REVEALING_GIFT_CLAIM_CODE";
+        PurchaseCheckoutMessage =
+            "Recovering the settled gift Claim Code through the BKE Licensing Agent…";
+
+        try
+        {
+            var result = await _storeGiftClaimReveal.RevealAsync(
+                correlationId,
+                cancellationToken);
+
+            switch (result.Status)
+            {
+                case "AVAILABLE":
+                    GiftClaimCode = result.ClaimCode ?? string.Empty;
+                    _recoverableCheckoutUrl = null;
+                    PurchaseCheckoutStatus = "GIFT_CLAIM_CODE_READY";
+                    PurchaseCheckoutMessage =
+                        "Your unbound one-time Claim Code is ready. Copy or save it before acknowledging delivery. BKE Launcher does not persist this plaintext code.";
+                    break;
+
+                case "PENDING":
+                    PurchaseCheckoutStatus = "GIFT_FULFILLMENT_PENDING";
+                    PurchaseCheckoutMessage =
+                        result.Message ??
+                        "Payment is complete, but the gift Claim Code is still being finalized. Check this existing purchase again; do not create another checkout.";
+                    break;
+
+                case "AUTH_REQUIRED":
+                    PurchaseCheckoutStatus = "AUTH_REQUIRED";
+                    PurchaseCheckoutMessage =
+                        result.Message ??
+                        "The same Agent account session is required to recover this gift Claim Code.";
+                    break;
+
+                case "NOT_FOUND":
+                    PurchaseCheckoutStatus = "GIFT_FULFILLMENT_NOT_FOUND";
+                    PurchaseCheckoutMessage =
+                        "No gift fulfillment is visible for this retained correlation. NOT_FOUND does not unlock another checkout; repeat the read-only recovery later.";
+                    break;
+
+                case "ACCOUNT_FORBIDDEN":
+                case "ACCOUNT_UNAVAILABLE":
+                case "NOT_GIFT_ORDER":
+                case "FAILED":
+                    PurchaseCheckoutStatus = result.Status;
+                    PurchaseCheckoutMessage =
+                        result.Message ??
+                        "Gift Claim Code recovery failed closed. The retained correlation remains locked.";
+                    break;
+
+                case "UNAVAILABLE":
+                    PurchaseCheckoutStatus = "UNAVAILABLE";
+                    PurchaseCheckoutMessage =
+                        result.Message ??
+                        "Gift Claim Code recovery is temporarily unavailable. Retry this recovery; do not create another checkout.";
+                    break;
+
+                case "CANCELLED":
+                case "ALREADY_USED":
+                case "REVOKED":
+                case "EXPIRED":
+                    GiftClaimCode = string.Empty;
+                    PurchaseCheckoutStatus = result.Status;
+                    PurchaseCheckoutMessage =
+                        result.Message ??
+                        "This gift fulfillment is terminal and cannot deliver a usable Claim Code.";
+                    if (TryClearCheckoutRecoveryState())
+                    {
+                        _purchaseAttemptLocked = false;
+                        RaisePurchaseActionState();
+                    }
+                    break;
+
+                default:
+                    PurchaseCheckoutStatus = "FAILED";
+                    PurchaseCheckoutMessage =
+                        "Gift Claim Code recovery returned an unknown state. The retained correlation remains locked.";
+                    break;
+            }
+
+            RaiseCheckoutRecoveryState();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException)
+        {
+            PurchaseCheckoutStatus = "UNAVAILABLE";
+            PurchaseCheckoutMessage =
+                "The Agent gift Claim Code capability is temporarily unavailable. Retry this recovery; do not create another checkout.";
+            RaiseCheckoutRecoveryState();
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or
+            ArgumentException)
+        {
+            PurchaseCheckoutStatus = "FAILED";
+            PurchaseCheckoutMessage =
+                "The Agent gift Claim Code response was invalid. The retained correlation remains locked.";
+            RaiseCheckoutRecoveryState();
+        }
+    }
+
+    public void CompleteGiftClaimDelivery()
+    {
+        if (!CanCompleteGiftDelivery)
+        {
+            PurchaseCheckoutMessage =
+                "A revealed gift Claim Code must remain visible until you save it and acknowledge delivery.";
+            return;
+        }
+
+        if (!TryClearCheckoutRecoveryState())
+        {
+            PurchaseCheckoutStatus = "RECOVERY_STATE_LOCKED";
+            PurchaseCheckoutMessage =
+                "The Claim Code remains visible because BKE could not safely clear its recovery lock.";
+            return;
+        }
+
+        GiftClaimCode = string.Empty;
+        _purchaseAttemptLocked = false;
+        ClearPurchaseReview();
+        StoreMessage =
+            "Gift Claim Code delivery acknowledged. Start another purchase only after reviewing the current plan and Legal terms again.";
+        RaisePurchaseActionState();
+        RaiseCheckoutRecoveryState();
     }
 
     public void OpenExistingCheckout()
@@ -1649,6 +1786,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         if (!preserveRecovery)
         {
+            GiftClaimCode = string.Empty;
             _purchaseAttemptLocked = false;
             PurchaseCheckoutStatus = "IDLE";
             PurchaseCheckoutMessage = "Review a plan before starting checkout.";
@@ -1744,6 +1882,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         Raise(nameof(CanCheckCheckoutStatus));
         Raise(nameof(CanOpenExistingCheckout));
+        Raise(nameof(CanCompleteGiftDelivery));
         Raise(nameof(ShowPurchaseCheckoutState));
     }
 
