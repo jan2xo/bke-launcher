@@ -891,7 +891,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 _recoverableCheckoutUrl = null;
                 await RevealGiftClaimCodeAsync(
-                    _checkoutRecoveryCorrelationId,
+                    result.CorrelationId,
                     cancellationToken);
                 return;
             }
