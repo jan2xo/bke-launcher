@@ -29,6 +29,7 @@ public sealed partial class App : Avalonia.Application
             var storeCheckoutReview = new LauncherStoreCheckoutReviewService(agentClient);
             var storeCheckoutStart = new LauncherStoreCheckoutStartService(agentClient);
             var storeCheckoutStatus = new LauncherStoreCheckoutStatusService(agentClient);
+            var storeGiftClaimReveal = new LauncherStoreGiftClaimRevealService(agentClient);
             var checkoutRecoveryStore = new FileLauncherCheckoutRecoveryStore();
             var externalNavigator = new ExternalBrowserNavigator();
             var softwareInstall = new LauncherSoftwareInstallController(agentClient);
@@ -45,6 +46,7 @@ public sealed partial class App : Avalonia.Application
                 storeCheckoutReview,
                 storeCheckoutStart,
                 storeCheckoutStatus,
+                storeGiftClaimReveal,
                 checkoutRecoveryStore,
                 externalNavigator,
                 softwareInstall,

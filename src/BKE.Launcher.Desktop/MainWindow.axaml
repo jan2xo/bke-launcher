@@ -253,6 +253,25 @@
                                 IsEnabled="{Binding CanOpenExistingCheckout}" />
                       </StackPanel>
 
+                      <Border IsVisible="{Binding HasGiftClaimCode}"
+                              Padding="12"
+                              CornerRadius="8">
+                        <StackPanel Spacing="8">
+                          <TextBlock Text="Gift Claim Code"
+                                     FontWeight="SemiBold" />
+                          <TextBox Text="{Binding GiftClaimCode, Mode=OneWay}"
+                                   IsReadOnly="True"
+                                   TextWrapping="Wrap" />
+                          <TextBlock Text="This is an unbound one-time Claim Code. Send it to the intended recipient; the first eligible BKE account that successfully redeems it becomes the software owner. BKE Launcher keeps this plaintext in memory only."
+                                     TextWrapping="Wrap"
+                                     FontSize="11"
+                                     Opacity="0.72" />
+                          <Button Content="I've saved this Claim Code"
+                                  Click="CompleteGiftClaimDelivery"
+                                  IsEnabled="{Binding CanCompleteGiftDelivery}" />
+                        </StackPanel>
+                      </Border>
+
                       <TextBlock Text="Checkout-status recovery is read-only. It checks the existing correlation and never creates a second order or payment."
                                  TextWrapping="Wrap"
                                  FontSize="11"
