@@ -115,6 +115,7 @@ Require(agentMethods.SetEquals([
     "ReviewStoreCheckoutAsync",
     "StartStoreCheckoutAsync",
     "CheckStoreCheckoutStatusAsync",
+    "RevealStoreGiftClaimCodeAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
