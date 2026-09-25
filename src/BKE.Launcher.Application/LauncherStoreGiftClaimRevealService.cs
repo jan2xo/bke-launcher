@@ -45,6 +45,22 @@ public sealed class LauncherStoreGiftClaimRevealService
                 "BKE Licensing Agent Store gift Claim Code contract drifted.");
         }
 
+        if (response.Status == "AVAILABLE" &&
+            (string.IsNullOrWhiteSpace(response.OrderId) ||
+             string.IsNullOrWhiteSpace(response.ClaimCodeId) ||
+             string.IsNullOrWhiteSpace(response.ClaimCode)))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent Store gift Claim Code reveal omitted required fields.");
+        }
+
+        if (response.Status != "AVAILABLE" &&
+            response.ClaimCode is not null)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent exposed gift Claim Code plaintext outside AVAILABLE state.");
+        }
+
         return new LauncherStoreGiftClaimRevealSnapshot(
             response.Status,
             response.CorrelationId,
