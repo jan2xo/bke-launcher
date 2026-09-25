@@ -1674,17 +1674,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LogoutAsync(CancellationToken cancellationToken)
     {
-        if (_purchaseAttemptLocked &&
-            !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId))
-        {
-            PurchaseCheckoutStatus = "RECOVERY_REQUIRED";
-            PurchaseCheckoutMessage =
-                "Resolve the existing checkout attempt before signing out. Checkout recovery is bound to this same Agent account session.";
-            Message =
-                "Sign-out is blocked while checkout recovery depends on the current Agent account session.";
-            RaiseCheckoutRecoveryState();
-            return;
-        }
+        var preserveCheckoutRecovery =
+            _purchaseAttemptLocked &&
+            !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
 
         try
         {
@@ -1700,13 +1692,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             AvailableAccounts.Clear();
             SelectedAccount = null;
             Raise(nameof(HasAccountChoices));
-            Message = response.Error?.Message ?? "Signed out on this machine.";
+            GiftClaimCode = string.Empty;
+            Message = preserveCheckoutRecovery
+                ? "Signed out. The existing checkout correlation remains locked. Sign back in with the same BKE identity and account on this device to continue recovery."
+                : response.Error?.Message ?? "Signed out on this machine.";
             ClearCatalog(
                 "AUTH_REQUIRED",
                 "Sign in to load your BKE software.");
-            ClearStore(
-                "AUTH_REQUIRED",
-                "Sign in to browse the BKE Store.");
             ClearStore(
                 "AUTH_REQUIRED",
                 "Sign in to browse the BKE Store.");
