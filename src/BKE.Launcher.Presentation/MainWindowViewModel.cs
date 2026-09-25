@@ -1098,7 +1098,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     PurchaseCheckoutStatus = "AUTH_REQUIRED";
                     PurchaseCheckoutMessage =
                         result.Message ??
-                        "The same Agent account session is required to recover this gift Claim Code.";
+                        "Sign in with the same BKE identity and account on this device to recover this gift Claim Code.";
                     break;
 
                 case "NOT_FOUND":
@@ -1829,7 +1829,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "A previous checkout attempt must be recovered before another purchase can be reviewed.";
             PurchaseCheckoutStatus = "RECOVERY_REQUIRED";
             PurchaseCheckoutMessage =
-                "Keep the same Agent account session, then check this saved checkout attempt. Signing out or replacing the Agent session can make this correlation unrecoverable.";
+                "Sign in with the same BKE identity and account on this device, then check this saved checkout attempt. The retained correlation survives Agent session replacement.";
         }
         catch (Exception storageError) when (
             storageError is IOException or
