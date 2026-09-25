@@ -49,13 +49,17 @@ public sealed class LauncherNotificationInboxService
                 "BKE Licensing Agent notification contract drifted.");
         }
 
-        if (response.Items.Count > limit ||
+        if (response.Status is not ("Succeeded" or "Failed") ||
+            response.Items is null ||
+            response.Items.Count > limit ||
             response.Items.Any(item =>
                 !AllowedAudienceKinds.Contains(item.AudienceKind)) ||
             response.Items.Any(item =>
                 item.State is not ("Unread" or "Read")) ||
             response.Items.Any(item =>
-                item.Severity is not ("Information" or "Warning")))
+                item.Severity is not ("Information" or "Warning")) ||
+            (response.Status == "Failed" &&
+                (response.Items.Count != 0 || response.Error is null)))
         {
             throw new InvalidDataException(
                 "BKE Licensing Agent returned an invalid notification feed.");
