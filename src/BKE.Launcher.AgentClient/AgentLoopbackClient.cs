@@ -131,6 +131,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             StoreCheckoutRequestTimeout,
             cancellationToken);
 
+    public Task<StoreGiftClaimRevealResponse> RevealStoreGiftClaimCodeAsync(
+        StoreGiftClaimRevealRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<StoreGiftClaimRevealRequest, StoreGiftClaimRevealResponse>(
+            AgentLocalContract.StoreGiftClaimRevealPath,
+            request,
+            StoreCheckoutRequestTimeout,
+            cancellationToken);
+
     public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken) =>
