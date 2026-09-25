@@ -387,7 +387,7 @@ Require(!mainWindowSource.Contains("Process.Start", StringComparison.Ordinal), "
 Require(!mainWindowMarkup.Contains("Device code", StringComparison.Ordinal), "Device-code UX remains visible in Launcher.");
 Require(mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Native sign-in action is missing.");
 Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Native password field is not masked.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode}\"", StringComparison.Ordinal),
+Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode, Mode=OneWay}\"", StringComparison.Ordinal),
     "Launcher Store does not render the recovered gift Claim Code.");
 Require(mainWindowMarkup.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal),
     "Launcher gift Claim Code field is not read-only.");
