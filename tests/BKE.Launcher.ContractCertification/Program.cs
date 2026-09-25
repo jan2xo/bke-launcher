@@ -394,6 +394,10 @@ Require(mainWindowMarkup.Contains("IsReadOnly=\"True\"", StringComparison.Ordina
     "Launcher gift Claim Code field is not read-only.");
 Require(mainWindowMarkup.Contains("Content=\"I've saved this Claim Code\"", StringComparison.Ordinal),
     "Launcher Store lacks explicit gift delivery acknowledgement.");
+Require(mainWindowMarkup.Contains("Content=\"Resume original checkout\"", StringComparison.Ordinal),
+    "Launcher Store lacks explicit same-correlation resume UX.");
+Require(mainWindowSource.Contains("RetryOriginalCheckout", StringComparison.Ordinal),
+    "Launcher same-correlation resume handler is missing.");
 Require(mainWindowSource.Contains("CompleteGiftClaimDelivery", StringComparison.Ordinal),
     "Launcher gift delivery acknowledgement handler is missing.");
 Require(mainWindowMarkup.Contains("Content=\"Update\"", StringComparison.Ordinal), "Software Update action is missing.");
@@ -546,15 +550,15 @@ Require(normalizedViewModelSource.Contains(
     StringComparison.Ordinal),
     "Launcher Store UX does not recover checkout state through the Agent.");
 Require(normalizedViewModelSource.Contains(
-    "var correlationId = Guid.NewGuid().ToString(\"N\")",
+    "new LauncherCheckoutRecoveryState(",
     StringComparison.Ordinal),
-    "Launcher does not create a durable checkout correlation before mutation.");
+    "Launcher does not create durable resumable checkout state before mutation.");
 Require(normalizedViewModelSource.Contains(
-    "_checkoutRecoveryStore.WriteCorrelationId(correlationId);",
+    "_checkoutRecoveryStore.Write(recoveryState);",
     StringComparison.Ordinal),
-    "Launcher does not persist the checkout correlation before mutation.");
+    "Launcher does not persist resumable checkout intent before mutation.");
 var recoveryWriteIndex = normalizedViewModelSource.IndexOf(
-    "_checkoutRecoveryStore.WriteCorrelationId(correlationId);",
+    "_checkoutRecoveryStore.Write(recoveryState);",
     StringComparison.Ordinal);
 var checkoutMutationIndex = normalizedViewModelSource.IndexOf(
     "await _storeCheckoutStart.StartAsync(",
@@ -564,18 +568,30 @@ Require(
     checkoutMutationIndex > recoveryWriteIndex,
     "Launcher can start checkout before durable recovery state is written.");
 Require(normalizedViewModelSource.Contains(
-    "_storeCheckoutStart.StartAsync(\n                _checkoutRecoveryCorrelationId,",
+    "recoveryState.CorrelationId,",
     StringComparison.Ordinal),
     "Launcher checkout-start does not use the retained recovery correlation.");
+Require(normalizedViewModelSource.Contains(
+    "public async Task RetryOriginalCheckoutAsync(",
+    StringComparison.Ordinal),
+    "Launcher lacks an explicit same-correlation checkout resume action.");
+Require(normalizedViewModelSource.Contains(
+    "PurchaseCheckoutStatus == \"RETRY_AVAILABLE\"",
+    StringComparison.Ordinal),
+    "Launcher can resume checkout without authoritative NOT_FOUND.");
+Require(normalizedViewModelSource.Contains(
+    "BKE will not create a new correlation.",
+    StringComparison.Ordinal),
+    "Launcher resume UX does not preserve the no-new-correlation boundary.");
 var checkoutStartCall = "await _storeCheckoutStart.StartAsync(";
 Require(
     normalizedViewModelSource.IndexOf(checkoutStartCall, StringComparison.Ordinal) ==
     normalizedViewModelSource.LastIndexOf(checkoutStartCall, StringComparison.Ordinal),
-    "Launcher recovery path can replay checkout-start mutation.");
+    "Launcher checkout-start authority is duplicated outside the centralized executor.");
 Require(normalizedViewModelSource.Contains(
-    "do not start a second checkout.",
+    "Resume is allowed only after authoritative NOT_FOUND.",
     StringComparison.Ordinal),
-    "Launcher checkout recovery does not preserve the no-second-order boundary.");
+    "Launcher ambiguous-result UX can replay checkout before a read-only NOT_FOUND.");
 Require(normalizedViewModelSource.Contains(
     "Resolve the existing checkout attempt before reviewing or starting another purchase.",
     StringComparison.Ordinal),
@@ -588,15 +604,6 @@ Require(normalizedViewModelSource.Contains(
     "Opened the existing secure checkout. No new order or payment attempt was created.",
     StringComparison.Ordinal),
     "Launcher existing-checkout resume UX does not state its no-new-mutation boundary.");
-
-Require(normalizedViewModelSource.Contains(
-    "BKE preserved this exact recovery correlation",
-    StringComparison.Ordinal),
-    "Launcher can discard recovery identity after an invalid checkout-start response.");
-Require(normalizedViewModelSource.Contains(
-    "NOT_FOUND is not treated as proof that no mutation occurred",
-    StringComparison.Ordinal),
-    "Launcher NOT_FOUND policy can unlock an ambiguous checkout without authoritative absence.");
 Require(!normalizedViewModelSource.Contains(
     "same Agent account session",
     StringComparison.Ordinal),
@@ -613,14 +620,11 @@ Require(normalizedViewModelSource.Contains(
     "Signed out. The existing checkout correlation remains locked.",
     StringComparison.Ordinal),
     "Launcher sign-out can imply that unresolved checkout recovery was discarded.");
-Require(!normalizedViewModelSource.Contains(
-    "Sign-out is blocked while checkout recovery depends on the current Agent account session.",
-    StringComparison.Ordinal),
-    "Launcher still blocks sign-out on obsolete same-session recovery semantics.");
 Require(normalizedViewModelSource.Contains(
     "GiftClaimCode = string.Empty;\n            Message = preserveCheckoutRecovery",
     StringComparison.Ordinal),
     "Launcher can retain revealed gift Claim Code plaintext after sign-out.");
+
 Require(!normalizedViewModelSource.Contains(
     "GiftClaimCodeDeliverySupported = false",
     StringComparison.Ordinal),
@@ -675,14 +679,26 @@ var checkoutRecoveryStoreSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Infrastructure", "FileLauncherCheckoutRecoveryStore.cs"));
 Require(checkoutRecoveryStoreSource.Contains("LauncherStoragePaths.UserDataRoot()", StringComparison.Ordinal),
     "Launcher checkout recovery state is not stored under the Launcher-owned user-data root.");
+Require(checkoutRecoveryStoreSource.Contains("checkout-recovery.json", StringComparison.Ordinal),
+    "Launcher resumable checkout recovery store is missing.");
 Require(checkoutRecoveryStoreSource.Contains("checkout-recovery.id", StringComparison.Ordinal),
-    "Launcher checkout recovery correlation store is missing.");
+    "Launcher does not preserve legacy correlation-only recovery compatibility.");
+Require(checkoutRecoveryStoreSource.Contains("JsonSerializer.Serialize(state)", StringComparison.Ordinal),
+    "Launcher does not serialize resumable checkout intent atomically.");
+Require(checkoutRecoveryStoreSource.Contains("PurchasePlanId", StringComparison.Ordinal),
+    "Launcher recovery state omits the original purchase-plan identity.");
+Require(checkoutRecoveryStoreSource.Contains("PurchaseMode", StringComparison.Ordinal),
+    "Launcher recovery state omits SELF/GIFT intent.");
+Require(checkoutRecoveryStoreSource.Contains("LegalVersionIds", StringComparison.Ordinal),
+    "Launcher recovery state omits reviewed Legal version identities.");
 Require(checkoutRecoveryStoreSource.Contains("Guid.TryParseExact", StringComparison.Ordinal),
     "Launcher checkout recovery store does not validate correlation identity.");
 Require(!checkoutRecoveryStoreSource.Contains("checkout_url", StringComparison.OrdinalIgnoreCase),
     "Launcher persisted checkout URL material in recovery state.");
-Require(!checkoutRecoveryStoreSource.Contains("payment", StringComparison.OrdinalIgnoreCase),
-    "Launcher persisted payment data in recovery state.");
+Require(!checkoutRecoveryStoreSource.Contains("PaymentStatus", StringComparison.OrdinalIgnoreCase),
+    "Launcher persisted payment status in recovery state.");
+Require(!checkoutRecoveryStoreSource.Contains("AmountMinor", StringComparison.OrdinalIgnoreCase),
+    "Launcher persisted authoritative pricing in recovery state.");
 Require(!checkoutRecoveryStoreSource.Contains("provider", StringComparison.OrdinalIgnoreCase),
     "Launcher persisted provider data in recovery state.");
 Require(!checkoutRecoveryStoreSource.Contains("claim_code", StringComparison.OrdinalIgnoreCase),
