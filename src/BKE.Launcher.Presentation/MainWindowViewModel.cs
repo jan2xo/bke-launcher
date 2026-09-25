@@ -9,7 +9,6 @@ namespace BKE.Launcher.Presentation;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    private const bool GiftClaimCodeDeliverySupported = false;
     private readonly LauncherAccountSessionController _accountSession;
     private readonly LauncherNativeSignInController _nativeSignIn;
     private readonly LauncherCatalogService _catalog;
@@ -17,6 +16,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
     private readonly LauncherStoreCheckoutStartService _storeCheckoutStart;
     private readonly LauncherStoreCheckoutStatusService _storeCheckoutStatus;
+    private readonly LauncherStoreGiftClaimRevealService _storeGiftClaimReveal;
     private readonly ILauncherCheckoutRecoveryStore _checkoutRecoveryStore;
     private readonly ILauncherExternalNavigator _externalNavigator;
     private readonly LauncherSoftwareInstallController _softwareInstall;
@@ -51,6 +51,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _showPurchaseReview;
     private string _purchaseCheckoutStatus = "IDLE";
     private string _purchaseCheckoutMessage = "Review a plan before starting checkout.";
+    private string _giftClaimCode = string.Empty;
     private string? _reviewedPurchasePlanId;
     private IReadOnlySet<string> _reviewedPurchaseModes =
         new HashSet<string>(StringComparer.Ordinal);
@@ -67,6 +68,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherStoreCheckoutReviewService storeCheckoutReview,
         LauncherStoreCheckoutStartService storeCheckoutStart,
         LauncherStoreCheckoutStatusService storeCheckoutStatus,
+        LauncherStoreGiftClaimRevealService storeGiftClaimReveal,
         ILauncherCheckoutRecoveryStore checkoutRecoveryStore,
         ILauncherExternalNavigator externalNavigator,
         LauncherSoftwareInstallController softwareInstall,
@@ -83,6 +85,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _storeCheckoutReview = storeCheckoutReview;
         _storeCheckoutStart = storeCheckoutStart;
         _storeCheckoutStatus = storeCheckoutStatus;
+        _storeGiftClaimReveal = storeGiftClaimReveal;
         _checkoutRecoveryStore = checkoutRecoveryStore;
         _externalNavigator = externalNavigator;
         _softwareInstall = softwareInstall;
@@ -205,15 +208,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SetField(ref _giftCheckoutEnabled, value);
             Raise(nameof(GiftCheckoutLabel));
+            Raise(nameof(CanBuyGift));
         }
     }
 
     public string GiftCheckoutLabel =>
-        GiftCheckoutEnabled && GiftClaimCodeDeliverySupported
-            ? "Gift purchase option: Claim Code delivery available"
-            : GiftCheckoutEnabled
-                ? "Gift purchase option: checkout authority is available, but one-time Claim Code delivery is not available in this Launcher build yet"
-                : "Gift purchase option: not available in this environment";
+        GiftCheckoutEnabled
+            ? "Gift purchase option: unbound one-time Claim Code delivery available"
+            : "Gift purchase option: not available in this environment";
 
     public string PurchaseReviewStatus
     {
@@ -281,6 +283,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _purchaseCheckoutMessage, value);
     }
 
+    public string GiftClaimCode
+    {
+        get => _giftClaimCode;
+        private set
+        {
+            SetField(ref _giftClaimCode, value);
+            Raise(nameof(HasGiftClaimCode));
+            Raise(nameof(CanCompleteGiftDelivery));
+        }
+    }
+
+    public bool HasGiftClaimCode =>
+        !string.IsNullOrWhiteSpace(GiftClaimCode);
+
+    public bool CanCompleteGiftDelivery =>
+        HasGiftClaimCode &&
+        _purchaseAttemptLocked &&
+        !_checkoutRecoveryStateBlocked &&
+        !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
+
     public bool ShowPurchaseActions =>
         PurchaseReviewStatus == "READY" &&
         _reviewedPurchasePlanId is not null &&
@@ -292,7 +314,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _reviewedPurchaseModes.Contains("SELF");
 
     public bool CanBuyGift =>
-        GiftClaimCodeDeliverySupported &&
+        GiftCheckoutEnabled &&
         ShowPurchaseActions &&
         !_purchaseAttemptLocked &&
         _reviewedPurchaseModes.Contains("GIFT");
