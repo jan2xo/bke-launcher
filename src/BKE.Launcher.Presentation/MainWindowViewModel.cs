@@ -1135,7 +1135,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                         "This gift fulfillment is terminal and cannot deliver a usable Claim Code.";
                     if (TryClearCheckoutRecoveryState())
                     {
-                        _purchaseAttemptLocked = false;
+                        PurchaseReviewMessage =
+                            "This gift fulfillment is terminal. Review the current plan and Legal terms again before another purchase.";
                         RaisePurchaseActionState();
                     }
                     break;
