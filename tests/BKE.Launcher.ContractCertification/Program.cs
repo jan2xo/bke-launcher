@@ -419,8 +419,16 @@ Require(mainWindowMarkup.Contains("Content=\"Refresh notifications\"", StringCom
     "BKE Notifications refresh action is missing.");
 Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRefreshNotifications}\"", StringComparison.Ordinal),
     "BKE Notifications refresh action is not session-bound.");
-Require(mainWindowMarkup.Contains("This first Launcher surface is read-only.", StringComparison.Ordinal),
-    "BKE Notifications UI does not state the read-only boundary.");
+Require(mainWindowMarkup.Contains("Mark Read and Dismiss are server-authoritative receipt actions.", StringComparison.Ordinal),
+    "BKE Notifications UI does not state the server-authoritative receipt boundary.");
+Require(mainWindowMarkup.Contains("Content=\"Mark read\"", StringComparison.Ordinal),
+    "BKE Notifications Mark Read action is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Dismiss\"", StringComparison.Ordinal),
+    "BKE Notifications Dismiss action is missing.");
+Require(mainWindowSource.Contains("MarkNotificationRead", StringComparison.Ordinal),
+    "BKE Notifications Mark Read click handler is missing.");
+Require(mainWindowSource.Contains("DismissNotification", StringComparison.Ordinal),
+    "BKE Notifications Dismiss click handler is missing.");
 Require(mainWindowSource.Contains("RefreshNotifications", StringComparison.Ordinal),
     "BKE Notifications refresh click handler is missing.");
 Require(mainWindowMarkup.Contains("Header=\"Store\"", StringComparison.Ordinal), "BKE Store tab is missing.");
