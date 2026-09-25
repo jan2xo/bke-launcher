@@ -111,6 +111,7 @@ Require(agentMethods.SetEquals([
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
     "GetAccountNotificationsAsync",
+    "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
     "GetStoreCatalogAsync",
     "ReviewStoreCheckoutAsync",
@@ -512,6 +513,10 @@ Require(!notificationServiceSource.Contains("account_id", StringComparison.Ordin
 Require(!notificationServiceSource.Contains("access_token", StringComparison.OrdinalIgnoreCase) &&
         !notificationServiceSource.Contains("refresh_token", StringComparison.OrdinalIgnoreCase),
     "Launcher Notifications absorbed Agent-owned cloud session secrets.");
+Require(notificationServiceSource.Contains("MutateAccountNotificationAsync", StringComparison.Ordinal),
+    "Launcher notification receipt actions do not delegate to the Agent.");
+Require(notificationServiceSource.Contains("response.State == expectedState", StringComparison.Ordinal),
+    "Launcher notification receipt actions do not validate authoritative state.");
 
 var accountNotificationRequestProperties = typeof(AccountNotificationFeedRequest)
     .GetProperties()
@@ -527,6 +532,29 @@ Require(!accountNotificationResponseProperties.Contains("AccountId"),
     "Launcher account notification response exposes cloud account authority.");
 Require(!accountNotificationResponseProperties.Contains("Data"),
     "Launcher account notification response exposes arbitrary cloud notification data.");
+
+var accountNotificationReceiptRequestProperties = typeof(AccountNotificationReceiptRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(accountNotificationReceiptRequestProperties.SequenceEqual(["NotificationId", "Action"]),
+    "Launcher account notification receipt request widened beyond notification id + action.");
+var accountNotificationReceiptResponseProperties = typeof(AccountNotificationReceiptResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(!accountNotificationReceiptResponseProperties.Contains("AccountId"),
+    "Launcher account notification receipt response exposes cloud account authority.");
+Require(!accountNotificationReceiptResponseProperties.Contains("Data"),
+    "Launcher account notification receipt response exposes arbitrary cloud notification data.");
+Require(normalizedViewModelSource.Contains(
+    "await _notifications.MutateAsync(",
+    StringComparison.Ordinal),
+    "Launcher notification actions do not delegate through the centralized notification service.");
+Require(!normalizedViewModelSource.Contains(
+    "Notifications.Remove",
+    StringComparison.Ordinal),
+    "Launcher notification Dismiss optimistically removes local state.");
 
 var storeServiceSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreService.cs"));
@@ -877,6 +905,8 @@ Require(AgentLocalContract.StoreGiftClaimRevealContractVersion == 1,
     "Launcher Agent gift Claim Code contract version drifted.");
 Require(AgentLocalContract.AccountNotificationFeedPath == "/v1/notifications/account-feed",
     "Launcher Agent account notification loopback path drifted.");
+Require(AgentLocalContract.AccountNotificationReceiptPath == "/v1/notifications/account-receipt",
+    "Launcher Agent account notification receipt loopback path drifted.");
 Require(AgentLocalContract.AccountNotificationInboxCapabilityId == "bke.account-notifications",
     "Launcher Agent account notification capability id drifted.");
 Require(AgentLocalContract.AccountNotificationInboxContractVersion == 1,
