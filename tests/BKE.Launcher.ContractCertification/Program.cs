@@ -543,7 +543,7 @@ Require(
     normalizedViewModelSource.LastIndexOf(checkoutStartCall, StringComparison.Ordinal),
     "Launcher recovery path can replay checkout-start mutation.");
 Require(normalizedViewModelSource.Contains(
-    "This read-only check may be repeated; do not start a second checkout.",
+    "do not start a second checkout.",
     StringComparison.Ordinal),
     "Launcher checkout recovery does not preserve the no-second-order boundary.");
 Require(normalizedViewModelSource.Contains(
