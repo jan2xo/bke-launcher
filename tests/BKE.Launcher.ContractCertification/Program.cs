@@ -532,6 +532,14 @@ Require(!giftClaimRevealServiceSource.Contains("recipient", StringComparison.Ord
     "Launcher Store gift Claim Code delivery introduced recipient identity.");
 Require(!giftClaimRevealServiceSource.Contains("File.", StringComparison.Ordinal),
     "Launcher Store gift Claim Code service persists one-time code material.");
+Require(giftClaimRevealServiceSource.Contains(
+    "response.Status == \"AVAILABLE\"",
+    StringComparison.Ordinal),
+    "Launcher Store gift Claim Code service does not validate AVAILABLE payloads.");
+Require(giftClaimRevealServiceSource.Contains(
+    "response.Status != \"AVAILABLE\" &&",
+    StringComparison.Ordinal),
+    "Launcher Store gift Claim Code service can accept plaintext outside AVAILABLE state.");
 
 Require(normalizedViewModelSource.Contains(
     "await _storeCheckoutStatus.CheckAsync(",
@@ -637,6 +645,14 @@ Require(normalizedViewModelSource.Contains(
     "Gift Claim Code delivery acknowledged. Start another purchase only after reviewing the current plan and Legal terms again.",
     StringComparison.Ordinal),
     "Launcher does not force a fresh review after gift delivery acknowledgement.");
+Require(normalizedViewModelSource.Contains(
+    "This gift fulfillment is terminal. Review the current plan and Legal terms again before another purchase.",
+    StringComparison.Ordinal),
+    "Launcher terminal gift fulfillment can reuse a stale purchase review.");
+Require(!normalizedViewModelSource.Contains(
+    "if (TryClearCheckoutRecoveryState())\n                    {\n                        _purchaseAttemptLocked = false;\n                        RaisePurchaseActionState();\n                    }\n                    break;",
+    StringComparison.Ordinal),
+    "Launcher terminal gift fulfillment unlocks stale purchase review state.");
 Require(normalizedViewModelSource.Contains(
     "\"GIFT_FULFILLMENT_PENDING\"",
     StringComparison.Ordinal),
