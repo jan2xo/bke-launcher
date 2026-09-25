@@ -141,6 +141,98 @@
             </Grid>
           </TabItem>
 
+          <TabItem Header="Notifications">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="Notifications" FontSize="20" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding NotificationMessage}"
+                             TextWrapping="Wrap"
+                             Opacity="0.72" />
+                </StackPanel>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="10">
+                  <Border Padding="10,6" CornerRadius="8">
+                    <TextBlock Text="{Binding NotificationStatus}"
+                               FontSize="11"
+                               FontWeight="SemiBold" />
+                  </Border>
+                  <Button Content="Refresh notifications"
+                          Click="RefreshNotifications"
+                          IsEnabled="{Binding CanRefreshNotifications}" />
+                </StackPanel>
+              </Grid>
+
+              <TextBlock Grid.Row="1"
+                         Text="This inbox is scoped by Digital Solutions to the selected BKE account and is mediated by the Licensing Agent. This first Launcher surface is read-only."
+                         TextWrapping="Wrap"
+                         Opacity="0.62"
+                         Margin="0,12,0,14" />
+
+              <ScrollViewer Grid.Row="2"
+                            VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                  <ItemsControl ItemsSource="{Binding Notifications}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:NotificationViewModel">
+                        <Border Padding="14"
+                                CornerRadius="10"
+                                Margin="0,0,0,8">
+                          <StackPanel Spacing="6">
+                            <Grid ColumnDefinitions="*,Auto">
+                              <TextBlock Text="{Binding Title}"
+                                         FontWeight="SemiBold"
+                                         FontSize="15"
+                                         TextWrapping="Wrap" />
+                              <TextBlock Grid.Column="1"
+                                         Text="{Binding StateLabel}"
+                                         FontSize="11"
+                                         FontWeight="SemiBold" />
+                            </Grid>
+                            <TextBlock Text="{Binding Body}"
+                                       TextWrapping="Wrap"
+                                       Opacity="0.82" />
+                            <WrapPanel>
+                              <TextBlock Text="{Binding CategoryLabel}"
+                                         FontSize="11"
+                                         Opacity="0.68"
+                                         Margin="0,0,12,0" />
+                              <TextBlock Text="{Binding SeverityLabel}"
+                                         FontSize="11"
+                                         Opacity="0.68"
+                                         Margin="0,0,12,0" />
+                              <TextBlock Text="{Binding ProductLabel}"
+                                         FontSize="11"
+                                         Opacity="0.68"
+                                         Margin="0,0,12,0" />
+                              <TextBlock Text="{Binding SourceLabel}"
+                                         FontSize="11"
+                                         Opacity="0.68"
+                                         Margin="0,0,12,0" />
+                              <TextBlock Text="{Binding CreatedLabel}"
+                                         FontSize="11"
+                                         Opacity="0.68" />
+                            </WrapPanel>
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+
+                  <Border IsVisible="{Binding ShowEmptyNotifications}"
+                          Padding="18"
+                          CornerRadius="10">
+                    <TextBlock Text="No notifications are available for this BKE account."
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Opacity="0.68" />
+                  </Border>
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+          </TabItem>
+
           <TabItem Header="Store">
             <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
               <Grid ColumnDefinitions="*,Auto">
