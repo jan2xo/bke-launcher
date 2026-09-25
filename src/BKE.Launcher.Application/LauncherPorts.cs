@@ -44,6 +44,10 @@ public interface ILauncherAgentClient
         StoreCheckoutStatusRequest request,
         CancellationToken cancellationToken);
 
+    Task<StoreGiftClaimRevealResponse> RevealStoreGiftClaimCodeAsync(
+        StoreGiftClaimRevealRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);
