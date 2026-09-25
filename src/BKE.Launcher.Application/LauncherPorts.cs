@@ -28,6 +28,10 @@ public interface ILauncherAgentClient
         AccountNotificationFeedRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountNotificationReceiptResponse> MutateAccountNotificationAsync(
+        AccountNotificationReceiptRequest request,
+        CancellationToken cancellationToken);
+
     Task<ClaimCodeRedeemResponse> RedeemClaimCodeAsync(
         ClaimCodeRedeemRequest request,
         CancellationToken cancellationToken);

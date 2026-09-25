@@ -7,6 +7,11 @@ public sealed record LauncherNotificationSnapshot(
     IReadOnlyList<AccountNotificationItem> Items,
     string? Message);
 
+public sealed record LauncherNotificationMutationResult(
+    string Status,
+    string? State,
+    string? Message);
+
 public sealed class LauncherNotificationInboxService
 {
     private static readonly HashSet<string> AllowedAudienceKinds =
@@ -76,6 +81,71 @@ public sealed class LauncherNotificationInboxService
         return new LauncherNotificationSnapshot(
             response.Status,
             items,
+            response.Error?.Message);
+    }
+
+    public async Task<LauncherNotificationMutationResult> MutateAsync(
+        string notificationId,
+        string action,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(notificationId) ||
+            notificationId.Length > 160)
+        {
+            throw new ArgumentException(
+                "Notification identifier is required.",
+                nameof(notificationId));
+        }
+        if (action is not ("MARK_READ" or "DISMISS"))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(action),
+                "Notification action must be MARK_READ or DISMISS.");
+        }
+
+        var response = await _agent.MutateAccountNotificationAsync(
+            new AccountNotificationReceiptRequest(
+                notificationId,
+                action),
+            cancellationToken);
+
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountNotificationInboxCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountNotificationInboxContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent notification receipt contract drifted.");
+        }
+
+        var expectedState = action == "MARK_READ"
+            ? "READ"
+            : "DISMISSED";
+        var validSucceeded =
+            response.Status == "Succeeded" &&
+            response.MutationStatus is ("UPDATED" or "UNCHANGED") &&
+            response.State == expectedState &&
+            response.Error is null;
+        var validNotFound =
+            response.Status == "NotFound" &&
+            response.MutationStatus == "NOT_FOUND" &&
+            response.State is null &&
+            response.Error is null;
+        var validFailed =
+            response.Status == "Failed" &&
+            response.MutationStatus is null &&
+            response.State is null &&
+            response.Error is not null;
+
+        if (!validSucceeded && !validNotFound && !validFailed)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent returned an invalid notification receipt result.");
+        }
+
+        return new LauncherNotificationMutationResult(
+            response.Status,
+            response.State,
             response.Error?.Message);
     }
 }

@@ -581,6 +581,71 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public Task MarkNotificationReadAsync(
+        NotificationViewModel notification,
+        CancellationToken cancellationToken) =>
+        MutateNotificationAsync(
+            notification,
+            "MARK_READ",
+            cancellationToken);
+
+    public Task DismissNotificationAsync(
+        NotificationViewModel notification,
+        CancellationToken cancellationToken) =>
+        MutateNotificationAsync(
+            notification,
+            "DISMISS",
+            cancellationToken);
+
+    private async Task MutateNotificationAsync(
+        NotificationViewModel notification,
+        string action,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+
+        if (!CanRefreshNotifications)
+        {
+            ClearNotifications(
+                "AUTH_REQUIRED",
+                "Sign in to update BKE notifications.");
+            return;
+        }
+
+        NotificationStatus = "UPDATING";
+        NotificationMessage = action == "MARK_READ"
+            ? "Marking notification as read through the BKE Licensing Agent…"
+            : "Dismissing notification through the BKE Licensing Agent…";
+
+        try
+        {
+            var result = await _notifications.MutateAsync(
+                notification.Id,
+                action,
+                cancellationToken);
+
+            if (result.Status == "Failed")
+            {
+                NotificationStatus = "FAILED";
+                NotificationMessage =
+                    result.Message ?? "The notification update failed.";
+                return;
+            }
+
+            await RefreshNotificationsAsync(cancellationToken);
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            NotificationStatus = "AGENT_UNAVAILABLE";
+            NotificationMessage =
+                "Notification update failed or the Agent returned an invalid receipt result.";
+        }
+    }
+
     public async Task RedeemClaimCodeAsync(CancellationToken cancellationToken)
     {
         if (!CanRedeemClaimCode)
@@ -2075,6 +2140,9 @@ public sealed record NotificationViewModel(
     string CreatedLabel,
     string ProductLabel)
 {
+    public bool CanMarkRead =>
+        string.Equals(StateLabel, "Unread", StringComparison.Ordinal);
+
     public static NotificationViewModel From(AccountNotificationItem item)
     {
         var created = DateTimeOffset.TryParse(item.CreatedAt, out var parsed)

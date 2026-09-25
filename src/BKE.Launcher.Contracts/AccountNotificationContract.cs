@@ -26,6 +26,18 @@ public sealed record AccountNotificationFeedResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<AccountNotificationItem> Items,
     [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountNotificationError? Error);
 
+public sealed record AccountNotificationReceiptRequest(
+    [property: JsonPropertyName("notification_id")] string NotificationId,
+    [property: JsonPropertyName("action")] string Action);
+
+public sealed record AccountNotificationReceiptResponse(
+    [property: JsonPropertyName("capability_id")] string CapabilityId,
+    [property: JsonPropertyName("contract_version")] int ContractVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("mutation_status"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MutationStatus,
+    [property: JsonPropertyName("state"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State,
+    [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AccountNotificationError? Error);
+
 public sealed record AccountNotificationError(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("message")] string Message,

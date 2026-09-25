@@ -47,6 +47,32 @@ public sealed partial class MainWindow : Window
         await ViewModel.RefreshNotificationsAsync(CancellationToken.None);
     }
 
+    private async void MarkNotificationRead(object? sender, RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: NotificationViewModel notification,
+            })
+        {
+            await ViewModel.MarkNotificationReadAsync(
+                notification,
+                CancellationToken.None);
+        }
+    }
+
+    private async void DismissNotification(object? sender, RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: NotificationViewModel notification,
+            })
+        {
+            await ViewModel.DismissNotificationAsync(
+                notification,
+                CancellationToken.None);
+        }
+    }
+
     private async void ReviewPurchase(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
