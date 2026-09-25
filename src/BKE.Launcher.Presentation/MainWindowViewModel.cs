@@ -901,7 +901,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             PurchaseCheckoutStatus = "RESULT_UNKNOWN";
             PurchaseCheckoutMessage =
-                "The Agent checkout result could not be confirmed. Check this exact attempt; do not retry checkout creation.";
+                "The Agent checkout result could not be confirmed. Check this exact attempt. Do not retry automatically or start another checkout.";
             RaiseCheckoutRecoveryState();
         }
         catch (Exception error) when (
@@ -910,7 +910,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             PurchaseCheckoutStatus = "RESULT_UNKNOWN";
             PurchaseCheckoutMessage =
-                "The Agent checkout response was invalid after checkout-start. BKE preserved this exact recovery correlation. Check this attempt; do not retry checkout creation.";
+                "The Agent checkout response was invalid after checkout-start. BKE preserved this exact recovery correlation. Check this attempt. Do not retry automatically or start another checkout.";
             RaiseCheckoutRecoveryState();
         }
     }
