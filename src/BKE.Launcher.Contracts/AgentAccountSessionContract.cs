@@ -26,6 +26,8 @@ public static class AgentLocalContract
     public const int StoreCheckoutReviewContractVersion = 1;
     public const string StoreCheckoutStartCapabilityId = "bke.store-checkout-start";
     public const int StoreCheckoutStartContractVersion = 1;
+    public const string StoreCheckoutStatusCapabilityId = "bke.store-checkout-status";
+    public const int StoreCheckoutStatusContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
     public const string AccountSessionDeviceContextPath = "/v1/account-session/device-context";
     public const string AccountSessionCompletePath = "/v1/account-session/complete";
@@ -42,6 +44,7 @@ public static class AgentLocalContract
     public const string StoreCatalogPath = "/v1/store/catalog";
     public const string StoreCheckoutReviewPath = "/v1/store/checkout-review";
     public const string StoreCheckoutStartPath = "/v1/store/checkout-start";
+    public const string StoreCheckoutStatusPath = "/v1/store/checkout-status";
 }
 
 public sealed record AccountSessionDeviceContextRequest(
