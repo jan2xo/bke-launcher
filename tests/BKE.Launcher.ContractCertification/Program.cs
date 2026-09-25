@@ -387,6 +387,14 @@ Require(!mainWindowSource.Contains("Process.Start", StringComparison.Ordinal), "
 Require(!mainWindowMarkup.Contains("Device code", StringComparison.Ordinal), "Device-code UX remains visible in Launcher.");
 Require(mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Native sign-in action is missing.");
 Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Native password field is not masked.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode}\"", StringComparison.Ordinal),
+    "Launcher Store does not render the recovered gift Claim Code.");
+Require(mainWindowMarkup.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal),
+    "Launcher gift Claim Code field is not read-only.");
+Require(mainWindowMarkup.Contains("Content=\"I've saved this Claim Code\"", StringComparison.Ordinal),
+    "Launcher Store lacks explicit gift delivery acknowledgement.");
+Require(mainWindowSource.Contains("CompleteGiftClaimDelivery", StringComparison.Ordinal),
+    "Launcher gift delivery acknowledgement handler is missing.");
 Require(mainWindowMarkup.Contains("Content=\"Update\"", StringComparison.Ordinal), "Software Update action is missing.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanUpdate}\"", StringComparison.Ordinal), "Software Update visibility is not state-bound.");
 Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "Software Update click handler is missing.");
@@ -511,6 +519,19 @@ Require(!checkoutStatusServiceSource.Contains("PAYMONGO", StringComparison.Ordin
 Require(!checkoutStatusServiceSource.Contains("account_id", StringComparison.OrdinalIgnoreCase),
     "Launcher Store checkout-status recovery can choose a cloud account.");
 
+var giftClaimRevealServiceSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreGiftClaimRevealService.cs"));
+Require(giftClaimRevealServiceSource.Contains("RevealStoreGiftClaimCodeAsync", StringComparison.Ordinal),
+    "Launcher Store gift Claim Code delivery does not delegate reveal authority to the Agent.");
+Require(!giftClaimRevealServiceSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store gift Claim Code delivery bypasses the Agent loopback boundary.");
+Require(!giftClaimRevealServiceSource.Contains("PAYMONGO", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store gift Claim Code delivery absorbed payment-provider authority.");
+Require(!giftClaimRevealServiceSource.Contains("recipient", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store gift Claim Code delivery introduced recipient identity.");
+Require(!giftClaimRevealServiceSource.Contains("File.", StringComparison.Ordinal),
+    "Launcher Store gift Claim Code service persists one-time code material.");
+
 Require(normalizedViewModelSource.Contains(
     "await _storeCheckoutStatus.CheckAsync(",
     StringComparison.Ordinal),
@@ -579,14 +600,46 @@ Require(normalizedViewModelSource.Contains(
     "Resolve the existing checkout attempt before signing out.",
     StringComparison.Ordinal),
     "Launcher can destroy the Agent session that an unresolved checkout recovery depends on.");
-Require(normalizedViewModelSource.Contains(
+Require(!normalizedViewModelSource.Contains(
     "GiftClaimCodeDeliverySupported = false",
     StringComparison.Ordinal),
-    "Launcher GIFT checkout is not fail-closed while one-time Claim Code delivery is unavailable.");
+    "Launcher still hard-blocks GIFT after certified Claim Code delivery became available.");
 Require(normalizedViewModelSource.Contains(
-    "GIFT_FULFILLMENT_PENDING",
+    "GiftCheckoutEnabled &&",
     StringComparison.Ordinal),
-    "Launcher can discard settled GIFT fulfillment context before Claim Code delivery exists.");
+    "Launcher GIFT action is not gated by authoritative Store availability.");
+Require(normalizedViewModelSource.Contains(
+    "result.FulfillmentMode == \"CLAIM_CODE\"",
+    StringComparison.Ordinal),
+    "Launcher does not recognize Digital Solutions CLAIM_CODE fulfillment.");
+Require(normalizedViewModelSource.Contains(
+    "await _storeGiftClaimReveal.RevealAsync(",
+    StringComparison.Ordinal),
+    "Launcher does not recover the settled gift Claim Code through the Agent.");
+Require(normalizedViewModelSource.Contains(
+    "\"GIFT_CLAIM_CODE_READY\"",
+    StringComparison.Ordinal),
+    "Launcher does not expose a distinct recovered gift Claim Code state.");
+Require(normalizedViewModelSource.Contains(
+    "BKE Launcher does not persist this plaintext code.",
+    StringComparison.Ordinal),
+    "Launcher gift delivery UX does not state the transient plaintext boundary.");
+Require(normalizedViewModelSource.Contains(
+    "public void CompleteGiftClaimDelivery()",
+    StringComparison.Ordinal),
+    "Launcher lacks explicit purchaser acknowledgement before clearing gift recovery.");
+Require(normalizedViewModelSource.Contains(
+    "A revealed gift Claim Code must remain visible until you save it and acknowledge delivery.",
+    StringComparison.Ordinal),
+    "Launcher can dismiss gift recovery before explicit purchaser acknowledgement.");
+Require(normalizedViewModelSource.Contains(
+    "Gift Claim Code delivery acknowledged. Start another purchase only after reviewing the current plan and Legal terms again.",
+    StringComparison.Ordinal),
+    "Launcher does not force a fresh review after gift delivery acknowledgement.");
+Require(normalizedViewModelSource.Contains(
+    "\"GIFT_FULFILLMENT_PENDING\"",
+    StringComparison.Ordinal),
+    "Launcher does not preserve retryable settled gift fulfillment while Claim Code materialization is pending.");
 
 
 var checkoutRecoveryStoreSource = File.ReadAllText(
@@ -603,6 +656,10 @@ Require(!checkoutRecoveryStoreSource.Contains("payment", StringComparison.Ordina
     "Launcher persisted payment data in recovery state.");
 Require(!checkoutRecoveryStoreSource.Contains("provider", StringComparison.OrdinalIgnoreCase),
     "Launcher persisted provider data in recovery state.");
+Require(!checkoutRecoveryStoreSource.Contains("claim_code", StringComparison.OrdinalIgnoreCase),
+    "Launcher persisted Claim Code material in checkout recovery state.");
+Require(!checkoutRecoveryStoreSource.Contains("GiftClaimCode", StringComparison.Ordinal),
+    "Launcher persisted gift Claim Code plaintext in checkout recovery state.");
 
 var externalNavigatorSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Infrastructure", "ExternalBrowserNavigator.cs"));
@@ -702,6 +759,12 @@ catch (ArgumentException)
     rejectedNonLoopback = true;
 }
 Require(rejectedNonLoopback, "Launcher Agent client accepted a non-loopback endpoint.");
+Require(AgentLocalContract.StoreGiftClaimRevealPath == "/v1/store/gift-claim-code",
+    "Launcher Agent gift Claim Code loopback path drifted.");
+Require(AgentLocalContract.StoreGiftClaimRevealCapabilityId == "bke.store-gift-claim-reveal",
+    "Launcher Agent gift Claim Code capability id drifted.");
+Require(AgentLocalContract.StoreGiftClaimRevealContractVersion == 1,
+    "Launcher Agent gift Claim Code contract version drifted.");
 
 var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
     "DefaultRequestTimeout",
