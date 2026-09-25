@@ -1793,7 +1793,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 : "RECOVERY_REQUIRED";
             PurchaseCheckoutMessage = _checkoutRecoveryStateBlocked
                 ? "Saved checkout recovery state is invalid. BKE will not create another checkout."
-                : "Keep the same Agent account session, then check the saved checkout attempt. Signing out or replacing the Agent session can make this correlation unrecoverable.";
+                : "Sign in with the same BKE identity and account on this device, then check the saved checkout attempt. The retained correlation stays locked across Agent session replacement.";
         }
 
         ShowPurchaseReview = preserveRecovery;
