@@ -1,15 +1,6 @@
 name: BKE Windows Parent Installer
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/windows-parent-installer.yml"
-      - ".github/workflows/_launcher-contracts.yml"
-      - ".github/workflows/certify.yml"
-      - "eng/licensing-agent-source.sha"
-      - "packaging/windows/**"
-      - "src/**"
-      - "tests/**"
   workflow_call:
     inputs:
       source_sha:
@@ -35,22 +26,22 @@ permissions:
   contents: read
 
 concurrency:
-  group: bke-parent-${{ inputs.source_sha || github.event.pull_request.number || github.ref }}
+  group: bke-parent-${{ inputs.source_sha }}
   cancel-in-progress: true
 
 env:
   BKE_VERSION: "0.1.0"
   AGENT_VERSION: "2.0.0"
-  AGENT_SOURCE_SHA: ${{ inputs.agent_source_sha || '379e76f9a69d41ea8d4cd950ca62728511bde8e2' }}
+  AGENT_SOURCE_SHA: ${{ inputs.agent_source_sha }}
   AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
-  SOURCE_SHA: ${{ inputs.source_sha || github.event.pull_request.head.sha || github.sha }}
+  SOURCE_SHA: ${{ inputs.source_sha }}
 
 jobs:
   launcher-contracts:
     name: Launcher contracts
     uses: ./.github/workflows/_launcher-contracts.yml
     with:
-      source_sha: ${{ inputs.source_sha || github.event.pull_request.head.sha || github.sha }}
+      source_sha: ${{ inputs.source_sha }}
 
   agent-contracts:
     name: Pinned Agent contracts
@@ -61,7 +52,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: ${{ inputs.agent_source_sha || '379e76f9a69d41ea8d4cd950ca62728511bde8e2' }}
+          ref: ${{ inputs.agent_source_sha }}
           path: agent-src
           fetch-depth: 1
 
@@ -110,7 +101,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: ${{ inputs.agent_source_sha || '379e76f9a69d41ea8d4cd950ca62728511bde8e2' }}
+          ref: ${{ inputs.agent_source_sha }}
           path: agent-src
           fetch-depth: 1
 
@@ -466,7 +457,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: ${{ inputs.agent_source_sha || '379e76f9a69d41ea8d4cd950ca62728511bde8e2' }}
+          ref: ${{ inputs.agent_source_sha }}
           path: agent-src
           fetch-depth: 1
 
@@ -607,7 +598,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jan2xo/bke-licensing-agent
-          ref: ${{ inputs.agent_source_sha || '379e76f9a69d41ea8d4cd950ca62728511bde8e2' }}
+          ref: ${{ inputs.agent_source_sha }}
           path: agent-src
           fetch-depth: 1
 
