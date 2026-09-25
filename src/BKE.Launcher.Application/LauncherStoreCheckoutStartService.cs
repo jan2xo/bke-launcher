@@ -21,11 +21,20 @@ public sealed class LauncherStoreCheckoutStartService
     }
 
     public async Task<LauncherStoreCheckoutStartSnapshot> StartAsync(
+        string correlationId,
         string purchasePlanId,
         string purchaseMode,
         IReadOnlyList<string> legalVersionIds,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(correlationId) ||
+            correlationId.Length > 128)
+        {
+            throw new ArgumentException(
+                "Checkout correlation identifier is required.",
+                nameof(correlationId));
+        }
+
         if (string.IsNullOrWhiteSpace(purchasePlanId))
         {
             throw new ArgumentException(
@@ -50,7 +59,6 @@ public sealed class LauncherStoreCheckoutStartService
                 nameof(legalVersionIds));
         }
 
-        var correlationId = Guid.NewGuid().ToString("N");
         var response = await _agent.StartStoreCheckoutAsync(
             new StoreCheckoutStartRequest(
                 correlationId,

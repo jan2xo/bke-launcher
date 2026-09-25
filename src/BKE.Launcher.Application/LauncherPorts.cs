@@ -40,6 +40,10 @@ public interface ILauncherAgentClient
         StoreCheckoutStartRequest request,
         CancellationToken cancellationToken);
 
+    Task<StoreCheckoutStatusResponse> CheckStoreCheckoutStatusAsync(
+        StoreCheckoutStatusRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);
@@ -95,4 +99,11 @@ public interface ILauncherExternalNavigator
 {
     void OpenCheckout(string absoluteUrl);
     void OpenLegalDocument(string slug);
+}
+
+public interface ILauncherCheckoutRecoveryStore
+{
+    string? ReadCorrelationId();
+    void WriteCorrelationId(string correlationId);
+    void Clear();
 }
