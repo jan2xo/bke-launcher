@@ -389,6 +389,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             SessionStatus = "SIGNING_IN";
+            ClearNotifications(
+                "AUTH_REQUIRED",
+                "Sign in to view BKE notifications.");
             Message = "Authenticating directly with BKE Digital Solutions…";
 
             var result = await _nativeSignIn.SignInAsync(
