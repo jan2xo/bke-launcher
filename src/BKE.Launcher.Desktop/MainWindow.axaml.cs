@@ -42,6 +42,11 @@ public sealed partial class MainWindow : Window
         await ViewModel.RefreshStoreAsync(CancellationToken.None);
     }
 
+    private async void RefreshNotifications(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.RefreshNotificationsAsync(CancellationToken.None);
+    }
+
     private async void ReviewPurchase(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
