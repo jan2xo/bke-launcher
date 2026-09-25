@@ -1098,7 +1098,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     PurchaseCheckoutStatus = "AUTH_REQUIRED";
                     PurchaseCheckoutMessage =
                         result.Message ??
-                        "The same Agent account session is required to recover this gift Claim Code.";
+                        "Sign in with the same BKE identity and account on this device to recover this gift Claim Code.";
                     break;
 
                 case "NOT_FOUND":
@@ -1674,17 +1674,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LogoutAsync(CancellationToken cancellationToken)
     {
-        if (_purchaseAttemptLocked &&
-            !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId))
-        {
-            PurchaseCheckoutStatus = "RECOVERY_REQUIRED";
-            PurchaseCheckoutMessage =
-                "Resolve the existing checkout attempt before signing out. Checkout recovery is bound to this same Agent account session.";
-            Message =
-                "Sign-out is blocked while checkout recovery depends on the current Agent account session.";
-            RaiseCheckoutRecoveryState();
-            return;
-        }
+        var preserveCheckoutRecovery =
+            _purchaseAttemptLocked &&
+            !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
 
         try
         {
@@ -1700,13 +1692,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             AvailableAccounts.Clear();
             SelectedAccount = null;
             Raise(nameof(HasAccountChoices));
-            Message = response.Error?.Message ?? "Signed out on this machine.";
+            GiftClaimCode = string.Empty;
+            Message = preserveCheckoutRecovery
+                ? "Signed out. The existing checkout correlation remains locked. Sign back in with the same BKE identity and account on this device to continue recovery."
+                : response.Error?.Message ?? "Signed out on this machine.";
             ClearCatalog(
                 "AUTH_REQUIRED",
                 "Sign in to load your BKE software.");
-            ClearStore(
-                "AUTH_REQUIRED",
-                "Sign in to browse the BKE Store.");
             ClearStore(
                 "AUTH_REQUIRED",
                 "Sign in to browse the BKE Store.");
@@ -1801,7 +1793,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 : "RECOVERY_REQUIRED";
             PurchaseCheckoutMessage = _checkoutRecoveryStateBlocked
                 ? "Saved checkout recovery state is invalid. BKE will not create another checkout."
-                : "Keep the same Agent account session, then check the saved checkout attempt. Signing out or replacing the Agent session can make this correlation unrecoverable.";
+                : "Sign in with the same BKE identity and account on this device, then check the saved checkout attempt. The retained correlation stays locked across Agent session replacement.";
         }
 
         ShowPurchaseReview = preserveRecovery;
@@ -1829,7 +1821,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "A previous checkout attempt must be recovered before another purchase can be reviewed.";
             PurchaseCheckoutStatus = "RECOVERY_REQUIRED";
             PurchaseCheckoutMessage =
-                "Keep the same Agent account session, then check this saved checkout attempt. Signing out or replacing the Agent session can make this correlation unrecoverable.";
+                "Sign in with the same BKE identity and account on this device, then check this saved checkout attempt. The retained correlation survives Agent session replacement.";
         }
         catch (Exception storageError) when (
             storageError is IOException or

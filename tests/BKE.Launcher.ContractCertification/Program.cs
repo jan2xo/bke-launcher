@@ -597,18 +597,30 @@ Require(normalizedViewModelSource.Contains(
     "NOT_FOUND is not treated as proof that no mutation occurred",
     StringComparison.Ordinal),
     "Launcher NOT_FOUND policy can unlock an ambiguous checkout without authoritative absence.");
-Require(normalizedViewModelSource.Contains(
+Require(!normalizedViewModelSource.Contains(
     "same Agent account session",
     StringComparison.Ordinal),
-    "Launcher recovery UX does not state the current Agent-session recovery boundary.");
-Require(!normalizedViewModelSource.Contains(
-    "Sign in with the same BKE account",
-    StringComparison.Ordinal),
-    "Launcher incorrectly promises account-level recovery while Digital Solutions recovery is Agent-session-bound.");
+    "Launcher still claims checkout recovery is bound to one Agent session.");
 Require(normalizedViewModelSource.Contains(
-    "Resolve the existing checkout attempt before signing out.",
+    "same BKE identity and account on this device",
     StringComparison.Ordinal),
-    "Launcher can destroy the Agent session that an unresolved checkout recovery depends on.");
+    "Launcher recovery UX does not state the same-identity/account/device recovery boundary.");
+Require(normalizedViewModelSource.Contains(
+    "var preserveCheckoutRecovery =",
+    StringComparison.Ordinal),
+    "Launcher sign-out does not explicitly preserve unresolved checkout recovery.");
+Require(normalizedViewModelSource.Contains(
+    "Signed out. The existing checkout correlation remains locked.",
+    StringComparison.Ordinal),
+    "Launcher sign-out can imply that unresolved checkout recovery was discarded.");
+Require(!normalizedViewModelSource.Contains(
+    "Sign-out is blocked while checkout recovery depends on the current Agent account session.",
+    StringComparison.Ordinal),
+    "Launcher still blocks sign-out on obsolete same-session recovery semantics.");
+Require(normalizedViewModelSource.Contains(
+    "GiftClaimCode = string.Empty;\n            Message = preserveCheckoutRecovery",
+    StringComparison.Ordinal),
+    "Launcher can retain revealed gift Claim Code plaintext after sign-out.");
 Require(!normalizedViewModelSource.Contains(
     "GiftClaimCodeDeliverySupported = false",
     StringComparison.Ordinal),
