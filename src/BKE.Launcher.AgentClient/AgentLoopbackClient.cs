@@ -89,6 +89,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
+        AccountNotificationFeedRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountNotificationFeedRequest, AccountNotificationFeedResponse>(
+            AgentLocalContract.AccountNotificationFeedPath,
+            request,
+            cancellationToken);
+
     public Task<ClaimCodeRedeemResponse> RedeemClaimCodeAsync(
         ClaimCodeRedeemRequest request,
         CancellationToken cancellationToken) =>
