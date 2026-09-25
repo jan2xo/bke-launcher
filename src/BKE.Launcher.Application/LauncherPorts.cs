@@ -105,9 +105,21 @@ public interface ILauncherExternalNavigator
     void OpenLegalDocument(string slug);
 }
 
+public sealed record LauncherCheckoutRecoveryState(
+    string CorrelationId,
+    string? PurchasePlanId,
+    string? PurchaseMode,
+    IReadOnlyList<string> LegalVersionIds)
+{
+    public bool HasResumeIntent =>
+        !string.IsNullOrWhiteSpace(PurchasePlanId) &&
+        PurchaseMode is "SELF" or "GIFT" &&
+        LegalVersionIds is { Count: >= 2 and <= 3 };
+}
+
 public interface ILauncherCheckoutRecoveryStore
 {
-    string? ReadCorrelationId();
-    void WriteCorrelationId(string correlationId);
+    LauncherCheckoutRecoveryState? Read();
+    void Write(LauncherCheckoutRecoveryState state);
     void Clear();
 }

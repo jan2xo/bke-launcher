@@ -75,6 +75,12 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void RetryOriginalCheckout(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.RetryOriginalCheckoutAsync(
+            CancellationToken.None);
+    }
+
     private void CompleteGiftClaimDelivery(object? sender, RoutedEventArgs args)
     {
         ViewModel.CompleteGiftClaimDelivery();

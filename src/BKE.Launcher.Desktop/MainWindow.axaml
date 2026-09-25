@@ -248,6 +248,9 @@
                         <Button Content="Check checkout status"
                                 Click="CheckPurchaseCheckoutStatus"
                                 IsEnabled="{Binding CanCheckCheckoutStatus}" />
+                        <Button Content="Resume original checkout"
+                                Click="RetryOriginalCheckout"
+                                IsEnabled="{Binding CanRetryOriginalCheckout}" />
                         <Button Content="Open existing checkout"
                                 Click="OpenExistingCheckout"
                                 IsEnabled="{Binding CanOpenExistingCheckout}" />
