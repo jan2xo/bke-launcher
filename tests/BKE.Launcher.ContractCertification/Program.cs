@@ -10,6 +10,9 @@ var agentBase = new Uri(AgentLocalContract.DefaultBaseAddress, UriKind.Absolute)
 Require(agentBase.IsLoopback, "Agent default address is not loopback.");
 Require(agentBase.Scheme == Uri.UriSchemeHttp, "Agent default address must use local HTTP.");
 
+Require(AgentLocalContract.PlatformAuthorityPath == "/v1/runtime/platform-authority", "platform-authority path drifted");
+Require(AgentLocalContract.PlatformAuthorityCapabilityId == "bke.platform-authority", "platform-authority capability id drifted");
+Require(AgentLocalContract.PlatformAuthorityContractVersion == 1, "platform-authority contract version drifted");
 Require(AgentLocalContract.AccountSessionDeviceContextPath == "/v1/account-session/device-context", "account-session device-context path drifted");
 Require(AgentLocalContract.AccountSessionCompletePath == "/v1/account-session/complete", "account-session complete path drifted");
 Require(AgentLocalContract.AccountSessionStartPath == "/v1/account-session/start", "account-session start path drifted");
@@ -49,7 +52,9 @@ Require(AgentLocalContract.StoreCheckoutStatusContractVersion == 1, "Store check
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.LauncherPlugin) == "LAUNCHER_PLUGIN", "launcher plugin execution type drifted");
 Require(ProductExecutionTypeWire.ToWireValue(ProductExecutionType.Standalone) == "STANDALONE", "standalone execution type drifted");
 
-var localResponseProperties = typeof(AccountSessionDeviceContextResponse).GetProperties()
+var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
+    .Concat(typeof(PlatformAuthorityError).GetProperties())
+    .Concat(typeof(AccountSessionDeviceContextResponse).GetProperties())
     .Concat(typeof(AccountSessionCompleteResponse).GetProperties())
     .Concat(typeof(AccountSessionStartResponse).GetProperties())
     .Concat(typeof(AccountSessionStatusResponse).GetProperties())
@@ -105,6 +110,7 @@ var agentMethods = typeof(ILauncherAgentClient)
     .ToHashSet(StringComparer.Ordinal);
 
 Require(agentMethods.SetEquals([
+    "GetPlatformAuthorityAsync",
     "GetAccountSessionDeviceContextAsync",
     "CompleteAccountSessionAsync",
     "StartAccountSessionAsync",
@@ -125,6 +131,20 @@ Require(agentMethods.SetEquals([
     "OpenSoftwareAsync",
     "RemoveSoftwareAsync"
 ]), "Launcher Agent client port drifted.");
+
+var platformAuthorityRequestProperties = typeof(PlatformAuthorityRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    platformAuthorityRequestProperties.SequenceEqual(["CorrelationId"]),
+    "Launcher widened the Agent platform-authority request.");
+Require(
+    typeof(PlatformAuthorityResponse).GetProperties().All(property =>
+        !property.Name.Contains("Token", StringComparison.OrdinalIgnoreCase) &&
+        !property.Name.Contains("Password", StringComparison.OrdinalIgnoreCase) &&
+        !property.Name.Contains("Handoff", StringComparison.OrdinalIgnoreCase)),
+    "Launcher platform-authority response exposes secret material.");
 
 var completeRequestProperties = typeof(AccountSessionCompleteRequest)
     .GetProperties()
@@ -367,20 +387,48 @@ var nativeLoginResponseProperties = typeof(NativeBkeLoginResponse)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 Require(!nativeLoginResponseProperties.Contains("AccessToken"), "Launcher platform response exposes access token.");
 Require(!nativeLoginResponseProperties.Contains("RefreshToken"), "Launcher platform response exposes refresh token.");
+Require(!typeof(BkePlatformContract).GetFields(BindingFlags.Public | BindingFlags.Static)
+        .Any(field => field.Name.Contains("DefaultBaseAddress", StringComparison.Ordinal)),
+    "Launcher platform contract regained an independent default authority.");
 Require(BkePlatformContract.NativeLoginPath == "/api/agent-sessions/native/login", "native login path drifted.");
 Require(BkePlatformContract.AccountSessionProtocolVersion == "bke.account-session.v1", "account-session protocol version drifted.");
 
-var rejectedInsecurePlatform = false;
-try
-{
-    using var _ = new PlatformIdentityClient(
-        baseAddress: new Uri("http://jl-bke.com", UriKind.Absolute));
-}
-catch (ArgumentException)
-{
-    rejectedInsecurePlatform = true;
-}
-Require(rejectedInsecurePlatform, "Launcher platform identity client accepted insecure HTTP.");
+var platformIdentitySource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Infrastructure", "PlatformIdentityClient.cs"));
+Require(!platformIdentitySource.Contains(
+        "BKE_PLATFORM_BASE_URL",
+        StringComparison.Ordinal),
+    "Launcher platform identity client still owns machine platform configuration.");
+Require(!platformIdentitySource.Contains(
+        "jl-bke.com",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher platform identity client still owns a production authority fallback.");
+Require(platformIdentitySource.Contains(
+        "ValidatePlatformBaseAddress(platformBaseAddress);",
+        StringComparison.Ordinal),
+    "Launcher platform identity client does not validate the Agent-supplied origin.");
+Require(platformIdentitySource.Contains(
+        "value.Scheme != Uri.UriSchemeHttps",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "value.AbsolutePath != "/"",
+        StringComparison.Ordinal),
+    "Launcher platform identity client no longer requires an HTTPS origin.");
+
+var nativeSignInControllerSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherNativeSignInController.cs"));
+Require(nativeSignInControllerSource.Contains(
+        "await _agent.GetPlatformAuthorityAsync(",
+        StringComparison.Ordinal),
+    "Native Launcher sign-in does not inherit platform authority from the Agent.");
+Require(nativeSignInControllerSource.Contains(
+        "await _identity.LoginAsync(\n            platformBaseAddress,",
+        StringComparison.Ordinal),
+    "Native Launcher sign-in does not bind credential validation to the Agent authority.");
+Require(nativeSignInControllerSource.Contains(
+        "AGENT_PLATFORM_AUTHORITY_UNAVAILABLE",
+        StringComparison.Ordinal),
+    "Native Launcher sign-in does not fail closed when Agent authority is unavailable.");
 
 var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
@@ -1057,7 +1105,7 @@ Console.WriteLine("Agent-mediated selected-account Notifications presentation bo
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
 Console.WriteLine("Agent-owned Store checkout-review presentation boundary certified");
-Console.WriteLine("Native Launcher credential -> DS -> one-time Agent handoff boundary certified");
+Console.WriteLine("Native Launcher credential -> Agent-owned authority -> DS -> one-time Agent handoff boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
 Console.WriteLine("Bounded long-running install transport certified");
