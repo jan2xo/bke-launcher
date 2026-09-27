@@ -217,6 +217,27 @@ jobs:
             throw "ARM64 parent installer still references the x64 BKE payload."
           }
 
+          $universalParent = Get-Content packaging/windows/bke-parent-universal.iss -Raw
+          foreach ($required in @(
+            'OutputBaseFilename=BKE-{#BkeVersion}-PREPRODUCTION-Windows',
+            'ArchitecturesAllowed=win64',
+            'if IsArm64 then',
+            'else if IsX64OS then',
+            'GetSHA256OfFile(ParentPath)',
+            'CompareText(ActualSha256, ExpectedSha256)',
+            '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+          )) {
+            if (-not $universalParent.Contains($required)) {
+              throw "Universal Windows selector invariant missing: $required"
+            }
+          }
+          $armIndex = $universalParent.IndexOf('if IsArm64 then')
+          $x64Index = $universalParent.IndexOf('else if IsX64OS then')
+          if ($armIndex -lt 0 -or $x64Index -le $armIndex) {
+            throw "Universal Windows selector must prefer native ARM64 before x64 compatibility."
+          }
+          Write-Host "Universal Windows architecture selector invariants: PASS"
+
       - name: Build parent component manifest
         shell: pwsh
         run: |
