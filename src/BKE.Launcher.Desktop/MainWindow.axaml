@@ -11,23 +11,24 @@
         MinHeight="580">
   <Grid>
     <Border IsVisible="{Binding ShowLoginPage}"
+            Classes="surface"
             Width="420"
-            Padding="32"
-            CornerRadius="16"
+            Padding="34"
+            CornerRadius="18"
             HorizontalAlignment="Center"
             VerticalAlignment="Center">
       <StackPanel Spacing="14">
         <TextBlock Text="BKE"
-                   FontSize="34"
-                   FontWeight="SemiBold"
+                   Classes="brand"
+                   FontSize="38"
                    HorizontalAlignment="Center" />
-        <TextBlock Text="Sign in to continue."
-                   HorizontalAlignment="Center"
-                   Opacity="0.72" />
+        <TextBlock Text="Your software. One account. One place."
+                   Classes="muted"
+                   HorizontalAlignment="Center" />
         <TextBlock Text="{Binding Message}"
+                   Classes="muted"
                    TextWrapping="Wrap"
-                   TextAlignment="Center"
-                   Opacity="0.78" />
+                   TextAlignment="Center" />
 
         <TextBlock Text="Email"
                    FontWeight="SemiBold"
@@ -53,6 +54,7 @@
         </StackPanel>
 
         <Button Content="Sign in with BKE"
+                Classes="primary"
                 HorizontalAlignment="Stretch"
                 Click="NativeSignIn" />
       </StackPanel>
@@ -63,29 +65,31 @@
           Margin="28">
       <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,24">
       <StackPanel Spacing="4">
-        <TextBlock Text="BKE Launcher" FontSize="30" FontWeight="SemiBold" />
-        <TextBlock Text="Your BKE software, one machine-local trust boundary." Opacity="0.72" />
+        <TextBlock Text="BKE" Classes="brand" />
+        <TextBlock Text="All your BKE software, in one place." Classes="muted" />
       </StackPanel>
       <StackPanel Grid.Column="1"
                   Orientation="Horizontal"
                   Spacing="10">
         <Button Content="Account"
                 Click="OpenAccount" />
-        <Border Padding="14,8" CornerRadius="8">
-          <TextBlock Text="{Binding SessionStatus}" FontWeight="SemiBold" />
+        <Border Classes="status-pill" Padding="14,8">
+          <TextBlock Text="{Binding SessionStatus}"
+                     FontSize="11"
+                     FontWeight="SemiBold" />
         </Border>
       </StackPanel>
       </Grid>
 
       <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="24">
         <Border Width="360"
+                Classes="surface"
                 Padding="22"
-                CornerRadius="12"
                 IsVisible="{Binding ShowAccountSurface}">
         <StackPanel Spacing="14">
-          <TextBlock Text="Account" FontSize="20" FontWeight="SemiBold" />
+          <TextBlock Text="Account" Classes="section-title" />
           <TextBlock Text="{Binding AccountDisplay}" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Opacity="0.78" />
+          <TextBlock Text="{Binding Message}" Classes="muted" TextWrapping="Wrap" />
 
           <Button Content="Refresh account status" Click="RefreshStatus" />
           <Button Content="Sign out on this machine" Click="Logout" />
@@ -107,18 +111,18 @@
         </StackPanel>
       </Border>
 
-        <Border Grid.Column="1" Padding="18" CornerRadius="12">
+        <Border Grid.Column="1" Classes="surface" Padding="18">
           <TabControl SelectedIndex="{Binding SelectedModuleIndex, Mode=TwoWay}"
                       SelectionChanged="ModuleChanged">
           <TabItem Header="My Software">
             <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
               <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Spacing="3">
-                  <TextBlock Text="My Software" FontSize="20" FontWeight="SemiBold" />
+                  <TextBlock Text="My Software" Classes="section-title" />
                   <TextBlock Text="{Binding CatalogMessage}" TextWrapping="Wrap" Opacity="0.72" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                  <Border Padding="10,6" CornerRadius="8">
+                  <Border Classes="content-card" Padding="10,6" CornerRadius="8">
                     <TextBlock Text="{Binding CatalogStatus}" FontSize="11" FontWeight="SemiBold" />
                   </Border>
                   <Button Content="Refresh software" Click="RefreshCatalog" />
@@ -136,7 +140,7 @@
                   <ItemsControl ItemsSource="{Binding Products}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:SoftwareProductViewModel">
-                        <Border Padding="14" CornerRadius="10" Margin="0,0,0,8">
+                        <Border Classes="content-card" Padding="14" CornerRadius="10" Margin="0,0,0,8">
                           <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
                             <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="15" />
                             <TextBlock Grid.Column="1" Text="{Binding StateLabel}" FontWeight="SemiBold" />
@@ -172,7 +176,7 @@
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
 
-                  <Border IsVisible="{Binding ShowEmptyProducts}" Padding="18" CornerRadius="10">
+                  <Border IsVisible="{Binding ShowEmptyProducts}" Classes="content-card" Padding="18" CornerRadius="10">
                     <TextBlock Text="No Agent-projected software is available yet."
                                TextWrapping="Wrap"
                                TextAlignment="Center"
@@ -187,7 +191,7 @@
             <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
               <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Spacing="3">
-                  <TextBlock Text="Notifications" FontSize="20" FontWeight="SemiBold" />
+                  <TextBlock Text="Notifications" Classes="section-title" />
                   <TextBlock Text="{Binding NotificationMessage}"
                              TextWrapping="Wrap"
                              Opacity="0.72" />
@@ -195,7 +199,7 @@
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             Spacing="10">
-                  <Border Padding="10,6" CornerRadius="8">
+                  <Border Classes="content-card" Padding="10,6" CornerRadius="8">
                     <TextBlock Text="{Binding NotificationStatus}"
                                FontSize="11"
                                FontWeight="SemiBold" />
@@ -218,7 +222,8 @@
                   <ItemsControl ItemsSource="{Binding Notifications}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:NotificationViewModel">
-                        <Border Padding="14"
+                        <Border Classes="content-card"
+                                Padding="14"
                                 CornerRadius="10"
                                 Margin="0,0,0,8">
                           <StackPanel Spacing="6">
@@ -272,6 +277,7 @@
                   </ItemsControl>
 
                   <Border IsVisible="{Binding ShowEmptyNotifications}"
+                          Classes="content-card"
                           Padding="18"
                           CornerRadius="10">
                     <TextBlock Text="No notifications are available for this BKE account."
@@ -288,11 +294,11 @@
             <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
               <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Spacing="3">
-                  <TextBlock Text="Store" FontSize="20" FontWeight="SemiBold" />
+                  <TextBlock Text="Store" Classes="section-title" />
                   <TextBlock Text="{Binding StoreMessage}" TextWrapping="Wrap" Opacity="0.72" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                  <Border Padding="10,6" CornerRadius="8">
+                  <Border Classes="content-card" Padding="10,6" CornerRadius="8">
                     <TextBlock Text="{Binding StoreStatus}" FontSize="11" FontWeight="SemiBold" />
                   </Border>
                   <Button Content="Refresh Store" Click="RefreshStore" />
@@ -307,6 +313,7 @@
                            TextWrapping="Wrap"
                            Opacity="0.62" />
                 <Border IsVisible="{Binding ShowPurchaseReview}"
+                        Classes="content-card"
                         Padding="12"
                         CornerRadius="8"
                         Margin="0,8,0,0">
@@ -400,6 +407,7 @@
                       </StackPanel>
 
                       <Border IsVisible="{Binding HasGiftClaimCode}"
+                                Classes="content-card"
                               Padding="12"
                               CornerRadius="8">
                         <StackPanel Spacing="8">
@@ -436,7 +444,7 @@
                   <ItemsControl ItemsSource="{Binding StoreProducts}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:StoreProductViewModel">
-                        <Border Padding="14" CornerRadius="10" Margin="0,0,0,8">
+                        <Border Classes="content-card" Padding="14" CornerRadius="10" Margin="0,0,0,8">
                           <StackPanel Spacing="8">
                             <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="16" />
                             <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.78" />
@@ -445,7 +453,7 @@
                             <ItemsControl ItemsSource="{Binding Editions}">
                               <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:StoreEditionViewModel">
-                                  <Border Padding="12" CornerRadius="8" Margin="0,4,0,4">
+                                  <Border Classes="content-card" Padding="12" CornerRadius="8" Margin="0,4,0,4">
                                     <StackPanel Spacing="5">
                                       <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                       <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Opacity="0.72" />
@@ -485,7 +493,7 @@
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
 
-                  <Border IsVisible="{Binding ShowEmptyStore}" Padding="18" CornerRadius="10">
+                  <Border IsVisible="{Binding ShowEmptyStore}" Classes="content-card" Padding="18" CornerRadius="10">
                     <TextBlock Text="No purchasable products are currently available."
                                TextWrapping="Wrap"
                                TextAlignment="Center"
