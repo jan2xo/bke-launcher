@@ -18,9 +18,9 @@ AppPublisher={#AppPublisher}
 DefaultDirName={#InstallDir}
 DefaultGroupName={#AppName}
 OutputDir=..\..\dist\installer
-OutputBaseFilename=BKE-{#BkeVersion}-PREPRODUCTION-Windows-x64
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+OutputBaseFilename=BKE-{#BkeVersion}-PREPRODUCTION-Windows
+ArchitecturesAllowed=win64
+ArchitecturesInstallIn64BitMode=win64
 PrivilegesRequired=admin
 Compression=lzma
 SolidCompression=yes
@@ -32,7 +32,7 @@ CreateUninstallRegKey=yes
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\bke-launcher.exe
 VersionInfoCompany={#AppPublisher}
-VersionInfoDescription=BKE parent installer PREPRODUCTION
+VersionInfoDescription=BKE Windows x64 installer PREPRODUCTION
 VersionInfoProductName={#AppName}
 
 [Files]
