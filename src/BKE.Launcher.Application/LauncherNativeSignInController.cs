@@ -5,13 +5,16 @@ namespace BKE.Launcher.Application;
 public sealed class LauncherNativeSignInController
 {
     private readonly ILauncherAgentClient _agent;
+    private readonly LauncherPlatformAuthorityResolver _platformAuthority;
     private readonly ILauncherIdentityClient _identity;
 
     public LauncherNativeSignInController(
         ILauncherAgentClient agent,
+        LauncherPlatformAuthorityResolver platformAuthority,
         ILauncherIdentityClient identity)
     {
         _agent = agent;
+        _platformAuthority = platformAuthority;
         _identity = identity;
     }
 
@@ -21,24 +24,8 @@ public sealed class LauncherNativeSignInController
         string? customerAccountId,
         CancellationToken cancellationToken)
     {
-        var authority = await _agent.GetPlatformAuthorityAsync(
-            new PlatformAuthorityRequest(NewCorrelationId()),
-            cancellationToken);
-
-        if (authority.Status != "READY" ||
-            string.IsNullOrWhiteSpace(authority.Environment) ||
-            string.IsNullOrWhiteSpace(authority.PlatformBaseUrl) ||
-            !TryParsePlatformAuthority(
-                authority.PlatformBaseUrl,
-                out var platformBaseAddress))
-        {
-            return new LauncherNativeSignInResult(
-                "FAILED",
-                Array.Empty<NativeBkeAccountChoice>(),
-                null,
-                authority.Error?.Code ?? "AGENT_PLATFORM_AUTHORITY_UNAVAILABLE",
-                authority.Error?.Message ?? "BKE Licensing Agent platform authority is unavailable.");
-        }
+        var platformBaseAddress =
+            await _platformAuthority.ResolveAsync(cancellationToken);
 
         var context = await _agent.GetAccountSessionDeviceContextAsync(
             new AccountSessionDeviceContextRequest(NewCorrelationId()),
@@ -103,26 +90,6 @@ public sealed class LauncherNativeSignInController
             completed.Account,
             completed.Error?.Code,
             completed.Error?.Message);
-    }
-
-    private static bool TryParsePlatformAuthority(
-        string value,
-        out Uri platformBaseAddress)
-    {
-        if (Uri.TryCreate(value, UriKind.Absolute, out var resolved) &&
-            resolved.Scheme == Uri.UriSchemeHttps &&
-            !string.IsNullOrWhiteSpace(resolved.Host) &&
-            string.IsNullOrEmpty(resolved.UserInfo) &&
-            resolved.AbsolutePath == "/" &&
-            string.IsNullOrEmpty(resolved.Query) &&
-            string.IsNullOrEmpty(resolved.Fragment))
-        {
-            platformBaseAddress = resolved;
-            return true;
-        }
-
-        platformBaseAddress = null!;
-        return false;
     }
 
     private static string NativeLoginMessage(string? code) => code switch
