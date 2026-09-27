@@ -415,20 +415,44 @@ Require(platformIdentitySource.Contains(
         StringComparison.Ordinal),
     "Launcher platform identity client no longer requires an HTTPS origin.");
 
+var platformAuthorityResolverSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherPlatformAuthorityResolver.cs"));
+Require(platformAuthorityResolverSource.Contains(
+        "await _agent.GetPlatformAuthorityAsync(",
+        StringComparison.Ordinal),
+    "Launcher platform authority resolver does not inherit authority from the Agent.");
+Require(platformAuthorityResolverSource.Contains(
+        "response.CapabilityId != AgentLocalContract.PlatformAuthorityCapabilityId",
+        StringComparison.Ordinal) &&
+    platformAuthorityResolverSource.Contains(
+        "response.ContractVersion != AgentLocalContract.PlatformAuthorityContractVersion",
+        StringComparison.Ordinal),
+    "Launcher platform authority resolver does not verify the Agent capability contract.");
+Require(platformAuthorityResolverSource.Contains(
+        "authority.Scheme != Uri.UriSchemeHttps",
+        StringComparison.Ordinal) &&
+    platformAuthorityResolverSource.Contains(
+        "authority.AbsolutePath != \"/\"",
+        StringComparison.Ordinal),
+    "Launcher platform authority resolver does not require an HTTPS origin.");
+Require(!platformAuthorityResolverSource.Contains(
+        "BKE_PLATFORM_BASE_URL",
+        StringComparison.Ordinal) &&
+    !platformAuthorityResolverSource.Contains(
+        "jl-bke.com",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher platform authority resolver regained independent machine authority.");
+
 var nativeSignInControllerSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherNativeSignInController.cs"));
 Require(nativeSignInControllerSource.Contains(
-        "await _agent.GetPlatformAuthorityAsync(",
+        "await _platformAuthority.ResolveAsync(cancellationToken)",
         StringComparison.Ordinal),
-    "Native Launcher sign-in does not inherit platform authority from the Agent.");
+    "Native Launcher sign-in does not use the shared Agent authority resolver.");
 Require(nativeSignInControllerSource.Contains(
         "await _identity.LoginAsync(\n            platformBaseAddress,",
         StringComparison.Ordinal),
     "Native Launcher sign-in does not bind credential validation to the Agent authority.");
-Require(nativeSignInControllerSource.Contains(
-        "AGENT_PLATFORM_AUTHORITY_UNAVAILABLE",
-        StringComparison.Ordinal),
-    "Native Launcher sign-in does not fail closed when Agent authority is unavailable.");
 
 var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
@@ -936,12 +960,30 @@ var externalNavigatorSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Infrastructure", "ExternalBrowserNavigator.cs"));
 Require(externalNavigatorSource.Contains("OpenCheckout", StringComparison.Ordinal),
     "Launcher secure checkout navigation is missing.");
+Require(externalNavigatorSource.Contains("OpenLegalDocumentAsync", StringComparison.Ordinal),
+    "Launcher Agent-authority Legal navigation is missing.");
+Require(externalNavigatorSource.Contains(
+        "await _platformAuthority.ResolveAsync(cancellationToken)",
+        StringComparison.Ordinal),
+    "Launcher Legal navigation does not inherit the Agent platform authority.");
 Require(externalNavigatorSource.Contains("Uri.UriSchemeHttps", StringComparison.Ordinal),
     "Launcher secure checkout navigation does not require HTTPS.");
+Require(!externalNavigatorSource.Contains("BKE_PLATFORM_BASE_URL", StringComparison.Ordinal) &&
+    !externalNavigatorSource.Contains("DefaultBaseAddress", StringComparison.Ordinal) &&
+    !externalNavigatorSource.Contains("jl-bke.com", StringComparison.OrdinalIgnoreCase),
+    "Launcher external navigation still owns an independent platform authority.");
 Require(!externalNavigatorSource.Contains("PayMongo", StringComparison.OrdinalIgnoreCase),
     "Launcher external navigator contains provider-specific authority.");
 Require(!externalNavigatorSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase),
     "Launcher external navigator calls a Digital Solutions Agent API directly.");
+Require(normalizedViewModelSource.Contains(
+        "await _externalNavigator.OpenLegalDocumentAsync(",
+        StringComparison.Ordinal),
+    "Launcher Legal-document UX does not await Agent-authority navigation.");
+Require(mainWindowSource.Contains(
+        "await ViewModel.OpenLegalDocumentAsync(",
+        StringComparison.Ordinal),
+    "Launcher Legal-document click handler does not await Agent-authority navigation.");
 
 Require(normalizedViewModelSource.Contains(
     "await _storeCheckoutStart.StartAsync(",
@@ -1105,6 +1147,7 @@ Console.WriteLine("Agent-mediated selected-account Notifications presentation bo
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
 Console.WriteLine("Agent-owned Store checkout-review presentation boundary certified");
+Console.WriteLine("Agent-owned platform authority for native login and Legal navigation certified");
 Console.WriteLine("Native Launcher credential -> Agent-owned authority -> DS -> one-time Agent handoff boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
 Console.WriteLine("Agent-owned standalone install intent boundary certified");
