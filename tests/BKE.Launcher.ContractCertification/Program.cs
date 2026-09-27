@@ -386,6 +386,27 @@ var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
 var mainWindowMarkup = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml"));
+var desktopProjectSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Desktop", "BKE.Launcher.Desktop.csproj"));
+Require(desktopProjectSource.Contains("Avalonia\" Version=\"12.1.3\"", StringComparison.Ordinal),
+    "Launcher Avalonia package baseline is not 12.1.3.");
+Require(!desktopProjectSource.Contains("12.1.1", StringComparison.Ordinal),
+    "Launcher still references the superseded Avalonia 12.1.1 baseline.");
+Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowLoginPage}\"", StringComparison.Ordinal),
+    "Launcher does not gate unauthenticated startup on the Login page.");
+Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAuthenticatedShell}\"", StringComparison.Ordinal),
+    "Launcher does not gate authenticated startup on the BKE shell.");
+Require(mainWindowMarkup.Contains("SelectedIndex=\"{Binding SelectedModuleIndex, Mode=TwoWay}\"", StringComparison.Ordinal),
+    "Launcher shell does not preserve an explicitly unselected module state.");
+Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", StringComparison.Ordinal),
+    "Launcher Account surface is not explicitly user-selected.");
+Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
+    "Launcher does not resolve Agent-owned authentication state on startup.");
+Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
+    "Launcher modules are not opened through explicit user navigation.");
+Require(mainWindowSource.Contains("ViewModel.OpenAccountSurface();", StringComparison.Ordinal),
+    "Launcher Account surface lacks explicit navigation.");
+
 Require(!mainWindowSource.Contains("Process.Start", StringComparison.Ordinal), "Native sign-in still launches a browser.");
 Require(!mainWindowMarkup.Contains("Device code", StringComparison.Ordinal), "Device-code UX remains visible in Launcher.");
 Require(mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Native sign-in action is missing.");
@@ -463,9 +484,65 @@ Require(normalizedViewModelSource.Contains(
     StringComparison.Ordinal),
     "Launcher Notifications UX does not delegate feed authority to its Agent-backed service.");
 Require(normalizedViewModelSource.Contains(
+    "public async Task InitializeAsync(CancellationToken cancellationToken)",
+    StringComparison.Ordinal),
+    "Launcher lacks explicit startup authentication-state initialization.");
+Require(normalizedViewModelSource.Contains(
+    "public async Task OpenModuleAsync(",
+    StringComparison.Ordinal),
+    "Launcher lacks explicit module-open intent.");
+Require(normalizedViewModelSource.Contains(
+    "SelectedModuleIndex = -1;",
+    StringComparison.Ordinal),
+    "Launcher does not preserve the naked authenticated shell state.");
+Require(normalizedViewModelSource.Contains(
+    "ShowAccountSurface = false;",
+    StringComparison.Ordinal),
+    "Launcher naked shell does not close the Account surface.");
+
+var nativeSignInStart = normalizedViewModelSource.IndexOf(
+    "public async Task NativeSignInAsync(",
+    StringComparison.Ordinal);
+var legacySignInStart = normalizedViewModelSource.IndexOf(
+    "public async Task StartSignInAsync(",
+    StringComparison.Ordinal);
+Require(nativeSignInStart >= 0 && legacySignInStart > nativeSignInStart,
+    "Launcher native sign-in method boundaries are unavailable for startup certification.");
+var nativeSignInSource = normalizedViewModelSource[
+    nativeSignInStart..legacySignInStart];
+Require(!nativeSignInSource.Contains(
+    "await RefreshCatalogAsync(cancellationToken);",
+    StringComparison.Ordinal),
+    "Launcher native sign-in still auto-opens/loads My Software.");
+Require(!nativeSignInSource.Contains(
+    "await RefreshStoreAsync(cancellationToken);",
+    StringComparison.Ordinal),
+    "Launcher native sign-in still auto-opens/loads Store.");
+Require(!nativeSignInSource.Contains(
     "await RefreshNotificationsAsync(cancellationToken);",
     StringComparison.Ordinal),
-    "Launcher does not refresh Notifications after authenticated session refresh.");
+    "Launcher native sign-in still auto-opens/loads Notifications.");
+
+var refreshStatusStart = normalizedViewModelSource.IndexOf(
+    "public async Task RefreshStatusAsync(",
+    StringComparison.Ordinal);
+var refreshNotificationsStart = normalizedViewModelSource.IndexOf(
+    "public async Task RefreshNotificationsAsync(",
+    StringComparison.Ordinal);
+Require(refreshStatusStart >= 0 && refreshNotificationsStart > refreshStatusStart,
+    "Launcher status-refresh method boundaries are unavailable for startup certification.");
+var refreshStatusSource = normalizedViewModelSource[
+    refreshStatusStart..refreshNotificationsStart];
+Require(!refreshStatusSource.Contains(
+    "await RefreshCatalogAsync(cancellationToken);",
+    StringComparison.Ordinal) &&
+    !refreshStatusSource.Contains(
+        "await RefreshStoreAsync(cancellationToken);",
+        StringComparison.Ordinal) &&
+    !refreshStatusSource.Contains(
+        "await RefreshNotificationsAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "Launcher account-session refresh still auto-loads a customer module.");
 Require(normalizedViewModelSource.Contains(
     "ClearNotifications(",
     StringComparison.Ordinal),
