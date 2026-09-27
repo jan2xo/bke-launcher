@@ -63,6 +63,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string? _checkoutRecoveryCorrelationId;
     private string? _recoverableCheckoutUrl;
     private bool _checkoutRecoveryStateBlocked;
+    private int _selectedModuleIndex = -1;
+    private bool _showAccountSurface;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -137,12 +139,33 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool HasAccountChoices => AvailableAccounts.Count > 0;
 
+    public bool IsAuthenticated =>
+        string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
+
+    public bool ShowLoginPage => !IsAuthenticated;
+    public bool ShowAuthenticatedShell => IsAuthenticated;
+
+    public int SelectedModuleIndex
+    {
+        get => _selectedModuleIndex;
+        set => SetField(ref _selectedModuleIndex, value);
+    }
+
+    public bool ShowAccountSurface
+    {
+        get => _showAccountSurface;
+        private set => SetField(ref _showAccountSurface, value);
+    }
+
     public string SessionStatus
     {
         get => _sessionStatus;
         private set
         {
             SetField(ref _sessionStatus, value);
+            Raise(nameof(IsAuthenticated));
+            Raise(nameof(ShowLoginPage));
+            Raise(nameof(ShowAuthenticatedShell));
             Raise(nameof(CanRedeemClaimCode));
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
@@ -377,6 +400,78 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyStore => StoreProducts.Count == 0;
     public bool ShowEmptyNotifications => Notifications.Count == 0;
 
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            SessionStatus = "CHECKING_SESSION";
+            Message = "Checking the BKE account session held by the Licensing Agent…";
+            var response = await _accountSession.StatusAsync(cancellationToken);
+            ApplyStatus(response);
+
+            if (response.Status == "AUTHENTICATED")
+            {
+                ResetShellSurface();
+                return;
+            }
+
+            ResetShellSurface();
+            ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+            ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
+            ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ResetShellSurface();
+            SessionStatus = "AGENT_UNAVAILABLE";
+            AccountDisplay = "Not available";
+            Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
+            ClearCatalog("AGENT_UNAVAILABLE", "Software catalog is unavailable while the Agent cannot be reached.");
+            ClearStore("AGENT_UNAVAILABLE", "BKE Store is unavailable while the Agent cannot be reached.");
+            ClearNotifications("AGENT_UNAVAILABLE", "Notifications are unavailable while the Agent cannot be reached.");
+        }
+    }
+
+    public void OpenAccountSurface()
+    {
+        if (!IsAuthenticated)
+        {
+            return;
+        }
+
+        SelectedModuleIndex = -1;
+        ShowAccountSurface = true;
+    }
+
+    public async Task OpenModuleAsync(
+        int moduleIndex,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            return;
+        }
+
+        ShowAccountSurface = false;
+        SelectedModuleIndex = moduleIndex;
+
+        switch (moduleIndex)
+        {
+            case 0:
+                await RefreshCatalogAsync(cancellationToken);
+                break;
+            case 1:
+                await RefreshNotificationsAsync(cancellationToken);
+                break;
+            case 2:
+                await RefreshStoreAsync(cancellationToken);
+                break;
+        }
+    }
+
     public async Task NativeSignInAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrEmpty(Password))
@@ -429,9 +524,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
                 Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
-                await RefreshCatalogAsync(cancellationToken);
-                await RefreshStoreAsync(cancellationToken);
-                await RefreshNotificationsAsync(cancellationToken);
+                ResetShellSurface();
                 return;
             }
 
@@ -473,9 +566,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             if (response.Status == "AUTHENTICATED")
             {
-                await RefreshCatalogAsync(cancellationToken);
-                await RefreshStoreAsync(cancellationToken);
-                await RefreshNotificationsAsync(cancellationToken);
+                ResetShellSurface();
             }
             else
             {
@@ -498,14 +589,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var response = await _accountSession.StatusAsync(cancellationToken);
             ApplyStatus(response);
 
-            if (response.Status == "AUTHENTICATED")
+            if (response.Status != "AUTHENTICATED")
             {
-                await RefreshCatalogAsync(cancellationToken);
-                await RefreshStoreAsync(cancellationToken);
-                await RefreshNotificationsAsync(cancellationToken);
-            }
-            else
-            {
+                ResetShellSurface();
                 ClearCatalog(
                     "AUTH_REQUIRED",
                     "Sign in to load your BKE software.");
@@ -1901,6 +1987,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var response = await _accountSession.LogoutAsync(cancellationToken);
+            ResetShellSurface();
             SessionStatus = response.Status;
             AccountDisplay = "Not signed in";
             UserCode = string.Empty;
@@ -1931,6 +2018,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             SessionStatus = "AGENT_UNAVAILABLE";
             Message = "The local session could not be changed because the BKE Licensing Agent is unavailable.";
         }
+    }
+
+    private void ResetShellSurface()
+    {
+        ShowAccountSurface = false;
+        SelectedModuleIndex = -1;
     }
 
     private void ApplyStatus(AccountSessionStatusResponse response)
