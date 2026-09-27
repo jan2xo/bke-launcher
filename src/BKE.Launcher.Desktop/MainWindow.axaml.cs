@@ -8,14 +8,43 @@ namespace BKE.Launcher.Desktop;
 
 public sealed partial class MainWindow : Window
 {
+    private bool _startupInitialized;
+
     public MainWindow()
     {
         InitializeComponent();
+        Opened += WindowOpened;
     }
 
     private MainWindowViewModel ViewModel =>
         DataContext as MainWindowViewModel
         ?? throw new InvalidOperationException("BKE Launcher view model is unavailable.");
+
+    private async void WindowOpened(object? sender, EventArgs args)
+    {
+        if (_startupInitialized)
+        {
+            return;
+        }
+
+        _startupInitialized = true;
+        await ViewModel.InitializeAsync(CancellationToken.None);
+    }
+
+    private void OpenAccount(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.OpenAccountSurface();
+    }
+
+    private async void ModuleChanged(object? sender, SelectionChangedEventArgs args)
+    {
+        if (sender is TabControl { SelectedIndex: >= 0 } tabs)
+        {
+            await ViewModel.OpenModuleAsync(
+                tabs.SelectedIndex,
+                CancellationToken.None);
+        }
+    }
 
     private async void NativeSignIn(object? sender, RoutedEventArgs args)
     {
