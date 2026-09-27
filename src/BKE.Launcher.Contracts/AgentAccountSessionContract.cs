@@ -4,6 +4,8 @@ namespace BKE.Launcher.Contracts;
 
 public static class AgentLocalContract
 {
+    public const string PlatformAuthorityCapabilityId = "bke.platform-authority";
+    public const int PlatformAuthorityContractVersion = 1;
     public const string CapabilityId = "bke.account-session";
     public const int ContractVersion = 1;
     public const string SoftwareCatalogCapabilityId = "bke.software-catalog";
@@ -33,6 +35,7 @@ public static class AgentLocalContract
     public const string AccountNotificationInboxCapabilityId = "bke.account-notifications";
     public const int AccountNotificationInboxContractVersion = 1;
     public const string DefaultBaseAddress = "http://127.0.0.1:43873";
+    public const string PlatformAuthorityPath = "/v1/runtime/platform-authority";
     public const string AccountSessionDeviceContextPath = "/v1/account-session/device-context";
     public const string AccountSessionCompletePath = "/v1/account-session/complete";
     public const string AccountSessionStartPath = "/v1/account-session/start";
@@ -53,6 +56,22 @@ public static class AgentLocalContract
     public const string AccountNotificationFeedPath = "/v1/notifications/account-feed";
     public const string AccountNotificationReceiptPath = "/v1/notifications/account-receipt";
 }
+
+public sealed record PlatformAuthorityRequest(
+    [property: JsonPropertyName("correlation_id")] string CorrelationId);
+
+public sealed record PlatformAuthorityResponse(
+    [property: JsonPropertyName("capability_id")] string CapabilityId,
+    [property: JsonPropertyName("contract_version")] int ContractVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("environment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Environment,
+    [property: JsonPropertyName("platform_base_url"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlatformBaseUrl,
+    [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PlatformAuthorityError? Error);
+
+public sealed record PlatformAuthorityError(
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("retryable")] bool Retryable);
 
 public sealed record AccountSessionDeviceContextRequest(
     [property: JsonPropertyName("correlation_id")] string CorrelationId);

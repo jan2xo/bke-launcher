@@ -4,6 +4,10 @@ namespace BKE.Launcher.Application;
 
 public interface ILauncherAgentClient
 {
+    Task<PlatformAuthorityResponse> GetPlatformAuthorityAsync(
+        PlatformAuthorityRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountSessionDeviceContextResponse> GetAccountSessionDeviceContextAsync(
         AccountSessionDeviceContextRequest request,
         CancellationToken cancellationToken);
@@ -95,6 +99,7 @@ public interface ILauncherCatalogSource
 public interface ILauncherIdentityClient
 {
     Task<NativeBkeLoginResponse> LoginAsync(
+        Uri platformBaseAddress,
         NativeBkeLoginRequest request,
         CancellationToken cancellationToken);
 }
@@ -110,7 +115,9 @@ public sealed record LauncherNativeSignInResult(
 public interface ILauncherExternalNavigator
 {
     void OpenCheckout(string absoluteUrl);
-    void OpenLegalDocument(string slug);
+    Task OpenLegalDocumentAsync(
+        string slug,
+        CancellationToken cancellationToken);
 }
 
 public sealed record LauncherCheckoutRecoveryState(

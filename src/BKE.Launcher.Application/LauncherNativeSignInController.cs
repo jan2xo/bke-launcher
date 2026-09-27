@@ -5,13 +5,16 @@ namespace BKE.Launcher.Application;
 public sealed class LauncherNativeSignInController
 {
     private readonly ILauncherAgentClient _agent;
+    private readonly LauncherPlatformAuthorityResolver _platformAuthority;
     private readonly ILauncherIdentityClient _identity;
 
     public LauncherNativeSignInController(
         ILauncherAgentClient agent,
+        LauncherPlatformAuthorityResolver platformAuthority,
         ILauncherIdentityClient identity)
     {
         _agent = agent;
+        _platformAuthority = platformAuthority;
         _identity = identity;
     }
 
@@ -21,6 +24,9 @@ public sealed class LauncherNativeSignInController
         string? customerAccountId,
         CancellationToken cancellationToken)
     {
+        var platformBaseAddress =
+            await _platformAuthority.ResolveAsync(cancellationToken);
+
         var context = await _agent.GetAccountSessionDeviceContextAsync(
             new AccountSessionDeviceContextRequest(NewCorrelationId()),
             cancellationToken);
@@ -40,6 +46,7 @@ public sealed class LauncherNativeSignInController
         }
 
         var login = await _identity.LoginAsync(
+            platformBaseAddress,
             new NativeBkeLoginRequest(
                 email.Trim(),
                 password,

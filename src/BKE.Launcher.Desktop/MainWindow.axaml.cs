@@ -151,14 +151,18 @@ public sealed partial class MainWindow : Window
         ViewModel.OpenExistingCheckout();
     }
 
-    private void OpenPurchaseLegalDocument(object? sender, RoutedEventArgs args)
+    private async void OpenPurchaseLegalDocument(
+        object? sender,
+        RoutedEventArgs args)
     {
         if (sender is Button
             {
                 DataContext: PurchaseLegalDocumentViewModel document,
             })
         {
-            ViewModel.OpenLegalDocument(document);
+            await ViewModel.OpenLegalDocumentAsync(
+                document,
+                CancellationToken.None);
         }
     }
 
