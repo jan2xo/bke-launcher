@@ -231,7 +231,9 @@ jobs:
             agent_version = $env:AGENT_VERSION
             agent_trust = "DISPOSABLE_PREPRODUCTION"
             root_uninstall = "CERTIFIED_PREPRODUCTION"
-            customer_download_surface = "BKE_ONLY"
+            customer_download_surface = "BKE_UNIVERSAL_WINDOWS_ONLY"
+            customer_architecture_selection = "AUTOMATIC"
+            internal_architecture_payloads = @("x64", "arm64")
           }
           $manifest | ConvertTo-Json -Depth 5 | Set-Content dist/parent/COMPONENT-MANIFEST.json -Encoding utf8
           Get-Content dist/parent/COMPONENT-MANIFEST.json
@@ -244,12 +246,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "BKE parent x64 compile failed." }
           & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-arm64.iss
           if ($LASTEXITCODE -ne 0) { throw "BKE parent ARM64 compile failed." }
+          & $iscc "/DBkeVersion=$env:BKE_VERSION" packaging/windows/bke-parent-universal.iss
+          if ($LASTEXITCODE -ne 0) { throw "BKE universal Windows installer compile failed." }
 
       - name: Build immutable package-boundary manifest
         shell: pwsh
         run: |
           $x64 = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe"
           $arm64 = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
+          $universal = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
           $boundary = [ordered]@{
             schema = "bke.parent-package-boundary.v1"
             status = "PREPRODUCTION"
@@ -262,6 +267,16 @@ jobs:
               x64 = [ordered]@{ file = $x64.Name; sha256 = (Get-FileHash $x64.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $x64.Length }
               arm64 = [ordered]@{ file = $arm64.Name; sha256 = (Get-FileHash $arm64.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $arm64.Length }
             }
+            universal = [ordered]@{
+              file = $universal.Name
+              sha256 = (Get-FileHash $universal.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              bytes = $universal.Length
+              architecture_selection = "AUTOMATIC"
+              embedded_parent_sha256 = [ordered]@{
+                x64 = (Get-FileHash $x64.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                arm64 = (Get-FileHash $arm64.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              }
+            }
           }
           $boundary | ConvertTo-Json -Depth 8 | Set-Content dist/parent/PACKAGE-MANIFEST.json -Encoding utf8
           Get-Content dist/parent/PACKAGE-MANIFEST.json
@@ -272,6 +287,7 @@ jobs:
           path: |
             dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-x64.exe
             dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-arm64.exe
+            dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows.exe
             dist/parent/COMPONENT-MANIFEST.json
             dist/parent/PACKAGE-MANIFEST.json
           if-no-files-found: error
@@ -307,6 +323,21 @@ jobs:
             if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
             if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
           }
+          $universal = $manifest.universal
+          if ($null -eq $universal) { throw "Universal Windows installer boundary is missing." }
+          if ([string]$universal.architecture_selection -ne "AUTOMATIC") { throw "Universal Windows architecture selector drifted." }
+          $universalPath = Join-Path "dist/installer" ([string]$universal.file)
+          if (!(Test-Path $universalPath -PathType Leaf)) { throw "Universal Windows installer is missing." }
+          $universalItem = Get-Item $universalPath
+          $universalHash = (Get-FileHash $universalItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($universalHash -ne [string]$universal.sha256) { throw "Universal Windows installer SHA-256 drifted." }
+          if ($universalItem.Length -ne [long]$universal.bytes) { throw "Universal Windows installer size drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $embeddedHash = [string]$universal.embedded_parent_sha256.$arch
+            if ($embeddedHash -ne [string]$manifest.installers.$arch.sha256) {
+              throw "Universal Windows embedded $arch parent provenance drifted."
+            }
+          }
           Write-Host "Immutable parent package boundary: PASS"
 
       - name: Defender scan parent installers
@@ -323,7 +354,8 @@ jobs:
 
           foreach ($path in @(
             "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe",
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
+            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe",
+            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
           )) {
             & $mp.FullName -Scan -ScanType 3 -File (Resolve-Path $path).Path -DisableRemediation
             if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
@@ -359,12 +391,27 @@ jobs:
             if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
             if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
           }
+          $universal = $manifest.universal
+          if ($null -eq $universal) { throw "Universal Windows installer boundary is missing." }
+          if ([string]$universal.architecture_selection -ne "AUTOMATIC") { throw "Universal Windows architecture selector drifted." }
+          $universalPath = Join-Path "dist/installer" ([string]$universal.file)
+          if (!(Test-Path $universalPath -PathType Leaf)) { throw "Universal Windows installer is missing." }
+          $universalItem = Get-Item $universalPath
+          $universalHash = (Get-FileHash $universalItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($universalHash -ne [string]$universal.sha256) { throw "Universal Windows installer SHA-256 drifted." }
+          if ($universalItem.Length -ne [long]$universal.bytes) { throw "Universal Windows installer size drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $embeddedHash = [string]$universal.embedded_parent_sha256.$arch
+            if ($embeddedHash -ne [string]$manifest.installers.$arch.sha256) {
+              throw "Universal Windows embedded $arch parent provenance drifted."
+            }
+          }
           Write-Host "Immutable parent package boundary: PASS"
 
       - name: Fresh-install x64 parent package
         shell: pwsh
         run: |
-          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
           $log=Join-Path $env:RUNNER_TEMP "bke-parent-install.log"
           $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
           if ($process.ExitCode -ne 0) {
@@ -445,7 +492,7 @@ jobs:
           $agentUninstallEntries = @(Get-InnoUninstallCandidates "BKE Licensing Agent" $agentRoot)
           if ($agentUninstallEntries.Count -ne 1) { throw "Agent uninstall registration is missing or ambiguous." }
 
-          Write-Host "BKE parent installer x64 fresh install: PASS"
+          Write-Host "BKE universal Windows installer x64 selection + fresh install: PASS"
 
   root-uninstall:
     name: Managed root uninstall
@@ -498,12 +545,27 @@ jobs:
             if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
             if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
           }
+          $universal = $manifest.universal
+          if ($null -eq $universal) { throw "Universal Windows installer boundary is missing." }
+          if ([string]$universal.architecture_selection -ne "AUTOMATIC") { throw "Universal Windows architecture selector drifted." }
+          $universalPath = Join-Path "dist/installer" ([string]$universal.file)
+          if (!(Test-Path $universalPath -PathType Leaf)) { throw "Universal Windows installer is missing." }
+          $universalItem = Get-Item $universalPath
+          $universalHash = (Get-FileHash $universalItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($universalHash -ne [string]$universal.sha256) { throw "Universal Windows installer SHA-256 drifted." }
+          if ($universalItem.Length -ne [long]$universal.bytes) { throw "Universal Windows installer size drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $embeddedHash = [string]$universal.embedded_parent_sha256.$arch
+            if ($embeddedHash -ne [string]$manifest.installers.$arch.sha256) {
+              throw "Universal Windows embedded $arch parent provenance drifted."
+            }
+          }
           Write-Host "Immutable parent package boundary: PASS"
 
       - name: Install x64 parent prerequisite for root-uninstall certification
         shell: pwsh
         run: |
-          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
           $log=Join-Path $env:RUNNER_TEMP "bke-parent-root-uninstall-install.log"
           $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
           if ($process.ExitCode -ne 0) {
@@ -639,6 +701,21 @@ jobs:
             if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
             if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
           }
+          $universal = $manifest.universal
+          if ($null -eq $universal) { throw "Universal Windows installer boundary is missing." }
+          if ([string]$universal.architecture_selection -ne "AUTOMATIC") { throw "Universal Windows architecture selector drifted." }
+          $universalPath = Join-Path "dist/installer" ([string]$universal.file)
+          if (!(Test-Path $universalPath -PathType Leaf)) { throw "Universal Windows installer is missing." }
+          $universalItem = Get-Item $universalPath
+          $universalHash = (Get-FileHash $universalItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($universalHash -ne [string]$universal.sha256) { throw "Universal Windows installer SHA-256 drifted." }
+          if ($universalItem.Length -ne [long]$universal.bytes) { throw "Universal Windows installer size drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $embeddedHash = [string]$universal.embedded_parent_sha256.$arch
+            if ($embeddedHash -ne [string]$manifest.installers.$arch.sha256) {
+              throw "Universal Windows embedded $arch parent provenance drifted."
+            }
+          }
           Write-Host "Immutable parent package boundary: PASS"
 
       - name: Certify fail-closed BKE root uninstall
@@ -677,7 +754,7 @@ jobs:
             return $uninstaller
           }
 
-          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
           $log=Join-Path $env:RUNNER_TEMP "bke-parent-reinstall.log"
           $install=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
           if ($install.ExitCode -ne 0) {
@@ -747,6 +824,21 @@ jobs:
             if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
             if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
           }
+          $universal = $manifest.universal
+          if ($null -eq $universal) { throw "Universal Windows installer boundary is missing." }
+          if ([string]$universal.architecture_selection -ne "AUTOMATIC") { throw "Universal Windows architecture selector drifted." }
+          $universalPath = Join-Path "dist/installer" ([string]$universal.file)
+          if (!(Test-Path $universalPath -PathType Leaf)) { throw "Universal Windows installer is missing." }
+          $universalItem = Get-Item $universalPath
+          $universalHash = (Get-FileHash $universalItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($universalHash -ne [string]$universal.sha256) { throw "Universal Windows installer SHA-256 drifted." }
+          if ($universalItem.Length -ne [long]$universal.bytes) { throw "Universal Windows installer size drifted." }
+          foreach ($arch in @("x64","arm64")) {
+            $embeddedHash = [string]$universal.embedded_parent_sha256.$arch
+            if ($embeddedHash -ne [string]$manifest.installers.$arch.sha256) {
+              throw "Universal Windows embedded $arch parent provenance drifted."
+            }
+          }
           Write-Host "Immutable parent package boundary: PASS"
 
       - name: Package parent-installer evidence
@@ -754,21 +846,18 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist/parent-evidence | Out-Null
           Copy-Item dist/parent/COMPONENT-MANIFEST.json dist/parent-evidence/
-          @(
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe",
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
-          ) | ForEach-Object {
-            $item=Get-Item $_
-            $hash=(Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($item.Name)" | Add-Content dist/parent-evidence/SHA256SUMS.txt -Encoding ascii
-            Copy-Item $item.FullName dist/parent-evidence/
-          }
+          $customerInstaller = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
+          $customerHash = (Get-FileHash $customerInstaller.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$customerHash  $($customerInstaller.Name)" | Add-Content dist/parent-evidence/SHA256SUMS.txt -Encoding ascii
+          Copy-Item $customerInstaller.FullName dist/parent-evidence/
+          Copy-Item dist/parent/PACKAGE-MANIFEST.json dist/parent-evidence/
 
           @(
             "PREPRODUCTION ONLY",
             "Agent trust is disposable and unsigned.",
+            "Customer-facing Windows architecture selection is automatic; x64/ARM64 parents remain internal immutable payloads.",
             "Root BKE uninstall is implemented and remotely certified for managed-product cleanup, Agent teardown, and fail-closed unknown provenance.",
-            "Do not publish these candidates as production installers."
+            "Do not publish this candidate as a production installer."
           ) | Set-Content dist/parent-evidence/NOT-PRODUCTION.txt -Encoding utf8
 
       - name: Upload BKE parent installer candidates
