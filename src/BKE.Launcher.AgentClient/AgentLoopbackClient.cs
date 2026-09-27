@@ -49,6 +49,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
         }
     }
 
+    public Task<PlatformAuthorityResponse> GetPlatformAuthorityAsync(
+        PlatformAuthorityRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<PlatformAuthorityRequest, PlatformAuthorityResponse>(
+            AgentLocalContract.PlatformAuthorityPath,
+            request,
+            cancellationToken);
+
     public Task<AccountSessionDeviceContextResponse> GetAccountSessionDeviceContextAsync(
         AccountSessionDeviceContextRequest request,
         CancellationToken cancellationToken) =>
