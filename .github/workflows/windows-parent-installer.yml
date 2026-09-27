@@ -122,7 +122,7 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: Publish BKE x64 + ARM64 payloads
+      - name: Publish BKE Windows x64 payload
         shell: pwsh
         run: |
           dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
@@ -131,18 +131,12 @@ jobs:
             -o dist/windows-x64
           if ($LASTEXITCODE -ne 0) { throw "BKE x64 publish failed." }
 
-          dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
-            -c Release -r win-arm64 --self-contained true `
-            -p:DebugType=None -p:DebugSymbols=false -p:Version=$env:BKE_VERSION `
-            -o dist/windows-arm64
-          if ($LASTEXITCODE -ne 0) { throw "BKE ARM64 publish failed." }
-
-      - name: Build pinned Agent support payloads
+      - name: Build pinned Agent x64 support payloads
         shell: pwsh
         working-directory: agent-src
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish_dotnet_windows_payloads.ps1 -Version $env:AGENT_VERSION -Architecture all
-          if ($LASTEXITCODE -ne 0) { throw "Agent support payload publish failed." }
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish_dotnet_windows_payloads.ps1 -Version $env:AGENT_VERSION -Architecture x64
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 support payload publish failed." }
 
           dotnet run --project dotnet/tools/BKE.LicensingAgent.ReleaseTooling/BKE.LicensingAgent.ReleaseTooling.csproj --configuration Release -- `
             generate-disposable-trust `
@@ -154,8 +148,6 @@ jobs:
 
           New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-service | Out-Null
           New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-runtime | Out-Null
-          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-service-arm64 | Out-Null
-          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-runtime-arm64 | Out-Null
 
           dotnet publish dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj `
             --configuration Release --runtime win-x64 --self-contained true `
@@ -169,29 +161,15 @@ jobs:
             --output dist/windows/bke-licensing-agent-runtime
           if ($LASTEXITCODE -ne 0) { throw "Agent x64 runtime publish failed." }
 
-          dotnet publish dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj `
-            --configuration Release --runtime win-arm64 --self-contained true `
-            -p:PublishSingleFile=true -p:Version=$env:AGENT_VERSION `
-            --output dist/windows/bke-licensing-agent-service-arm64
-          if ($LASTEXITCODE -ne 0) { throw "Agent ARM64 service publish failed." }
-
-          dotnet publish dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj `
-            --configuration Release --runtime win-arm64 --self-contained true `
-            -p:PublishSingleFile=true -p:BKEAgentRuntimeBridge=true -p:Version=$env:AGENT_VERSION `
-            --output dist/windows/bke-licensing-agent-runtime-arm64
-          if ($LASTEXITCODE -ne 0) { throw "Agent ARM64 runtime publish failed." }
-
-      - name: Compile pinned Agent installers
+      - name: Compile pinned Agent x64 installer
         shell: pwsh
         working-directory: agent-src
         run: |
           $iscc = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "Inno Setup 6\ISCC.exe"
           & $iscc packaging/windows/bke-licensing-agent.iss
           if ($LASTEXITCODE -ne 0) { throw "Agent x64 installer compile failed." }
-          & $iscc packaging/windows/bke-licensing-agent-arm64.iss
-          if ($LASTEXITCODE -ne 0) { throw "Agent ARM64 installer compile failed." }
 
-      - name: Verify component architectures
+      - name: Verify Windows x64 component architecture
         shell: pwsh
         run: |
           function Assert-PeMachine([string]$Path,[int]$Expected) {
@@ -203,26 +181,32 @@ jobs:
             if ($machine -ne $Expected) { throw ("wrong PE machine {0}: 0x{1:X4}" -f $Path,$machine) }
           }
           Assert-PeMachine "dist/windows-x64/bke-launcher.exe" 0x8664
-          Assert-PeMachine "dist/windows-arm64/bke-launcher.exe" 0xAA64
           Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service/bke-licensing-agent-service.exe" 0x8664
-          Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service-arm64/bke-licensing-agent-service.exe" 0xAA64
+          Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-runtime/bke-licensing-agent-runtime.exe" 0x8664
 
-          $arm64Parent = Get-Content packaging/windows/bke-parent-arm64.iss -Raw
-          $expectedArm64Source = 'Source: "..\..\dist\windows-arm64\*"'
-          $forbiddenX64Source = 'Source: "..\..\dist\windows-x64\*"'
-          if (-not $arm64Parent.Contains($expectedArm64Source)) {
-            throw "ARM64 parent installer is not wired to the ARM64 BKE payload."
+          $parent = Get-Content packaging/windows/bke-parent-x64.iss -Raw
+          foreach ($required in @(
+            'OutputBaseFilename=BKE-{#BkeVersion}-PREPRODUCTION-Windows',
+            'ArchitecturesAllowed=x64compatible',
+            'ArchitecturesInstallIn64BitMode=x64compatible',
+            'Source: "..\..\dist\windows-x64\*"',
+            'BKE-Licensing-Agent-" + AgentVersion + "-Windows-x64.exe'
+          )) {
+            if (-not $parent.Contains($required)) {
+              throw "Windows x64 parent invariant missing: $required"
+            }
           }
-          if ($arm64Parent.Contains($forbiddenX64Source)) {
-            throw "ARM64 parent installer still references the x64 BKE payload."
+          if ($parent.Contains('windows-arm64') -or $parent.Contains('Windows-arm64.exe')) {
+            throw "Windows x64 parent contains an ARM64 payload reference."
           }
+          Write-Host "Windows x64 parent architecture invariants: PASS"
 
       - name: Build parent component manifest
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/parent | Out-Null
           $manifest = [ordered]@{
-            schema = "bke.parent-installer-components.v1"
+            schema = "bke.parent-installer-components.v2"
             status = "PREPRODUCTION"
             production_ready = $false
             bke_source_sha = $env:SOURCE_SHA
@@ -231,47 +215,50 @@ jobs:
             agent_version = $env:AGENT_VERSION
             agent_trust = "DISPOSABLE_PREPRODUCTION"
             root_uninstall = "CERTIFIED_PREPRODUCTION"
-            customer_download_surface = "BKE_ONLY"
+            customer_download_surface = "BKE_WINDOWS_ONLY"
+            platform = "windows"
+            application_architecture = "x64"
+            hardware_architecture_selection = "NONE"
           }
           $manifest | ConvertTo-Json -Depth 5 | Set-Content dist/parent/COMPONENT-MANIFEST.json -Encoding utf8
           Get-Content dist/parent/COMPONENT-MANIFEST.json
 
-      - name: Compile BKE parent installers
+      - name: Compile BKE Windows x64 parent installer
         shell: pwsh
         run: |
           $iscc = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "Inno Setup 6\ISCC.exe"
           & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-x64.iss
-          if ($LASTEXITCODE -ne 0) { throw "BKE parent x64 compile failed." }
-          & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-arm64.iss
-          if ($LASTEXITCODE -ne 0) { throw "BKE parent ARM64 compile failed." }
+          if ($LASTEXITCODE -ne 0) { throw "BKE Windows x64 parent compile failed." }
 
       - name: Build immutable package-boundary manifest
         shell: pwsh
         run: |
-          $x64 = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe"
-          $arm64 = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
+          $installer = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
           $boundary = [ordered]@{
-            schema = "bke.parent-package-boundary.v1"
+            schema = "bke.parent-package-boundary.v2"
             status = "PREPRODUCTION"
             production_ready = $false
             source_sha = $env:SOURCE_SHA
             agent_source_sha = $env:AGENT_SOURCE_SHA
             bke_version = $env:BKE_VERSION
             agent_version = $env:AGENT_VERSION
-            installers = [ordered]@{
-              x64 = [ordered]@{ file = $x64.Name; sha256 = (Get-FileHash $x64.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $x64.Length }
-              arm64 = [ordered]@{ file = $arm64.Name; sha256 = (Get-FileHash $arm64.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $arm64.Length }
+            installer = [ordered]@{
+              platform = "windows"
+              application_architecture = "x64"
+              file = $installer.Name
+              sha256 = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              bytes = $installer.Length
             }
           }
           $boundary | ConvertTo-Json -Depth 8 | Set-Content dist/parent/PACKAGE-MANIFEST.json -Encoding utf8
           Get-Content dist/parent/PACKAGE-MANIFEST.json
+
       - name: Upload immutable parent package boundary
         uses: actions/upload-artifact@v4
         with:
           name: bke-parent-package
           path: |
-            dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-x64.exe
-            dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows-arm64.exe
+            dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows.exe
             dist/parent/COMPONENT-MANIFEST.json
             dist/parent/PACKAGE-MANIFEST.json
           if-no-files-found: error
@@ -294,22 +281,23 @@ jobs:
           $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
           if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
           if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
           if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
           if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
-          foreach ($arch in @("x64","arm64")) {
-            $entry = $manifest.installers.$arch
-            $path = Join-Path "dist/installer" ([string]$entry.file)
-            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
-            $item = Get-Item $path
-            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
-            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
-          }
-          Write-Host "Immutable parent package boundary: PASS"
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
 
-      - name: Defender scan parent installers
+      - name: Defender scan Windows x64 parent installer
         shell: pwsh
         run: |
           $platformRoot=Join-Path $env:ProgramData "Microsoft\Windows Defender\Platform"
@@ -321,13 +309,10 @@ jobs:
           }
           if ($null -eq $mp) { throw "Microsoft Defender unavailable." }
 
-          foreach ($path in @(
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe",
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
-          )) {
-            & $mp.FullName -Scan -ScanType 3 -File (Resolve-Path $path).Path -DisableRemediation
-            if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
-          }
+          $path = "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
+          & $mp.FullName -Scan -ScanType 3 -File (Resolve-Path $path).Path -DisableRemediation
+          if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
+          Write-Host "Defender scan PASS: $path"
 
   fresh-install:
     name: Fresh install + runtime health
@@ -346,25 +331,26 @@ jobs:
           $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
           if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
           if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
           if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
           if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
-          foreach ($arch in @("x64","arm64")) {
-            $entry = $manifest.installers.$arch
-            $path = Join-Path "dist/installer" ([string]$entry.file)
-            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
-            $item = Get-Item $path
-            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
-            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
-          }
-          Write-Host "Immutable parent package boundary: PASS"
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
 
-      - name: Fresh-install x64 parent package
+      - name: Fresh-install Windows x64 parent package
         shell: pwsh
         run: |
-          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
           $log=Join-Path $env:RUNNER_TEMP "bke-parent-install.log"
           $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
           if ($process.ExitCode -ne 0) {
@@ -445,7 +431,7 @@ jobs:
           $agentUninstallEntries = @(Get-InnoUninstallCandidates "BKE Licensing Agent" $agentRoot)
           if ($agentUninstallEntries.Count -ne 1) { throw "Agent uninstall registration is missing or ambiguous." }
 
-          Write-Host "BKE parent installer x64 fresh install: PASS"
+          Write-Host "BKE Windows x64 parent fresh install: PASS"
 
   root-uninstall:
     name: Managed root uninstall
@@ -485,25 +471,26 @@ jobs:
           $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
           if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
           if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
           if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
           if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
-          foreach ($arch in @("x64","arm64")) {
-            $entry = $manifest.installers.$arch
-            $path = Join-Path "dist/installer" ([string]$entry.file)
-            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
-            $item = Get-Item $path
-            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
-            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
-          }
-          Write-Host "Immutable parent package boundary: PASS"
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
 
-      - name: Install x64 parent prerequisite for root-uninstall certification
+      - name: Install Windows x64 parent prerequisite for root-uninstall certification
         shell: pwsh
         run: |
-          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
           $log=Join-Path $env:RUNNER_TEMP "bke-parent-root-uninstall-install.log"
           $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
           if ($process.ExitCode -ne 0) {
@@ -626,20 +613,21 @@ jobs:
           $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
           if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
           if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
           if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
           if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
-          foreach ($arch in @("x64","arm64")) {
-            $entry = $manifest.installers.$arch
-            $path = Join-Path "dist/installer" ([string]$entry.file)
-            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
-            $item = Get-Item $path
-            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
-            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
-          }
-          Write-Host "Immutable parent package boundary: PASS"
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
 
       - name: Certify fail-closed BKE root uninstall
         shell: pwsh
@@ -677,7 +665,7 @@ jobs:
             return $uninstaller
           }
 
-          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe").Path
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
           $log=Join-Path $env:RUNNER_TEMP "bke-parent-reinstall.log"
           $install=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
           if ($install.ExitCode -ne 0) {
@@ -734,41 +722,39 @@ jobs:
           $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
           if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.schema -ne "bke.parent-package-boundary.v1") { throw "Parent package boundary schema drifted." }
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
           if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
           if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
           if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
-          foreach ($arch in @("x64","arm64")) {
-            $entry = $manifest.installers.$arch
-            $path = Join-Path "dist/installer" ([string]$entry.file)
-            if (!(Test-Path $path -PathType Leaf)) { throw "Parent $arch installer is missing." }
-            $item = Get-Item $path
-            $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($hash -ne [string]$entry.sha256) { throw "Parent $arch installer SHA-256 drifted." }
-            if ($item.Length -ne [long]$entry.bytes) { throw "Parent $arch installer size drifted." }
-          }
-          Write-Host "Immutable parent package boundary: PASS"
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
 
       - name: Package parent-installer evidence
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/parent-evidence | Out-Null
           Copy-Item dist/parent/COMPONENT-MANIFEST.json dist/parent-evidence/
-          @(
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-x64.exe",
-            "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows-arm64.exe"
-          ) | ForEach-Object {
-            $item=Get-Item $_
-            $hash=(Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($item.Name)" | Add-Content dist/parent-evidence/SHA256SUMS.txt -Encoding ascii
-            Copy-Item $item.FullName dist/parent-evidence/
-          }
+          $customerInstaller = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
+          $customerHash = (Get-FileHash $customerInstaller.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$customerHash  $($customerInstaller.Name)" | Add-Content dist/parent-evidence/SHA256SUMS.txt -Encoding ascii
+          Copy-Item $customerInstaller.FullName dist/parent-evidence/
+          Copy-Item dist/parent/PACKAGE-MANIFEST.json dist/parent-evidence/
 
           @(
             "PREPRODUCTION ONLY",
             "Agent trust is disposable and unsigned.",
+            "BKE ships one customer-facing Windows installer backed by the x64 application runtime.",
             "Root BKE uninstall is implemented and remotely certified for managed-product cleanup, Agent teardown, and fail-closed unknown provenance.",
-            "Do not publish these candidates as production installers."
+            "Do not publish this candidate as a production installer."
           ) | Set-Content dist/parent-evidence/NOT-PRODUCTION.txt -Encoding utf8
 
       - name: Upload BKE parent installer candidates

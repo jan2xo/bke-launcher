@@ -2,12 +2,23 @@
 set -euo pipefail
 
 mapfile -t owners < <(grep -El '^[[:space:]]*pull_request:[[:space:]]*$' .github/workflows/*.yml | sort)
-if [ "${#owners[@]}" -ne 1 ] || [ "${owners[0]}" != ".github/workflows/pr-guard.yml" ]; then
-  echo "PR workflow ownership must belong only to pr-guard.yml" >&2
+expected_owners=(
+  ".github/workflows/certify.yml"
+  ".github/workflows/pr-guard.yml"
+)
+if [ "${#owners[@]}" -ne "${#expected_owners[@]}" ]; then
+  echo "PR workflow ownership drifted; only pr-guard plus explicit ready-for-review certification are allowed." >&2
   printf '%s\n' "${owners[@]}" >&2
   exit 1
 fi
-
+for i in "${!expected_owners[@]}"; do
+  if [ "${owners[$i]}" != "${expected_owners[$i]}" ]; then
+    echo "PR workflow ownership drifted; only pr-guard plus explicit ready-for-review certification are allowed." >&2
+    printf '%s\n' "${owners[@]}" >&2
+    exit 1
+  fi
+done
+grep -Fq 'types: [ready_for_review]' .github/workflows/certify.yml
 grep -q 'issue_comment:' .github/workflows/certify.yml
 grep -q 'workflow_dispatch:' .github/workflows/certify.yml
 grep -q 'required-certification:' .github/workflows/certify.yml
@@ -32,11 +43,15 @@ grep -q 'agent_source_sha:' .github/workflows/windows-parent-installer.yml
 
 for path in .github/workflows/*.yml; do
   [ "$path" = ".github/workflows/pr-guard.yml" ] && continue
+  [ "$path" = ".github/workflows/certify.yml" ] && continue
   if grep -q 'github.event.pull_request' "$path"; then
     echo "stale pull_request event context in $path" >&2
     exit 1
   fi
 done
+
+grep -Fq "github.event_name == 'pull_request'" .github/workflows/certify.yml
+grep -Fq 'Certification targets:' .github/workflows/certify.yml
 
 grep -Eq '^[0-9a-fA-F]{40}$' eng/licensing-agent-source.sha
 
