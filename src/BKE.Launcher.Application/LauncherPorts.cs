@@ -115,7 +115,9 @@ public sealed record LauncherNativeSignInResult(
 public interface ILauncherExternalNavigator
 {
     void OpenCheckout(string absoluteUrl);
-    void OpenLegalDocument(string slug);
+    Task OpenLegalDocumentAsync(
+        string slug,
+        CancellationToken cancellationToken);
 }
 
 public sealed record LauncherCheckoutRecoveryState(
