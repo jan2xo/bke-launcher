@@ -19,17 +19,8 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
     private readonly HttpClient _http;
     private readonly bool _ownsHttpClient;
 
-    public PlatformIdentityClient(HttpClient? httpClient = null, Uri? baseAddress = null)
+    public PlatformIdentityClient(HttpClient? httpClient = null)
     {
-        var configured = Environment.GetEnvironmentVariable("BKE_PLATFORM_BASE_URL")?.Trim();
-        var resolved = baseAddress
-            ?? new Uri(
-                string.IsNullOrWhiteSpace(configured)
-                    ? BkePlatformContract.DefaultBaseAddress
-                    : configured,
-                UriKind.Absolute);
-        ValidatePlatformBaseAddress(resolved);
-
         if (httpClient is null)
         {
             _http = new HttpClient(new HttpClientHandler
@@ -37,7 +28,6 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
                 AllowAutoRedirect = false,
             })
             {
-                BaseAddress = resolved,
                 Timeout = Timeout.InfiniteTimeSpan,
             };
             _ownsHttpClient = true;
@@ -45,22 +35,27 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         else
         {
             _http = httpClient;
-            _http.BaseAddress = resolved;
             _http.Timeout = Timeout.InfiniteTimeSpan;
             _ownsHttpClient = false;
         }
     }
 
     public async Task<NativeBkeLoginResponse> LoginAsync(
+        Uri platformBaseAddress,
         NativeBkeLoginRequest request,
         CancellationToken cancellationToken)
     {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        var endpoint = new Uri(
+            platformBaseAddress,
+            BkePlatformContract.NativeLoginPath);
+
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(DefaultRequestTimeout);
 
         using var message = new HttpRequestMessage(
             HttpMethod.Post,
-            BkePlatformContract.NativeLoginPath);
+            endpoint);
         message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         message.Headers.UserAgent.ParseAdd("bke-launcher");
         message.Headers.TryAddWithoutValidation(
@@ -142,6 +137,8 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         if (!value.IsAbsoluteUri ||
             value.Scheme != Uri.UriSchemeHttps ||
             string.IsNullOrWhiteSpace(value.Host) ||
+            !string.IsNullOrEmpty(value.UserInfo) ||
+            value.AbsolutePath != "/" ||
             !string.IsNullOrEmpty(value.Query) ||
             !string.IsNullOrEmpty(value.Fragment))
         {
