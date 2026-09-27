@@ -411,7 +411,7 @@ Require(platformIdentitySource.Contains(
         "value.Scheme != Uri.UriSchemeHttps",
         StringComparison.Ordinal) &&
     platformIdentitySource.Contains(
-        "value.AbsolutePath != "/"",
+        "value.AbsolutePath != \"/\"",
         StringComparison.Ordinal),
     "Launcher platform identity client no longer requires an HTTPS origin.");
 
