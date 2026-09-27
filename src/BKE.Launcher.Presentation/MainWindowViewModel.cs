@@ -1528,14 +1528,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public void OpenLegalDocument(PurchaseLegalDocumentViewModel document)
+    public async Task OpenLegalDocumentAsync(
+        PurchaseLegalDocumentViewModel document,
+        CancellationToken cancellationToken)
     {
         try
         {
-            _externalNavigator.OpenLegalDocument(document.Slug);
+            await _externalNavigator.OpenLegalDocumentAsync(
+                document.Slug,
+                cancellationToken);
         }
         catch (Exception error) when (
-            error is InvalidDataException or
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
             ArgumentException or
             System.ComponentModel.Win32Exception)
         {
