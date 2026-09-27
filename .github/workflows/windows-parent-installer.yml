@@ -314,6 +314,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
           Write-Host "Defender scan PASS: $path"
 
+  fresh-install:
+    name: Fresh install + runtime health
+    needs: parent-package
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
       - name: Download exact parent package
         uses: actions/download-artifact@v4
         with:
