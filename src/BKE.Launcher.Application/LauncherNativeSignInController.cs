@@ -21,6 +21,25 @@ public sealed class LauncherNativeSignInController
         string? customerAccountId,
         CancellationToken cancellationToken)
     {
+        var authority = await _agent.GetPlatformAuthorityAsync(
+            new PlatformAuthorityRequest(NewCorrelationId()),
+            cancellationToken);
+
+        if (authority.Status != "READY" ||
+            string.IsNullOrWhiteSpace(authority.Environment) ||
+            string.IsNullOrWhiteSpace(authority.PlatformBaseUrl) ||
+            !TryParsePlatformAuthority(
+                authority.PlatformBaseUrl,
+                out var platformBaseAddress))
+        {
+            return new LauncherNativeSignInResult(
+                "FAILED",
+                Array.Empty<NativeBkeAccountChoice>(),
+                null,
+                authority.Error?.Code ?? "AGENT_PLATFORM_AUTHORITY_UNAVAILABLE",
+                authority.Error?.Message ?? "BKE Licensing Agent platform authority is unavailable.");
+        }
+
         var context = await _agent.GetAccountSessionDeviceContextAsync(
             new AccountSessionDeviceContextRequest(NewCorrelationId()),
             cancellationToken);
@@ -40,6 +59,7 @@ public sealed class LauncherNativeSignInController
         }
 
         var login = await _identity.LoginAsync(
+            platformBaseAddress,
             new NativeBkeLoginRequest(
                 email.Trim(),
                 password,
@@ -83,6 +103,26 @@ public sealed class LauncherNativeSignInController
             completed.Account,
             completed.Error?.Code,
             completed.Error?.Message);
+    }
+
+    private static bool TryParsePlatformAuthority(
+        string value,
+        out Uri platformBaseAddress)
+    {
+        if (Uri.TryCreate(value, UriKind.Absolute, out var resolved) &&
+            resolved.Scheme == Uri.UriSchemeHttps &&
+            !string.IsNullOrWhiteSpace(resolved.Host) &&
+            string.IsNullOrEmpty(resolved.UserInfo) &&
+            resolved.AbsolutePath == "/" &&
+            string.IsNullOrEmpty(resolved.Query) &&
+            string.IsNullOrEmpty(resolved.Fragment))
+        {
+            platformBaseAddress = resolved;
+            return true;
+        }
+
+        platformBaseAddress = null!;
+        return false;
     }
 
     private static string NativeLoginMessage(string? code) => code switch
