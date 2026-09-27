@@ -21,8 +21,12 @@ public sealed partial class App : Avalonia.Application
         {
             var agentClient = new AgentLoopbackClient();
             var accountSession = new LauncherAccountSessionController(agentClient);
+            var platformAuthority = new LauncherPlatformAuthorityResolver(agentClient);
             var identityClient = new PlatformIdentityClient();
-            var nativeSignIn = new LauncherNativeSignInController(agentClient, identityClient);
+            var nativeSignIn = new LauncherNativeSignInController(
+                agentClient,
+                platformAuthority,
+                identityClient);
             var catalogSource = new AgentSoftwareCatalogSource(agentClient);
             var catalog = new LauncherCatalogService(catalogSource);
             var store = new LauncherStoreService(agentClient);
@@ -32,7 +36,8 @@ public sealed partial class App : Avalonia.Application
             var storeGiftClaimReveal = new LauncherStoreGiftClaimRevealService(agentClient);
             var notifications = new LauncherNotificationInboxService(agentClient);
             var checkoutRecoveryStore = new FileLauncherCheckoutRecoveryStore();
-            var externalNavigator = new ExternalBrowserNavigator();
+            var externalNavigator =
+                new ExternalBrowserNavigator(platformAuthority);
             var softwareInstall = new LauncherSoftwareInstallController(agentClient);
             var softwareUpdate = new LauncherSoftwareUpdateController(agentClient);
             var softwareRepair = new LauncherSoftwareRepairController(agentClient);
