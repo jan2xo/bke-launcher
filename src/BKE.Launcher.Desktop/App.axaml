@@ -2,7 +2,98 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="BKE.Launcher.Desktop.App"
              RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <SolidColorBrush x:Key="BkeBackgroundBrush">#0A0E13</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSurfaceBrush">#111821</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSurfaceRaisedBrush">#151E29</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeBorderBrush">#263241</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeTextBrush">#F4F7FA</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeMutedTextBrush">#91A0AF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeAccentBrush">#F4F7FA</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeAccentTextBrush">#0A0E13</SolidColorBrush>
+  </Application.Resources>
+
   <Application.Styles>
     <FluentTheme DensityStyle="Compact" />
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{StaticResource BkeBackgroundBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.brand">
+      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.section-title">
+      <Setter Property="FontSize" Value="20" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="Border.surface">
+      <Setter Property="Background" Value="{StaticResource BkeSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="14" />
+    </Style>
+
+    <Style Selector="Border.content-card">
+      <Setter Property="Background" Value="{StaticResource BkeSurfaceRaisedBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="Border.status-pill">
+      <Setter Property="Background" Value="{StaticResource BkeSurfaceRaisedBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="999" />
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Background" Value="{StaticResource BkeSurfaceRaisedBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource BkeAccentBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource BkeAccentTextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeAccentBrush}" />
+    </Style>
+
+    <Style Selector="TextBox">
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="Background" Value="#0D131B" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="ComboBox">
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Background" Value="#0D131B" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="TabItem">
+      <Setter Property="Padding" Value="16,10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
   </Application.Styles>
 </Application>
