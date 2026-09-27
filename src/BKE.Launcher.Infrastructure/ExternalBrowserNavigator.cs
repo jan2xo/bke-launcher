@@ -1,24 +1,16 @@
 using System.Diagnostics;
 using BKE.Launcher.Application;
-using BKE.Launcher.Contracts;
 
 namespace BKE.Launcher.Infrastructure;
 
 public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
 {
-    private readonly Uri _platformBaseUri;
+    private readonly LauncherPlatformAuthorityResolver _platformAuthority;
 
-    public ExternalBrowserNavigator(Uri? platformBaseUri = null)
+    public ExternalBrowserNavigator(
+        LauncherPlatformAuthorityResolver platformAuthority)
     {
-        var configured = Environment.GetEnvironmentVariable("BKE_PLATFORM_BASE_URL")?.Trim();
-        _platformBaseUri = platformBaseUri
-            ?? new Uri(
-                string.IsNullOrWhiteSpace(configured)
-                    ? BkePlatformContract.DefaultBaseAddress
-                    : configured,
-                UriKind.Absolute);
-
-        ValidateHttpsUri(_platformBaseUri, requireOrigin: true);
+        _platformAuthority = platformAuthority;
     }
 
     public void OpenCheckout(string absoluteUrl)
@@ -33,7 +25,9 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
         Open(uri);
     }
 
-    public void OpenLegalDocument(string slug)
+    public async Task OpenLegalDocumentAsync(
+        string slug,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(slug) ||
             slug.Length > 256 ||
@@ -48,7 +42,11 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
                 nameof(slug));
         }
 
-        Open(new Uri(_platformBaseUri, $"/legal/{Uri.EscapeDataString(slug)}"));
+        var platformBaseUri =
+            await _platformAuthority.ResolveAsync(cancellationToken);
+        Open(new Uri(
+            platformBaseUri,
+            $"/legal/{Uri.EscapeDataString(slug)}"));
     }
 
     private static void ValidateHttpsUri(Uri uri, bool requireOrigin)
