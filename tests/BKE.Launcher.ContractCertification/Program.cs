@@ -1717,4 +1717,3 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 }
-
