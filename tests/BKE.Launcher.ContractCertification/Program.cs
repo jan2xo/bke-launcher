@@ -5,6 +5,7 @@ using BKE.Launcher.Application;
 using BKE.Launcher.Contracts;
 using BKE.Launcher.Infrastructure;
 using BKE.Launcher.PluginHost;
+using BKE.Launcher.Presentation;
 
 var agentBase = new Uri(AgentLocalContract.DefaultBaseAddress, UriKind.Absolute);
 Require(agentBase.IsLoopback, "Agent default address is not loopback.");
@@ -1141,6 +1142,8 @@ Require(removeTimeout == TimeSpan.FromMinutes(10),
 Require(removeTimeout > defaultTimeout,
     "Launcher remove operation does not have a dedicated long-running timeout.");
 
+await CertifyCustomerAcquisitionToMySoftwareAsync();
+
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
@@ -1162,6 +1165,175 @@ Console.WriteLine("Bounded long-running remove transport certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
 
+
+static async Task CertifyCustomerAcquisitionToMySoftwareAsync()
+{
+    await CertifySelfPurchaseRefreshesMySoftwareAsync();
+    await CertifyGiftPurchaseStaysUnboundAsync();
+    await CertifyClaimCodeRedemptionRefreshesMySoftwareAsync();
+}
+
+static async Task CertifySelfPurchaseRefreshesMySoftwareAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var recovery = new CustomerJourneyRecoveryStore();
+    var navigator = new CustomerJourneyNavigator();
+    var viewModel = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    Require(viewModel.IsAuthenticated, "Customer journey did not enter the authenticated BKE shell.");
+    Require(viewModel.SelectedModuleIndex == -1,
+        "Authenticated startup auto-selected a customer destination.");
+
+    await viewModel.OpenModuleAsync(0, CancellationToken.None);
+    Require(viewModel.Products.Count == 1 &&
+            viewModel.Products[0].StateLabel == "Not entitled" &&
+            !viewModel.Products[0].CanInstall,
+        "SELF journey did not begin without software ownership.");
+
+    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    Require(viewModel.StoreProducts.Count == 1,
+        "SELF journey could not load the Agent-mediated Store.");
+
+    await viewModel.ReviewPurchaseAsync(
+        CustomerJourneyAgentClient.PurchasePlanId,
+        CancellationToken.None);
+    foreach (var document in viewModel.PurchaseLegalDocuments)
+    {
+        document.IsAccepted = true;
+    }
+
+    Require(viewModel.CanBuySelf,
+        "SELF journey did not expose purchase intent after current review and Legal acceptance.");
+
+    await viewModel.StartPurchaseAsync("SELF", CancellationToken.None);
+    Require(agent.CheckoutStartCount == 1,
+        "SELF journey did not create exactly one checkout mutation.");
+    Require(recovery.State is not null,
+        "SELF journey did not retain checkout recovery state before settlement.");
+    Require(navigator.LastCheckoutUrl is not null,
+        "SELF journey did not open the existing secure checkout returned by authority.");
+
+    await viewModel.CheckPurchaseCheckoutStatusAsync(CancellationToken.None);
+
+    Require(agent.CheckoutStartCount == 1,
+        "SELF settlement recovery created a duplicate checkout mutation.");
+    Require(catalog.Owned,
+        "SELF settlement did not make the authoritative catalog source expose ownership.");
+    Require(recovery.State is null,
+        "SELF settlement did not clear the resolved checkout recovery lock.");
+    Require(viewModel.Products.Count == 1 &&
+            viewModel.Products[0].StateLabel == "Installable" &&
+            viewModel.Products[0].CanInstall,
+        "SELF settlement did not refresh the acquired entitlement into My Software.");
+}
+
+static async Task CertifyGiftPurchaseStaysUnboundAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var recovery = new CustomerJourneyRecoveryStore();
+    var navigator = new CustomerJourneyNavigator();
+    var viewModel = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    await viewModel.OpenModuleAsync(0, CancellationToken.None);
+    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    await viewModel.ReviewPurchaseAsync(
+        CustomerJourneyAgentClient.PurchasePlanId,
+        CancellationToken.None);
+    foreach (var document in viewModel.PurchaseLegalDocuments)
+    {
+        document.IsAccepted = true;
+    }
+
+    Require(viewModel.CanBuyGift,
+        "GIFT journey did not expose Claim Code purchase after current review and Legal acceptance.");
+
+    await viewModel.StartPurchaseAsync("GIFT", CancellationToken.None);
+    await viewModel.CheckPurchaseCheckoutStatusAsync(CancellationToken.None);
+
+    Require(agent.CheckoutStartCount == 1,
+        "GIFT settlement recovery created a duplicate checkout mutation.");
+    Require(!catalog.Owned,
+        "GIFT settlement incorrectly granted the purchaser software ownership.");
+    Require(viewModel.Products.Count == 1 &&
+            viewModel.Products[0].StateLabel == "Not entitled",
+        "GIFT settlement altered the purchaser's My Software entitlement.");
+    Require(viewModel.GiftClaimCode == CustomerJourneyAgentClient.GiftClaimCode,
+        "GIFT settlement did not reveal the unbound one-time Claim Code.");
+    Require(recovery.State is not null && viewModel.CanCompleteGiftDelivery,
+        "GIFT recovery was discarded before the purchaser acknowledged Claim Code delivery.");
+
+    viewModel.CompleteGiftClaimDelivery();
+
+    Require(string.IsNullOrEmpty(viewModel.GiftClaimCode),
+        "Acknowledged GIFT delivery retained Claim Code plaintext in Launcher state.");
+    Require(recovery.State is null,
+        "Acknowledged GIFT delivery did not clear the resolved recovery state.");
+}
+
+static async Task CertifyClaimCodeRedemptionRefreshesMySoftwareAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var recovery = new CustomerJourneyRecoveryStore();
+    var navigator = new CustomerJourneyNavigator();
+    var viewModel = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    await viewModel.OpenModuleAsync(0, CancellationToken.None);
+    Require(viewModel.Products.Count == 1 &&
+            viewModel.Products[0].StateLabel == "Not entitled",
+        "Claim Code recipient did not begin without software ownership.");
+
+    viewModel.ClaimCode = CustomerJourneyAgentClient.GiftClaimCode;
+    await viewModel.RedeemClaimCodeAsync(CancellationToken.None);
+
+    Require(agent.RedeemCount == 1,
+        "Claim Code redemption did not delegate exactly once to the Agent boundary.");
+    Require(catalog.Owned,
+        "Claim Code redemption did not make the authoritative catalog source expose ownership.");
+    Require(viewModel.ClaimStatus == "CLAIMED" &&
+            string.IsNullOrEmpty(viewModel.ClaimCode),
+        "Successful Claim Code redemption retained plaintext or failed to report CLAIMED.");
+    Require(viewModel.Products.Count == 1 &&
+            viewModel.Products[0].StateLabel == "Installable" &&
+            viewModel.Products[0].CanInstall,
+        "Claim Code redemption did not refresh the recipient entitlement into My Software.");
+}
+
+static MainWindowViewModel BuildCustomerJourneyViewModel(
+    CustomerJourneyAgentClient agent,
+    CustomerJourneyCatalogSource catalog,
+    CustomerJourneyRecoveryStore recovery,
+    CustomerJourneyNavigator navigator)
+{
+    var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
+    return new MainWindowViewModel(
+        new LauncherAccountSessionController(agent),
+        new LauncherNativeSignInController(
+            agent,
+            platformAuthority,
+            new CustomerJourneyIdentityClient()),
+        new LauncherCatalogService(catalog),
+        new LauncherStoreService(agent),
+        new LauncherStoreCheckoutReviewService(agent),
+        new LauncherStoreCheckoutStartService(agent),
+        new LauncherStoreCheckoutStatusService(agent),
+        new LauncherStoreGiftClaimRevealService(agent),
+        new LauncherNotificationInboxService(agent),
+        recovery,
+        navigator,
+        new LauncherSoftwareInstallController(agent),
+        new LauncherSoftwareUpdateController(agent),
+        new LauncherSoftwareRepairController(agent),
+        new LauncherSoftwareOpenController(agent),
+        new LauncherSoftwareRemoveController(agent),
+        new LauncherClaimCodeRedemptionController(agent));
+}
+
 static void Require(bool condition, string message)
 {
     if (!condition)
@@ -1169,3 +1341,379 @@ static void Require(bool condition, string message)
         throw new InvalidOperationException(message);
     }
 }
+
+sealed class CustomerJourneyCatalogSource : ILauncherCatalogSource
+{
+    public bool Owned { get; set; }
+
+    public Task<LauncherCatalogSnapshot> GetProductsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new LauncherCatalogSnapshot(
+            "READY",
+            new[]
+            {
+                new LauncherProduct(
+                    CustomerJourneyAgentClient.ProductId,
+                    "Render Dock",
+                    "Certification product",
+                    ProductExecutionType.Standalone,
+                    Owned ? LauncherProductState.Installable : LauncherProductState.NotEntitled,
+                    null,
+                    "1.0.3"),
+            },
+            null));
+    }
+}
+
+sealed class CustomerJourneyRecoveryStore : ILauncherCheckoutRecoveryStore
+{
+    public LauncherCheckoutRecoveryState? State { get; private set; }
+
+    public LauncherCheckoutRecoveryState? Read() => State;
+
+    public void Write(LauncherCheckoutRecoveryState state)
+    {
+        State = state;
+    }
+
+    public void Clear()
+    {
+        State = null;
+    }
+}
+
+sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
+{
+    public string? LastCheckoutUrl { get; private set; }
+
+    public void OpenCheckout(string absoluteUrl)
+    {
+        LastCheckoutUrl = absoluteUrl;
+    }
+
+    public Task OpenLegalDocumentAsync(
+        string slug,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+}
+
+sealed class CustomerJourneyIdentityClient : ILauncherIdentityClient
+{
+    public Task<NativeBkeLoginResponse> LoginAsync(
+        Uri platformBaseAddress,
+        NativeBkeLoginRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException(
+            "Native credential login is outside this already-authenticated customer journey certification.");
+}
+
+sealed class CustomerJourneyAgentClient : ILauncherAgentClient
+{
+    public const string ProductId = "bke-render-dock";
+    public const string PurchasePlanId = "plan-cert-render-dock";
+    public const string GiftClaimCode = "BKE-CLM-CERT1-CERT2-CERT3-CERT4-CERT5-CERT6";
+
+    private const string AccountId = "acct-cert-recipient";
+    private readonly CustomerJourneyCatalogSource _catalog;
+    private string _purchaseMode = "SELF";
+
+    public CustomerJourneyAgentClient(CustomerJourneyCatalogSource catalog)
+    {
+        _catalog = catalog;
+    }
+
+    public int CheckoutStartCount { get; private set; }
+    public int RedeemCount { get; private set; }
+
+    public Task<AccountSessionStatusResponse> GetAccountSessionStatusAsync(
+        AccountSessionStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new AccountSessionStatusResponse(
+            AgentLocalContract.CapabilityId,
+            AgentLocalContract.ContractVersion,
+            "AUTHENTICATED",
+            new AccountSessionAccount(
+                "user-cert",
+                "customer@example.test",
+                AccountId,
+                "INDIVIDUAL",
+                "Certification Customer"),
+            null));
+    }
+
+    public Task<StoreCatalogResponse> GetStoreCatalogAsync(
+        StoreCatalogRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new StoreCatalogResponse(
+            AgentLocalContract.StoreCatalogCapabilityId,
+            AgentLocalContract.StoreCatalogContractVersion,
+            "READY",
+            true,
+            new[]
+            {
+                new StoreCatalogProduct(
+                    ProductId,
+                    "render-dock",
+                    "Render Dock",
+                    "Certification product",
+                    "Stateful customer journey certification product.",
+                    "SOFTWARE",
+                    ProductExecutionTypeWire.Standalone,
+                    new[]
+                    {
+                        new StoreCatalogEdition(
+                            "edition-cert-render-dock",
+                            "standard",
+                            "Standard",
+                            "Certification edition",
+                            new[] { "render" },
+                            1,
+                            2,
+                            "ACTIVE",
+                            new[]
+                            {
+                                new StoreCatalogPlan(
+                                    PurchasePlanId,
+                                    "PERPETUAL",
+                                    "PHP",
+                                    30000,
+                                    "ONE_TIME",
+                                    null,
+                                    null,
+                                    "NONE",
+                                    0,
+                                    null),
+                            }),
+                    }),
+            },
+            null));
+    }
+
+    public Task<StoreCheckoutReviewResponse> ReviewStoreCheckoutAsync(
+        StoreCheckoutReviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (request.PurchasePlanId != PurchasePlanId)
+        {
+            throw new InvalidOperationException("Unexpected certification purchase plan.");
+        }
+
+        var plan = new StoreCatalogPlan(
+            PurchasePlanId,
+            "PERPETUAL",
+            "PHP",
+            30000,
+            "ONE_TIME",
+            null,
+            null,
+            "NONE",
+            0,
+            null);
+        return Task.FromResult(new StoreCheckoutReviewResponse(
+            AgentLocalContract.StoreCheckoutReviewCapabilityId,
+            AgentLocalContract.StoreCheckoutReviewContractVersion,
+            "READY",
+            new[] { "SELF", "GIFT" },
+            new StoreCheckoutReviewProduct(
+                ProductId,
+                "render-dock",
+                "Render Dock",
+                "Certification product"),
+            new StoreCheckoutReviewEdition(
+                "edition-cert-render-dock",
+                "standard",
+                "Standard",
+                1,
+                2,
+                "ACTIVE"),
+            plan,
+            new[]
+            {
+                new StoreCheckoutReviewLegalDocument(
+                    "TERMS",
+                    "Terms of Service",
+                    "terms",
+                    "legal-terms-v1",
+                    "1.0",
+                    null,
+                    false),
+                new StoreCheckoutReviewLegalDocument(
+                    "PRIVACY",
+                    "Privacy Policy",
+                    "privacy",
+                    "legal-privacy-v1",
+                    "1.0",
+                    null,
+                    false),
+            },
+            Array.Empty<StoreCheckoutReviewPendingLegalDocument>(),
+            null));
+    }
+
+    public Task<StoreCheckoutStartResponse> StartStoreCheckoutAsync(
+        StoreCheckoutStartRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        CheckoutStartCount++;
+        _purchaseMode = request.PurchaseMode;
+
+        return Task.FromResult(new StoreCheckoutStartResponse(
+            AgentLocalContract.StoreCheckoutStartCapabilityId,
+            AgentLocalContract.StoreCheckoutStartContractVersion,
+            "READY",
+            request.CorrelationId,
+            _purchaseMode == "GIFT" ? "order-gift-cert" : "order-self-cert",
+            "https://checkout.example.test/existing",
+            false,
+            null));
+    }
+
+    public Task<StoreCheckoutStatusResponse> CheckStoreCheckoutStatusAsync(
+        StoreCheckoutStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var gift = _purchaseMode == "GIFT";
+        if (!gift)
+        {
+            _catalog.Owned = true;
+        }
+
+        return Task.FromResult(new StoreCheckoutStatusResponse(
+            AgentLocalContract.StoreCheckoutStatusCapabilityId,
+            AgentLocalContract.StoreCheckoutStatusContractVersion,
+            "FOUND",
+            request.CorrelationId,
+            gift ? "order-gift-cert" : "order-self-cert",
+            gift ? "BKE-2026-GIFT-CERT" : "BKE-2026-SELF-CERT",
+            "FULFILLED",
+            gift ? "CLAIM_CODE" : "ACCOUNT_ENTITLEMENT",
+            "SETTLED",
+            null,
+            "2026-09-28T12:00:00Z",
+            null));
+    }
+
+    public Task<StoreGiftClaimRevealResponse> RevealStoreGiftClaimCodeAsync(
+        StoreGiftClaimRevealRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new StoreGiftClaimRevealResponse(
+            AgentLocalContract.StoreGiftClaimRevealCapabilityId,
+            AgentLocalContract.StoreGiftClaimRevealContractVersion,
+            "AVAILABLE",
+            request.CorrelationId,
+            "order-gift-cert",
+            "claim-cert",
+            GiftClaimCode,
+            null));
+    }
+
+    public Task<ClaimCodeRedeemResponse> RedeemClaimCodeAsync(
+        ClaimCodeRedeemRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RedeemCount++;
+
+        if (!string.Equals(request.Code, GiftClaimCode, StringComparison.Ordinal))
+        {
+            return Task.FromResult(new ClaimCodeRedeemResponse(
+                AgentLocalContract.ClaimCodeRedemptionCapabilityId,
+                AgentLocalContract.ClaimCodeRedemptionContractVersion,
+                "NOT_FOUND",
+                null,
+                null,
+                new ClaimCodeRedeemError(
+                    "NOT_FOUND",
+                    "Claim Code not found.",
+                    false)));
+        }
+
+        _catalog.Owned = true;
+        return Task.FromResult(new ClaimCodeRedeemResponse(
+            AgentLocalContract.ClaimCodeRedemptionCapabilityId,
+            AgentLocalContract.ClaimCodeRedemptionContractVersion,
+            "CLAIMED",
+            AccountId,
+            "entitlement-cert",
+            null));
+    }
+
+    public Task<PlatformAuthorityResponse> GetPlatformAuthorityAsync(
+        PlatformAuthorityRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountSessionDeviceContextResponse> GetAccountSessionDeviceContextAsync(
+        AccountSessionDeviceContextRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountSessionCompleteResponse> CompleteAccountSessionAsync(
+        AccountSessionCompleteRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountSessionStartResponse> StartAccountSessionAsync(
+        AccountSessionStartRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountSessionLogoutResponse> LogoutAccountSessionAsync(
+        AccountSessionLogoutRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
+        AccountNotificationFeedRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountNotificationReceiptResponse> MutateAccountNotificationAsync(
+        AccountNotificationReceiptRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
+        SoftwareCatalogRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareInstallResponse> InstallSoftwareAsync(
+        SoftwareInstallRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareUpdateResponse> UpdateSoftwareAsync(
+        SoftwareUpdateRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareRepairResponse> RepairSoftwareAsync(
+        SoftwareRepairRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareOpenResponse> OpenSoftwareAsync(
+        SoftwareOpenRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<SoftwareRemoveResponse> RemoveSoftwareAsync(
+        SoftwareRemoveRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+}
+
