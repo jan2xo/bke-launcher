@@ -1150,6 +1150,7 @@ Console.WriteLine("Agent-mediated selected-account Notifications presentation bo
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
 Console.WriteLine("Agent-owned Store checkout-review presentation boundary certified");
+Console.WriteLine("Customer acquisition -> entitlement -> My Software composition certified");
 Console.WriteLine("Agent-owned platform authority for native login and Legal navigation certified");
 Console.WriteLine("Native Launcher credential -> Agent-owned authority -> DS -> one-time Agent handoff boundary certified");
 Console.WriteLine("Agent-owned software catalog boundary certified");
