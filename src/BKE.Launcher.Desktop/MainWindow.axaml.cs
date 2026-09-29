@@ -159,6 +159,14 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void UpdateAccountOrganizationProfile(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.UpdateAccountOrganizationProfileAsync(
+            CancellationToken.None);
+    }
+
     private async void RefreshAccountPrivacy(
         object? sender,
         RoutedEventArgs args)
