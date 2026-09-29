@@ -1713,10 +1713,65 @@ Require(removeTimeout == TimeSpan.FromMinutes(10),
 Require(removeTimeout > defaultTimeout,
     "Launcher remove operation does not have a dedicated long-running timeout.");
 
+var accountSwitchViewModelSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
+Require(
+    accountSwitchViewModelSource.Contains(
+        "public async Task SwitchAccountAsync(",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "await LogoutAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "Launcher account switching does not revoke/clear the Agent-owned session first.");
+Require(
+    accountSwitchViewModelSource.Contains(
+        "var preservedEmail = _authenticatedAccountEmail;",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "Password = string.Empty;",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "ClearNativeMfaState();",
+        StringComparison.Ordinal),
+    "Launcher account switching retained credential/MFA material or failed to preserve only email.");
+Require(
+    accountSwitchViewModelSource.Contains(
+        "if (_purchaseAttemptLocked)",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "Resolve the existing checkout attempt before switching accounts.",
+        StringComparison.Ordinal),
+    "Launcher account switching does not respect checkout-recovery account binding.");
+Require(
+    !accountSwitchViewModelSource.Contains(
+        "/api/agent-sessions/",
+        StringComparison.OrdinalIgnoreCase) &&
+    !accountSwitchViewModelSource.Contains(
+        "customer_account_id",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher account switching absorbed cloud/session mutation authority.");
+Require(
+    mainWindowMarkup.Contains(
+        "Content="Switch BKE account"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled="{Binding CanSwitchAccount}"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click="SwitchAccount"",
+        StringComparison.Ordinal),
+    "Launcher safe account-switch desktop action is missing.");
+Require(
+    mainWindowSource.Contains(
+        "SwitchAccount",
+        StringComparison.Ordinal),
+    "Launcher safe account-switch desktop handler is missing.");
+
 await CertifyNativePasswordResetRequestAsync();
 await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
+await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
@@ -1725,6 +1780,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
+Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
@@ -2041,6 +2097,100 @@ static async Task CertifyAccountPrivacySettingsAsync()
             viewModel.AccountPrivacyRequests.Count == 0 &&
             viewModel.AccountPrivacyRequestTypes.Count == 0,
         "Launcher retained privacy state after Agent session invalidation.");
+}
+
+static async Task CertifySafeAccountSwitchingAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+
+    Require(
+        viewModel.IsAuthenticated &&
+        viewModel.AccountTypeLabel == "Personal account" &&
+        viewModel.CanSwitchAccount,
+        "Safe account switching did not begin from an authenticated Personal account.");
+
+    await viewModel.RefreshAccountPrivacyAsync(CancellationToken.None);
+    Require(
+        viewModel.AccountPrivacyRequestTypes.Count > 0,
+        "Account-switch certification did not load account-scoped presentation state.");
+
+    viewModel.Email = "form-state-must-not-win@example.test";
+    viewModel.Password = "credential-must-clear";
+
+    await viewModel.SwitchAccountAsync(CancellationToken.None);
+
+    Require(
+        agent.LogoutCount == 1 &&
+        !agent.Authenticated &&
+        viewModel.SessionStatus == "SIGNED_OUT" &&
+        viewModel.ShowLoginPage &&
+        !viewModel.ShowAuthenticatedShell,
+        "Safe account switching did not clear the current Agent session exactly once.");
+    Require(
+        viewModel.Email == "customer@example.test" &&
+        string.IsNullOrEmpty(viewModel.Password) &&
+        string.IsNullOrEmpty(viewModel.NativeMfaCode) &&
+        string.IsNullOrEmpty(viewModel.AccountTypeLabel),
+        "Safe account switching preserved more than the authenticated account email.");
+    Require(
+        viewModel.AccountPrivacyRequestTypes.Count == 0 &&
+        viewModel.AccountPrivacyRequests.Count == 0,
+        "Safe account switching retained account-scoped privacy presentation state.");
+    Require(
+        viewModel.Message.Contains(
+            "fresh",
+            StringComparison.OrdinalIgnoreCase) ||
+        viewModel.Message.Contains(
+            "password",
+            StringComparison.OrdinalIgnoreCase),
+        "Safe account switching did not tell the customer to authenticate again.");
+
+    var lockedCatalog = new CustomerJourneyCatalogSource();
+    var lockedAgent = new CustomerJourneyAgentClient(lockedCatalog);
+    var recovery = new CustomerJourneyRecoveryStore();
+    var navigator = new CustomerJourneyNavigator();
+    var lockedViewModel = BuildCustomerJourneyViewModel(
+        lockedAgent,
+        lockedCatalog,
+        recovery,
+        navigator);
+
+    await lockedViewModel.InitializeAsync(CancellationToken.None);
+    await lockedViewModel.OpenModuleAsync(2, CancellationToken.None);
+    await lockedViewModel.ReviewPurchaseAsync(
+        CustomerJourneyAgentClient.PurchasePlanId,
+        CancellationToken.None);
+    foreach (var document in lockedViewModel.PurchaseLegalDocuments)
+    {
+        document.IsAccepted = true;
+    }
+    await lockedViewModel.StartPurchaseAsync(
+        "SELF",
+        CancellationToken.None);
+
+    Require(
+        recovery.State is not null &&
+        !lockedViewModel.CanSwitchAccount,
+        "Checkout recovery did not lock account switching to the current identity/account.");
+
+    await lockedViewModel.SwitchAccountAsync(CancellationToken.None);
+
+    Require(
+        lockedAgent.LogoutCount == 0 &&
+        lockedAgent.Authenticated &&
+        lockedViewModel.IsAuthenticated &&
+        lockedViewModel.Message.Contains(
+            "Resolve the existing checkout attempt",
+            StringComparison.Ordinal),
+        "Launcher allowed account switching while checkout recovery was bound to the current account.");
 }
 
 static async Task CertifyCustomerAcquisitionToMySoftwareAsync()
@@ -2418,6 +2568,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     }
 
     public int CheckoutStartCount { get; private set; }
+    public int LogoutCount { get; private set; }
     public int RedeemCount { get; private set; }
     public int PasswordChangeCount { get; private set; }
     public int PrivacyListCount { get; private set; }
@@ -2690,8 +2841,17 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public Task<AccountSessionLogoutResponse> LogoutAccountSessionAsync(
         AccountSessionLogoutRequest request,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LogoutCount++;
+        Authenticated = false;
+        return Task.FromResult(new AccountSessionLogoutResponse(
+            AgentLocalContract.CapabilityId,
+            AgentLocalContract.ContractVersion,
+            "SIGNED_OUT",
+            null));
+    }
 
     public Task<AccountPasswordChangeResponse> ChangeAccountPasswordAsync(
         AccountPasswordChangeRequest request,
