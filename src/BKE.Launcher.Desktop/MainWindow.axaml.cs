@@ -31,9 +31,14 @@ public sealed partial class MainWindow : Window
         await ViewModel.InitializeAsync(CancellationToken.None);
     }
 
-    private void OpenAccount(object? sender, RoutedEventArgs args)
+    private async void OpenAccount(object? sender, RoutedEventArgs args)
     {
         ViewModel.OpenAccountSurface();
+        if (ViewModel.ShowOrganizationSection)
+        {
+            await ViewModel.RefreshAccountOrganizationAsync(
+                CancellationToken.None);
+        }
     }
 
     private async void ModuleChanged(object? sender, SelectionChangedEventArgs args)
@@ -136,6 +141,14 @@ public sealed partial class MainWindow : Window
     private async void RegenerateMfaRecovery(object? sender, RoutedEventArgs args)
     {
         await ViewModel.RegenerateMfaRecoveryAsync(CancellationToken.None);
+    }
+
+    private async void RefreshAccountOrganization(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RefreshAccountOrganizationAsync(
+            CancellationToken.None);
     }
 
     private async void RefreshAccountPrivacy(
