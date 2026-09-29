@@ -86,6 +86,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _accountOrganizationStatus = "UNKNOWN";
     private string _accountOrganizationMessage =
         "Refresh organization details to load the Agent-authoritative selected-account overview.";
+    private string _organizationCreateStatus = "IDLE";
+    private string _organizationCreateMessage =
+        "Create a BKE Organization, then switch accounts to select it.";
+    private string _organizationCreateDisplayName = string.Empty;
+    private string _organizationCreateLegalName = string.Empty;
+    private string _organizationCreateBillingEmail = string.Empty;
+    private string _organizationCreateRegistrationNumber = string.Empty;
+    private string _organizationCreateTaxId = string.Empty;
+    private bool _organizationCreateRetryBlocked;
     private AccountOrganizationAccount? _organizationAccount;
     private AccountOrganizationPermissions? _organizationPermissions;
     private AccountOrganizationProfile? _organizationProfile;
@@ -586,6 +595,94 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _accountOrganizationMessage, value);
     }
 
+    public string OrganizationCreateStatus
+    {
+        get => _organizationCreateStatus;
+        private set
+        {
+            SetField(ref _organizationCreateStatus, value);
+            Raise(nameof(CanCreateOrganization));
+        }
+    }
+
+    public string OrganizationCreateMessage
+    {
+        get => _organizationCreateMessage;
+        private set => SetField(ref _organizationCreateMessage, value);
+    }
+
+    public string OrganizationCreateDisplayName
+    {
+        get => _organizationCreateDisplayName;
+        set
+        {
+            SetField(ref _organizationCreateDisplayName, value);
+            Raise(nameof(CanCreateOrganization));
+        }
+    }
+
+    public string OrganizationCreateLegalName
+    {
+        get => _organizationCreateLegalName;
+        set
+        {
+            SetField(ref _organizationCreateLegalName, value);
+            Raise(nameof(CanCreateOrganization));
+        }
+    }
+
+    public string OrganizationCreateBillingEmail
+    {
+        get => _organizationCreateBillingEmail;
+        set
+        {
+            SetField(ref _organizationCreateBillingEmail, value);
+            Raise(nameof(CanCreateOrganization));
+        }
+    }
+
+    public string OrganizationCreateRegistrationNumber
+    {
+        get => _organizationCreateRegistrationNumber;
+        set
+        {
+            SetField(ref _organizationCreateRegistrationNumber, value);
+            Raise(nameof(CanCreateOrganization));
+        }
+    }
+
+    public string OrganizationCreateTaxId
+    {
+        get => _organizationCreateTaxId;
+        set
+        {
+            SetField(ref _organizationCreateTaxId, value);
+            Raise(nameof(CanCreateOrganization));
+        }
+    }
+
+    public bool ShowOrganizationCreateSection => IsAuthenticated;
+
+    public bool CanCreateOrganization =>
+        ShowOrganizationCreateSection &&
+        OrganizationCreateStatus != "CREATING" &&
+        !_organizationCreateRetryBlocked &&
+        ValidOrganizationCreateText(
+            OrganizationCreateDisplayName,
+            2,
+            120) &&
+        ValidOrganizationCreateText(
+            OrganizationCreateLegalName,
+            2,
+            180) &&
+        ValidOrganizationCreateEmail(
+            OrganizationCreateBillingEmail) &&
+        OrganizationCreateRegistrationNumber.Trim().Length <= 80 &&
+        OrganizationCreateTaxId.Trim().Length <= 80;
+
+    public bool OrganizationCreateRetryBlocked =>
+        _organizationCreateRetryBlocked;
+
     public bool ShowOrganizationSection =>
         IsAuthenticated &&
         _authenticatedAccountType == "ORGANIZATION" &&
@@ -1030,6 +1127,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         SelectedModuleIndex = -1;
         ShowAccountSurface = true;
+        if (string.IsNullOrWhiteSpace(
+                OrganizationCreateBillingEmail) &&
+            !string.IsNullOrWhiteSpace(_authenticatedAccountEmail))
+        {
+            OrganizationCreateBillingEmail =
+                _authenticatedAccountEmail;
+        }
     }
 
     public async Task OpenModuleAsync(
@@ -3087,6 +3191,100 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
 
+    public async Task CreateAccountOrganizationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            OrganizationCreateStatus = "AUTH_REQUIRED";
+            OrganizationCreateMessage =
+                "Sign in with BKE before creating an organization.";
+            return;
+        }
+
+        if (!CanCreateOrganization)
+        {
+            if (_organizationCreateRetryBlocked)
+            {
+                OrganizationCreateStatus = "OUTCOME_UNKNOWN";
+                OrganizationCreateMessage =
+                    "The previous creation result is uncertain. Use Switch BKE account and check the available accounts before attempting another organization.";
+                return;
+            }
+
+            OrganizationCreateStatus = "INVALID_INPUT";
+            OrganizationCreateMessage =
+                "Enter a 2–120 character display name, 2–180 character legal name, valid billing email, and optional registration/tax values of 80 characters or fewer.";
+            return;
+        }
+
+        OrganizationCreateStatus = "CREATING";
+        OrganizationCreateMessage =
+            "Creating the organization through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.CreateAsync(
+                OrganizationCreateDisplayName,
+                OrganizationCreateLegalName,
+                OrganizationCreateBillingEmail,
+                OrganizationCreateRegistrationNumber,
+                OrganizationCreateTaxId,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountOrganizationReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "CREATED")
+            {
+                var displayName =
+                    response.DisplayName ??
+                    OrganizationCreateDisplayName.Trim();
+                ClearOrganizationCreateFields();
+                OrganizationCreateStatus = "CREATED";
+                OrganizationCreateMessage =
+                    $"{displayName} was created. Use Switch BKE account to select the new Organization; the current account was not changed automatically.";
+                return;
+            }
+
+            if (response.Status == "OUTCOME_UNKNOWN")
+            {
+                _organizationCreateRetryBlocked = true;
+                OrganizationCreateStatus = "OUTCOME_UNKNOWN";
+                OrganizationCreateMessage =
+                    response.Error?.Message ??
+                    "The creation result could not be confirmed. Use Switch BKE account and check the available accounts before retrying.";
+                RaiseAccountOrganizationCapabilities();
+                return;
+            }
+
+            OrganizationCreateStatus = response.Status;
+            OrganizationCreateMessage =
+                response.Error?.Message ??
+                "The organization was not created.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            _organizationCreateRetryBlocked = true;
+            OrganizationCreateStatus = "OUTCOME_UNKNOWN";
+            OrganizationCreateMessage =
+                "The creation result could not be confirmed. Use Switch BKE account and check the available accounts before retrying; BKE will not blindly resubmit this request.";
+            RaiseAccountOrganizationCapabilities();
+        }
+        catch (ArgumentException error)
+        {
+            OrganizationCreateStatus = "INVALID_INPUT";
+            OrganizationCreateMessage = error.Message;
+        }
+    }
+
     public async Task RefreshAccountOrganizationAsync(
         CancellationToken cancellationToken)
     {
@@ -3715,6 +3913,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ResetAccountOrganizationState()
     {
+        ClearOrganizationCreateFields();
+        _organizationCreateRetryBlocked = false;
+        OrganizationCreateStatus = "IDLE";
+        OrganizationCreateMessage =
+            "Create a BKE Organization, then switch accounts to select it.";
         _organizationAccount = null;
         _organizationPermissions = null;
         _organizationProfile = null;
@@ -3728,6 +3931,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Refresh organization details to load the Agent-authoritative selected-account overview.";
         RaiseAccountOrganizationCapabilities();
     }
+
+    private void ClearOrganizationCreateFields()
+    {
+        OrganizationCreateDisplayName = string.Empty;
+        OrganizationCreateLegalName = string.Empty;
+        OrganizationCreateBillingEmail = string.Empty;
+        OrganizationCreateRegistrationNumber = string.Empty;
+        OrganizationCreateTaxId = string.Empty;
+    }
+
+    private static bool ValidOrganizationCreateText(
+        string? value,
+        int minimum,
+        int maximum) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Trim().Length >= minimum &&
+        value.Trim().Length <= maximum &&
+        value.All(character => character >= 32);
+
+    private static bool ValidOrganizationCreateEmail(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length <= 320 &&
+        System.Net.Mail.MailAddress.TryCreate(
+            value.Trim(),
+            out var parsed) &&
+        string.Equals(
+            parsed.Address,
+            value.Trim(),
+            StringComparison.OrdinalIgnoreCase);
 
     private void ClearAccountOrganization(
         string status,
@@ -3756,6 +3988,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void RaiseAccountOrganizationCapabilities()
     {
+        Raise(nameof(ShowOrganizationCreateSection));
+        Raise(nameof(CanCreateOrganization));
+        Raise(nameof(OrganizationCreateRetryBlocked));
         Raise(nameof(ShowOrganizationSection));
         Raise(nameof(CanRefreshAccountOrganization));
         Raise(nameof(OrganizationReady));
