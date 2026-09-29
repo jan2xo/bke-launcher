@@ -97,6 +97,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<AccountPasswordChangeResponse> ChangeAccountPasswordAsync(
+        AccountPasswordChangeRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountPasswordChangeRequest, AccountPasswordChangeResponse>(
+            AgentLocalContract.AccountPasswordChangePath,
+            request,
+            cancellationToken);
+
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,
         CancellationToken cancellationToken) =>
