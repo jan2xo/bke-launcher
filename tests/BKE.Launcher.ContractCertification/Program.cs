@@ -764,20 +764,20 @@ Require(mainWindowMarkup.Contains(
         StringComparison.Ordinal),
     "Launcher Create Account UX lacks registration/verification actions.");
 
-var viewModelSource = File.ReadAllText(
+var registrationViewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
-Require(viewModelSource.Contains(
+Require(registrationViewModelSource.Contains(
         "finally\n        {\n            RegistrationPassword = string.Empty;",
         StringComparison.Ordinal),
     "Launcher registration UX does not clear the transient password after registration.");
-Require(viewModelSource.Contains(
+Require(registrationViewModelSource.Contains(
         "var code = RegistrationCode;\n        RegistrationCode = string.Empty;",
         StringComparison.Ordinal),
     "Launcher registration UX does not clear the transient verification code before submission.");
-Require(viewModelSource.Contains(
+Require(registrationViewModelSource.Contains(
         "Email = verifiedEmail;",
         StringComparison.Ordinal) &&
-    viewModelSource.Contains(
+    registrationViewModelSource.Contains(
         "_showRegistration = false;",
         StringComparison.Ordinal),
     "Launcher verified-registration UX does not return to the normal sign-in surface.");
