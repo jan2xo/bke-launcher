@@ -87,6 +87,7 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountPrivacyItem).GetProperties())
     .Concat(typeof(AccountPrivacyError).GetProperties())
     .Concat(typeof(AccountOrganizationOverviewResponse).GetProperties())
+    .Concat(typeof(AccountOrganizationCreateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationAccount).GetProperties())
     .Concat(typeof(AccountOrganizationPermissions).GetProperties())
     .Concat(typeof(AccountOrganizationProfile).GetProperties())
@@ -161,6 +162,7 @@ Require(agentMethods.SetEquals([
     "GetAccountPrivacyRequestsAsync",
     "CreateAccountPrivacyRequestAsync",
     "GetAccountOrganizationAsync",
+    "CreateAccountOrganizationAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -326,12 +328,14 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "726a8d6a96c731c9ce58742e51618f56926df52a",
-    "Launcher is not pinned to the merged Agent organization authority.");
+        "283487c4a4ec4c23f5623c020eca02ea7b11d083",
+    "Launcher is not pinned to the merged Agent organization-create authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
         "/v1/account/organization" &&
+    AgentLocalContract.AccountOrganizationCreatePath ==
+        "/v1/account/organization/create" &&
     AgentLocalContract.AccountOrganizationCapabilityId ==
         "bke.account-organization" &&
     AgentLocalContract.AccountOrganizationContractVersion == 1,
@@ -344,9 +348,50 @@ Require(
         .SequenceEqual(["CorrelationId"]),
     "Launcher widened the Agent organization request.");
 
+Require(
+    typeof(AccountOrganizationCreateRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "DisplayName",
+            "LegalName",
+            "BillingEmail",
+            "RegistrationNumber",
+            "TaxId"
+        ]),
+    "Launcher widened the Agent organization-create request.");
+
+using (var organizationCreateDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationCreateRequest(
+            "organization-create-cert",
+            "Certification Org",
+            "Certification Organization Legal",
+            "billing@example.test",
+            "REG-001",
+            "TAX-001"))))
+{
+    var fields = organizationCreateDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "display_name",
+            "legal_name",
+            "billing_email",
+            "registration_number",
+            "tax_id"
+        ]),
+        "Launcher organization-create wire request drifted.");
+}
+
 foreach (var type in new[]
 {
     typeof(AccountOrganizationOverviewResponse),
+    typeof(AccountOrganizationCreateResponse),
     typeof(AccountOrganizationAccount),
     typeof(AccountOrganizationMember),
     typeof(AccountOrganizationInvitation),
@@ -397,6 +442,9 @@ Require(
         StringComparison.OrdinalIgnoreCase) &&
     organizationClientSource.Contains(
         "AgentLocalContract.AccountOrganizationOverviewPath",
+        StringComparison.Ordinal) &&
+    organizationClientSource.Contains(
+        "AgentLocalContract.AccountOrganizationCreatePath",
         StringComparison.Ordinal),
     "Launcher bypassed the local Agent organization authority.");
 
@@ -958,6 +1006,23 @@ Require(
         "RefreshAccountOrganizationAsync",
         StringComparison.Ordinal),
     "Launcher organization Account surface is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationCreateSection}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding OrganizationCreateDisplayName, Mode=TwoWay}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanCreateOrganization}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"CreateAccountOrganization\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "CreateAccountOrganizationAsync",
+        StringComparison.Ordinal),
+    "Launcher organization-create Account surface is missing.");
 Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
     "Launcher does not resolve Agent-owned authentication state on startup.");
 Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
@@ -1878,7 +1943,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
-Console.WriteLine("Agent-mediated read-only Organization Overview presentation certified");
+Console.WriteLine("Agent-mediated Organization Overview and duplicate-safe Create Organization presentation certified");
 Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
@@ -2200,6 +2265,126 @@ static async Task CertifyAccountPrivacySettingsAsync()
 
 static async Task CertifyAccountOrganizationSettingsAsync()
 {
+    var createCatalog = new CustomerJourneyCatalogSource();
+    var createAgent = new CustomerJourneyAgentClient(createCatalog);
+    var createViewModel = BuildCustomerJourneyViewModel(
+        createAgent,
+        createCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await createViewModel.InitializeAsync(CancellationToken.None);
+    createViewModel.OpenAccountSurface();
+
+    Require(
+        createViewModel.IsAuthenticated &&
+        createViewModel.AccountTypeLabel == "Personal account" &&
+        createViewModel.ShowOrganizationCreateSection &&
+        createViewModel.OrganizationCreateBillingEmail ==
+            "customer@example.test",
+        "Organization creation certification did not begin from the authenticated Personal account.");
+
+    createViewModel.OrganizationCreateDisplayName =
+        "Created Certification Org";
+    createViewModel.OrganizationCreateLegalName =
+        "Created Certification Organization Legal";
+    createViewModel.OrganizationCreateRegistrationNumber =
+        "REG-CREATE";
+    createViewModel.OrganizationCreateTaxId = "TAX-CREATE";
+
+    Require(
+        createViewModel.CanCreateOrganization,
+        "Launcher did not enable valid organization creation input.");
+
+    createAgent.OrganizationCreateOutcome =
+        "EMAIL_NOT_VERIFIED";
+    await createViewModel.CreateAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        createViewModel.IsAuthenticated &&
+        createViewModel.OrganizationCreateStatus ==
+            "EMAIL_NOT_VERIFIED" &&
+        createViewModel.OrganizationCreateDisplayName ==
+            "Created Certification Org",
+        "EMAIL_NOT_VERIFIED incorrectly destroyed organization creation state or session.");
+
+    createAgent.OrganizationCreateOutcome =
+        "LEGAL_REACCEPTANCE_REQUIRED";
+    await createViewModel.CreateAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        createViewModel.IsAuthenticated &&
+        createViewModel.OrganizationCreateStatus ==
+            "LEGAL_REACCEPTANCE_REQUIRED" &&
+        createViewModel.OrganizationCreateDisplayName ==
+            "Created Certification Org",
+        "LEGAL_REACCEPTANCE_REQUIRED incorrectly destroyed organization creation state or session.");
+
+    createAgent.OrganizationCreateOutcome = "CREATED";
+    await createViewModel.CreateAccountOrganizationAsync(
+        CancellationToken.None);
+
+    Require(
+        createAgent.OrganizationCreateCount == 3 &&
+        createAgent.LastOrganizationCreateRequest is not null &&
+        createAgent.LastOrganizationCreateRequest.DisplayName ==
+            "Created Certification Org" &&
+        createAgent.LastOrganizationCreateRequest.LegalName ==
+            "Created Certification Organization Legal" &&
+        createAgent.LastOrganizationCreateRequest.BillingEmail ==
+            "customer@example.test" &&
+        createAgent.LastOrganizationCreateRequest.RegistrationNumber ==
+            "REG-CREATE" &&
+        createAgent.LastOrganizationCreateRequest.TaxId ==
+            "TAX-CREATE" &&
+        createViewModel.OrganizationCreateStatus == "CREATED" &&
+        !createViewModel.OrganizationCreateRetryBlocked &&
+        string.IsNullOrEmpty(
+            createViewModel.OrganizationCreateDisplayName) &&
+        createViewModel.AccountTypeLabel == "Personal account" &&
+        createViewModel.OrganizationCreateMessage.Contains(
+            "Switch BKE account",
+            StringComparison.Ordinal),
+        "Launcher organization creation did not preserve explicit account switching or clear transient form state.");
+
+    createViewModel.OpenAccountSurface();
+    createViewModel.OrganizationCreateDisplayName =
+        "Ambiguous Certification Org";
+    createViewModel.OrganizationCreateLegalName =
+        "Ambiguous Certification Organization Legal";
+    createAgent.OrganizationCreateOutcomeUnknown = true;
+
+    await createViewModel.CreateAccountOrganizationAsync(
+        CancellationToken.None);
+
+    Require(
+        createAgent.OrganizationCreateCount == 4 &&
+        createViewModel.OrganizationCreateStatus ==
+            "OUTCOME_UNKNOWN" &&
+        createViewModel.OrganizationCreateRetryBlocked &&
+        !createViewModel.CanCreateOrganization &&
+        createViewModel.OrganizationCreateMessage.Contains(
+            "could not be confirmed",
+            StringComparison.OrdinalIgnoreCase),
+        "Launcher ambiguous organization creation remained replayable.");
+
+    await createViewModel.CreateAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        createAgent.OrganizationCreateCount == 4,
+        "Launcher blindly replayed an ambiguous organization creation.");
+
+    await createViewModel.SwitchAccountAsync(
+        CancellationToken.None);
+    Require(
+        createViewModel.SessionStatus == "SIGNED_OUT" &&
+        !createViewModel.OrganizationCreateRetryBlocked &&
+        string.IsNullOrEmpty(
+            createViewModel.OrganizationCreateDisplayName) &&
+        string.IsNullOrEmpty(
+            createViewModel.OrganizationCreateBillingEmail),
+        "Safe account switching retained organization-create mutation state.");
+
     var ownerCatalog = new CustomerJourneyCatalogSource();
     var ownerAgent = new CustomerJourneyAgentClient(ownerCatalog)
     {
@@ -2809,12 +2994,18 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
     public int OrganizationReadCount { get; private set; }
+    public int OrganizationCreateCount { get; private set; }
     public int PlatformAuthorityCount { get; private set; }
     public bool Authenticated { get; set; } = true;
     public string AccountType { get; set; } = "INDIVIDUAL";
     public string OrganizationRole { get; set; } = "OWNER";
     public string OrganizationDisplayName { get; set; } =
         "Certification Organization";
+    public string OrganizationCreateOutcome { get; set; } =
+        "CREATED";
+    public bool OrganizationCreateOutcomeUnknown { get; set; }
+    public AccountOrganizationCreateRequest? LastOrganizationCreateRequest
+        { get; private set; }
     public bool PrivacyCreateOutcomeUnknown { get; set; }
     private readonly List<AccountPrivacyItem> _privacyRequests = [];
     public string PasswordChangeOutcome { get; set; } = "CHANGED";
@@ -3355,6 +3546,79 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 }
                 : Array.Empty<AccountOrganizationInvitation>(),
             null));
+    }
+
+    public Task<AccountOrganizationCreateResponse> CreateAccountOrganizationAsync(
+        AccountOrganizationCreateRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OrganizationCreateCount++;
+        LastOrganizationCreateRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountOrganizationCreateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    false,
+                    new AccountOrganizationError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (OrganizationCreateOutcomeUnknown)
+        {
+            OrganizationCreateOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountOrganizationCreateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    null,
+                    false,
+                    new AccountOrganizationError(
+                        "ORGANIZATION_CREATE_OUTCOME_UNKNOWN",
+                        "The creation result could not be confirmed.",
+                        false)));
+        }
+
+        if (OrganizationCreateOutcome != "CREATED")
+        {
+            var message = OrganizationCreateOutcome switch
+            {
+                "EMAIL_NOT_VERIFIED" =>
+                    "Verify your BKE email before creating an organization.",
+                "LEGAL_REACCEPTANCE_REQUIRED" =>
+                    "Accept the current BKE Legal documents before creating an organization.",
+                _ =>
+                    "The organization was not created.",
+            };
+            return Task.FromResult(
+                new AccountOrganizationCreateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    OrganizationCreateOutcome,
+                    null,
+                    false,
+                    new AccountOrganizationError(
+                        OrganizationCreateOutcome,
+                        message,
+                        false)));
+        }
+
+        return Task.FromResult(
+            new AccountOrganizationCreateResponse(
+                AgentLocalContract.AccountOrganizationCapabilityId,
+                AgentLocalContract.AccountOrganizationContractVersion,
+                "CREATED",
+                request.DisplayName,
+                true,
+                null));
     }
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
