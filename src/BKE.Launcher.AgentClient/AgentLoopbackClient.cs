@@ -11,6 +11,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
     internal static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(5);
     internal static readonly TimeSpan AccountPasswordChangeRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountMfaRequestTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan AccountPrivacyRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RepairRequestTimeout = TimeSpan.FromMinutes(10);
@@ -160,6 +161,24 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AgentLocalContract.AccountMfaRecoveryRegeneratePath,
             request,
             AccountMfaRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountPrivacyListResponse> GetAccountPrivacyRequestsAsync(
+        AccountPrivacyListRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountPrivacyListRequest, AccountPrivacyListResponse>(
+            AgentLocalContract.AccountPrivacyListPath,
+            request,
+            AccountPrivacyRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountPrivacyCreateResponse> CreateAccountPrivacyRequestAsync(
+        AccountPrivacyCreateRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountPrivacyCreateRequest, AccountPrivacyCreateResponse>(
+            AgentLocalContract.AccountPrivacyCreatePath,
+            request,
+            AccountPrivacyRequestTimeout,
             cancellationToken);
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(

@@ -56,6 +56,14 @@ public interface ILauncherAgentClient
         AccountMfaMutationRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountPrivacyListResponse> GetAccountPrivacyRequestsAsync(
+        AccountPrivacyListRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountPrivacyCreateResponse> CreateAccountPrivacyRequestAsync(
+        AccountPrivacyCreateRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,
         CancellationToken cancellationToken);
