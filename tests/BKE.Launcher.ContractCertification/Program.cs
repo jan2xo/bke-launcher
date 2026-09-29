@@ -1168,6 +1168,9 @@ Require(AgentLocalContract.AccountNotificationInboxContractVersion == 1,
 var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
     "DefaultRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
+var passwordChangeTimeoutField = typeof(AgentLoopbackClient).GetField(
+    "AccountPasswordChangeRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
 var installTimeoutField = typeof(AgentLoopbackClient).GetField(
     "InstallRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
@@ -1181,12 +1184,15 @@ var removeTimeoutField = typeof(AgentLoopbackClient).GetField(
     "RemoveRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
 var defaultTimeoutValue = defaultTimeoutField?.GetValue(null);
+var passwordChangeTimeoutValue = passwordChangeTimeoutField?.GetValue(null);
 var installTimeoutValue = installTimeoutField?.GetValue(null);
 var updateTimeoutValue = updateTimeoutField?.GetValue(null);
 var repairTimeoutValue = repairTimeoutField?.GetValue(null);
 var removeTimeoutValue = removeTimeoutField?.GetValue(null);
 Require(defaultTimeoutValue is TimeSpan,
     "Launcher default loopback timeout field is unavailable.");
+Require(passwordChangeTimeoutValue is TimeSpan,
+    "Launcher password-change timeout field is unavailable.");
 Require(installTimeoutValue is TimeSpan,
     "Launcher install-operation timeout field is unavailable.");
 Require(updateTimeoutValue is TimeSpan,
@@ -1196,12 +1202,17 @@ Require(repairTimeoutValue is TimeSpan,
 Require(removeTimeoutValue is TimeSpan,
     "Launcher remove-operation timeout field is unavailable.");
 var defaultTimeout = (TimeSpan)defaultTimeoutValue!;
+var passwordChangeTimeout = (TimeSpan)passwordChangeTimeoutValue!;
 var installTimeout = (TimeSpan)installTimeoutValue!;
 var updateTimeout = (TimeSpan)updateTimeoutValue!;
 var repairTimeout = (TimeSpan)repairTimeoutValue!;
 var removeTimeout = (TimeSpan)removeTimeoutValue!;
 Require(defaultTimeout == TimeSpan.FromSeconds(5),
     "Launcher default loopback timeout drifted.");
+Require(passwordChangeTimeout == TimeSpan.FromSeconds(30),
+    "Launcher password-change timeout drifted.");
+Require(passwordChangeTimeout > defaultTimeout,
+    "Launcher password change does not have a dedicated bounded mutation timeout.");
 Require(installTimeout == TimeSpan.FromMinutes(10),
     "Launcher install-operation timeout drifted.");
 Require(installTimeout > defaultTimeout,
