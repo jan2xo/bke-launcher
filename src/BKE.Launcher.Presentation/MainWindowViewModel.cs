@@ -587,7 +587,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
                 Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
-                ResetPasswordChangeState();
                 ResetShellSurface();
                 return;
             }
@@ -604,6 +603,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             InvalidDataException)
         {
             Password = string.Empty;
+            ResetPasswordChangeState();
             SessionStatus = "SIGN_IN_UNAVAILABLE";
             AccountDisplay = "Not signed in";
             Message = "BKE native sign-in is unavailable or returned an invalid response.";
