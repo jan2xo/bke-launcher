@@ -51,6 +51,13 @@ public sealed partial class MainWindow : Window
         await ViewModel.NativeSignInAsync(CancellationToken.None);
     }
 
+    private async void RequestPasswordReset(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RequestPasswordResetAsync(CancellationToken.None);
+    }
+
     private async void RefreshStatus(object? sender, RoutedEventArgs args)
     {
         await ViewModel.RefreshStatusAsync(CancellationToken.None);
