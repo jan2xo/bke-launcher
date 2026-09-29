@@ -58,6 +58,42 @@
                 HorizontalAlignment="Stretch"
                 Click="NativeSignIn" />
 
+        <StackPanel IsVisible="{Binding ShowNativeMfaChallenge}" Spacing="8">
+          <TextBlock Text="Multi-factor verification"
+                     FontWeight="SemiBold" />
+          <TextBlock Text="{Binding NativeMfaMessage}"
+                     Classes="muted"
+                     TextWrapping="Wrap"
+                     TextAlignment="Center" />
+          <TextBlock Text="{Binding NativeMfaReference}"
+                     FontWeight="SemiBold"
+                     TextAlignment="Center" />
+          <TextBox Text="{Binding NativeMfaCode, Mode=TwoWay}"
+                   Watermark="Verification code" />
+          <Button Content="Verify and sign in"
+                  Classes="primary"
+                  IsEnabled="{Binding CanVerifyNativeMfa}"
+                  Click="VerifyNativeMfa" />
+        </StackPanel>
+
+        <Border IsVisible="{Binding HasMfaRecoveryCodes}"
+                Classes="content-card"
+                Padding="12">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Save your recovery codes"
+                       FontWeight="SemiBold" />
+            <TextBlock Text="These codes are shown only from the authoritative MFA operation. Save them somewhere secure before dismissing this message."
+                       Classes="muted"
+                       TextWrapping="Wrap" />
+            <TextBox Text="{Binding AccountMfaRecoveryCodes}"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     MinHeight="100" />
+            <Button Content="I saved these codes"
+                    Click="DismissMfaRecoveryCodes" />
+          </StackPanel>
+        </Border>
+
         <Button Content="Forgot password?"
                 HorizontalAlignment="Stretch"
                 IsEnabled="{Binding CanRequestPasswordReset}"
@@ -128,6 +164,55 @@
               <TextBlock Text="{Binding PasswordChangeMessage}"
                          TextWrapping="Wrap"
                          Opacity="0.72" />
+
+              <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
+
+              <TextBlock Text="Multi-factor authentication"
+                         FontSize="18"
+                         FontWeight="SemiBold" />
+              <TextBlock Text="{Binding AccountMfaSummary}"
+                         FontWeight="SemiBold"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="{Binding AccountMfaMessage}"
+                         TextWrapping="Wrap"
+                         Opacity="0.72" />
+              <Button Content="Refresh MFA status"
+                      Click="RefreshAccountMfa" />
+              <TextBlock Text="Current password"
+                         FontWeight="SemiBold" />
+              <TextBox Text="{Binding AccountMfaCurrentPassword, Mode=TwoWay}"
+                       PasswordChar="●" />
+
+              <StackPanel IsVisible="{Binding ShowMfaEnableActions}" Spacing="8">
+                <Button Content="Enable MFA"
+                        IsEnabled="{Binding CanStartMfaEnrollment}"
+                        Click="StartMfaEnrollment" />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding ShowMfaProtectedActions}" Spacing="8">
+                <Button Content="Verify password for MFA changes"
+                        IsEnabled="{Binding CanStartMfaProof}"
+                        Click="StartMfaProof" />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding HasAccountMfaChallenge}" Spacing="8">
+                <TextBlock Text="{Binding AccountMfaReference}"
+                           FontWeight="SemiBold" />
+                <TextBox Text="{Binding AccountMfaCode, Mode=TwoWay}"
+                         Watermark="Verification code" />
+                <Button Content="Complete MFA enrollment"
+                        IsVisible="{Binding ShowMfaEnrollmentChallenge}"
+                        IsEnabled="{Binding CanCompleteMfaEnrollment}"
+                        Click="CompleteMfaEnrollment" />
+                <StackPanel IsVisible="{Binding ShowMfaProofChallenge}" Spacing="8">
+                  <Button Content="Disable MFA"
+                          IsEnabled="{Binding CanSubmitMfaProof}"
+                          Click="DisableMfa" />
+                  <Button Content="Regenerate recovery codes"
+                          IsEnabled="{Binding CanSubmitMfaProof}"
+                          Click="RegenerateMfaRecovery" />
+                </StackPanel>
+              </StackPanel>
 
               <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
 

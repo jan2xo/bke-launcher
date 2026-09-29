@@ -32,6 +32,30 @@ public interface ILauncherAgentClient
         AccountPasswordChangeRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountMfaStatusResponse> GetAccountMfaStatusAsync(
+        AccountMfaStatusRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountMfaChallengeResponse> StartAccountMfaEnrollmentAsync(
+        AccountMfaEnrollStartRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountMfaMutationResponse> CompleteAccountMfaEnrollmentAsync(
+        AccountMfaEnrollCompleteRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountMfaChallengeResponse> StartAccountMfaProofAsync(
+        AccountMfaProofChallengeRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountMfaMutationResponse> DisableAccountMfaAsync(
+        AccountMfaMutationRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountMfaMutationResponse> RegenerateAccountMfaRecoveryAsync(
+        AccountMfaMutationRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,
         CancellationToken cancellationToken);
@@ -107,6 +131,11 @@ public interface ILauncherIdentityClient
         NativeBkeLoginRequest request,
         CancellationToken cancellationToken);
 
+    Task<NativeBkeMfaVerifyResponse> VerifyMfaAsync(
+        Uri platformBaseAddress,
+        NativeBkeMfaVerifyRequest request,
+        CancellationToken cancellationToken);
+
     Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
         Uri platformBaseAddress,
         NativeBkePasswordResetRequest request,
@@ -118,7 +147,11 @@ public sealed record LauncherNativeSignInResult(
     IReadOnlyList<NativeBkeAccountChoice> Accounts,
     AccountSessionAccount? Account,
     string? ErrorCode,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    string? ChallengeToken = null,
+    string? ExpiresAt = null,
+    bool EmailSent = false,
+    string? MfaReference = null);
 
 
 public interface ILauncherExternalNavigator

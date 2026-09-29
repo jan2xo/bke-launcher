@@ -22,6 +22,15 @@ Require(AgentLocalContract.AccountSessionLogoutPath == "/v1/account-session/logo
 Require(AgentLocalContract.AccountPasswordChangePath == "/v1/account/password-change", "account password-change path drifted");
 Require(AgentLocalContract.AccountPasswordChangeCapabilityId == "bke.account-password-change", "account password-change capability id drifted");
 Require(AgentLocalContract.AccountPasswordChangeContractVersion == 1, "account password-change contract version drifted");
+Require(AgentLocalContract.AccountMfaStatusPath == "/v1/account/mfa/status", "account MFA status path drifted");
+Require(AgentLocalContract.AccountMfaEnrollStartPath == "/v1/account/mfa/enroll/start", "account MFA enroll-start path drifted");
+Require(AgentLocalContract.AccountMfaEnrollCompletePath == "/v1/account/mfa/enroll/complete", "account MFA enroll-complete path drifted");
+Require(AgentLocalContract.AccountMfaChallengePath == "/v1/account/mfa/challenge", "account MFA challenge path drifted");
+Require(AgentLocalContract.AccountMfaDisablePath == "/v1/account/mfa/disable", "account MFA disable path drifted");
+Require(AgentLocalContract.AccountMfaRecoveryRegeneratePath == "/v1/account/mfa/recovery/regenerate", "account MFA recovery path drifted");
+Require(AgentLocalContract.AccountMfaCapabilityId == "bke.account-mfa", "account MFA capability id drifted");
+Require(AgentLocalContract.AccountMfaContractVersion == 1, "account MFA contract version drifted");
+Require(BkePlatformContract.NativeMfaVerifyPath == "/api/agent-sessions/native/mfa/verify", "native MFA verify path drifted");
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
 Require(AgentLocalContract.SoftwareCatalogCapabilityId == "bke.software-catalog", "software catalog capability id drifted");
 Require(AgentLocalContract.SoftwareCatalogContractVersion == 1, "software catalog contract version drifted");
@@ -65,6 +74,10 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountSessionLogoutResponse).GetProperties())
     .Concat(typeof(AccountPasswordChangeResponse).GetProperties())
     .Concat(typeof(AccountPasswordChangeError).GetProperties())
+    .Concat(typeof(AccountMfaStatusResponse).GetProperties())
+    .Concat(typeof(AccountMfaChallengeResponse).GetProperties())
+    .Concat(typeof(AccountMfaMutationResponse).GetProperties())
+    .Concat(typeof(AccountMfaError).GetProperties())
     .Concat(typeof(SoftwareCatalogResponse).GetProperties())
     .Concat(typeof(SoftwareCatalogItem).GetProperties())
     .Concat(typeof(SoftwareInstallResponse).GetProperties())
@@ -123,6 +136,12 @@ Require(agentMethods.SetEquals([
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
     "ChangeAccountPasswordAsync",
+    "GetAccountMfaStatusAsync",
+    "StartAccountMfaEnrollmentAsync",
+    "CompleteAccountMfaEnrollmentAsync",
+    "StartAccountMfaProofAsync",
+    "DisableAccountMfaAsync",
+    "RegenerateAccountMfaRecoveryAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -205,6 +224,44 @@ Require(
             !property.Name.Contains("CurrentPassword", StringComparison.OrdinalIgnoreCase) &&
             !property.Name.Contains("NewPassword", StringComparison.OrdinalIgnoreCase)),
     "Launcher password-change response reflects credential material.");
+
+
+var accountMfaMutationRequestProperties = typeof(AccountMfaMutationRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    accountMfaMutationRequestProperties.SequenceEqual([
+        "CorrelationId",
+        "CurrentPassword",
+        "ChallengeToken",
+        "Code"
+    ]),
+    "Launcher widened the Agent account MFA mutation request.");
+Require(
+    typeof(AccountMfaMutationResponse)
+        .GetProperties()
+        .All(property =>
+            !property.Name.Contains("Password", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("AccessToken", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("RefreshToken", StringComparison.OrdinalIgnoreCase)),
+    "Launcher account MFA response exposes durable session or password material.");
+
+var nativeMfaVerifyRequestProperties = typeof(NativeBkeMfaVerifyRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    nativeMfaVerifyRequestProperties.SequenceEqual([
+        "ChallengeToken",
+        "Code",
+        "CustomerAccountId",
+        "DeviceId",
+        "DeviceName",
+        "Platform",
+        "Architecture"
+    ]),
+    "Launcher native MFA verification request drifted.");
 
 var claimRequestProperties = typeof(ClaimCodeRedeemRequest)
     .GetProperties()
@@ -770,6 +827,36 @@ Require(!normalizedViewModelSource.Contains(
     "/api/agent-sessions/",
     StringComparison.OrdinalIgnoreCase),
     "Launcher Notifications UX bypasses the Agent loopback boundary.");
+
+Require(normalizedViewModelSource.Contains(
+    "await _nativeSignIn.VerifyMfaAsync(",
+    StringComparison.Ordinal),
+    "Launcher native sign-in UX does not complete customer MFA through the native identity controller.");
+Require(normalizedViewModelSource.Contains(
+    "await _accountMfa.StatusAsync(",
+    StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "_accountMfa.EnrollCompleteAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "_accountMfa.DisableAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "_accountMfa.RegenerateRecoveryAsync(",
+        StringComparison.Ordinal),
+    "Launcher Account Security UX does not delegate MFA authority through the Agent-backed controller.");
+Require(!normalizedViewModelSource.Contains(
+    "/api/agent-sessions/account/mfa",
+    StringComparison.OrdinalIgnoreCase),
+    "Launcher presentation bypasses Agent account-MFA mediation.");
+Require(normalizedViewModelSource.Contains(
+    "AccountMfaRecoveryCodes = string.Empty;",
+    StringComparison.Ordinal),
+    "Launcher lacks explicit in-memory recovery-code clearing.");
+Require(normalizedViewModelSource.Contains(
+    "EnterAccountMfaReauthentication(",
+    StringComparison.Ordinal),
+    "Launcher lacks fail-closed MFA reauthentication handling.");
 
 Require(normalizedViewModelSource.Contains(
     "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
@@ -1709,6 +1796,12 @@ sealed class CustomerJourneyIdentityClient : ILauncherIdentityClient
         throw new NotSupportedException(
             "Native credential login is outside this customer journey certification.");
 
+    public Task<NativeBkeMfaVerifyResponse> VerifyMfaAsync(
+        Uri platformBaseAddress,
+        NativeBkeMfaVerifyRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     public Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
         Uri platformBaseAddress,
         NativeBkePasswordResetRequest request,
@@ -2055,6 +2148,36 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                     false)),
         });
     }
+
+    public Task<AccountMfaStatusResponse> GetAccountMfaStatusAsync(
+        AccountMfaStatusRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountMfaChallengeResponse> StartAccountMfaEnrollmentAsync(
+        AccountMfaEnrollStartRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountMfaMutationResponse> CompleteAccountMfaEnrollmentAsync(
+        AccountMfaEnrollCompleteRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountMfaChallengeResponse> StartAccountMfaProofAsync(
+        AccountMfaProofChallengeRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountMfaMutationResponse> DisableAccountMfaAsync(
+        AccountMfaMutationRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<AccountMfaMutationResponse> RegenerateAccountMfaRecoveryAsync(
+        AccountMfaMutationRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,

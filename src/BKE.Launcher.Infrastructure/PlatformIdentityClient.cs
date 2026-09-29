@@ -46,56 +46,82 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         CancellationToken cancellationToken)
     {
         ValidatePlatformBaseAddress(platformBaseAddress);
-        var endpoint = new Uri(
-            platformBaseAddress,
-            BkePlatformContract.NativeLoginPath);
-
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(DefaultRequestTimeout);
-
-        using var message = new HttpRequestMessage(
-            HttpMethod.Post,
-            endpoint);
-        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        message.Headers.UserAgent.ParseAdd("bke-launcher");
-        message.Headers.TryAddWithoutValidation(
-            "x-bke-account-session-version",
-            BkePlatformContract.AccountSessionProtocolVersion);
-        message.Headers.TryAddWithoutValidation("x-request-id", Guid.NewGuid().ToString("N"));
-        message.Content = JsonContent.Create(request, options: JsonOptions);
-
-        using var response = await _http.SendAsync(
-            message,
-            HttpCompletionOption.ResponseHeadersRead,
-            timeoutSource.Token);
+        using var response = await SendAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativeLoginPath),
+            request,
+            cancellationToken);
 
         if (IsRedirect(response.StatusCode))
         {
-            return Failed("PLATFORM_REDIRECT_REJECTED");
+            return FailedLogin("PLATFORM_REDIRECT_REJECTED");
         }
-
         if (!response.IsSuccessStatusCode)
         {
-            var error = await ReadErrorAsync(response, timeoutSource.Token);
-            return Failed(error);
+            return FailedLogin(await ReadErrorAsync(response, cancellationToken));
         }
 
+        EnsureNativeProtocol(response);
         var result = await response.Content.ReadFromJsonAsync<NativeBkeLoginResponse>(
             JsonOptions,
-            timeoutSource.Token);
+            cancellationToken);
+        if (result is null ||
+            result.Status is not ("account_selection_required" or "handoff_issued" or "mfa_challenge_required"))
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native sign-in response.");
+        }
+
+        if (result.Status == "handoff_issued")
+        {
+            ValidateHandoff(result.HandoffCode);
+        }
+        if (result.Status == "mfa_challenge_required" &&
+            (string.IsNullOrWhiteSpace(result.ChallengeToken) ||
+             result.ChallengeToken.Length is < 16 or > 512 ||
+             string.IsNullOrWhiteSpace(result.ExpiresAt) ||
+             string.IsNullOrWhiteSpace(result.MfaReference)))
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native MFA challenge.");
+        }
+
+        return result;
+    }
+
+    public async Task<NativeBkeMfaVerifyResponse> VerifyMfaAsync(
+        Uri platformBaseAddress,
+        NativeBkeMfaVerifyRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        using var response = await SendAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativeMfaVerifyPath),
+            request,
+            cancellationToken);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedMfa("PLATFORM_REDIRECT_REJECTED");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return FailedMfa(await ReadErrorAsync(response, cancellationToken));
+        }
+
+        EnsureNativeProtocol(response);
+        var result = await response.Content.ReadFromJsonAsync<NativeBkeMfaVerifyResponse>(
+            JsonOptions,
+            cancellationToken);
         if (result is null ||
             result.Status is not ("account_selection_required" or "handoff_issued"))
         {
-            throw new InvalidDataException("Digital Solutions returned an invalid native sign-in response.");
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native MFA verification response.");
         }
-
-        if (result.Status == "handoff_issued" &&
-            (string.IsNullOrWhiteSpace(result.HandoffCode) ||
-             result.HandoffCode.Length is < 32 or > 256))
+        if (result.Status == "handoff_issued")
         {
-            throw new InvalidDataException("Digital Solutions returned an invalid native handoff.");
+            ValidateHandoff(result.HandoffCode);
         }
-
         return result;
     }
 
@@ -105,17 +131,46 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         CancellationToken cancellationToken)
     {
         ValidatePlatformBaseAddress(platformBaseAddress);
-        var endpoint = new Uri(
-            platformBaseAddress,
-            BkePlatformContract.NativePasswordResetRequestPath);
-
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
+        using var response = await SendAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativePasswordResetRequestPath),
+            request,
             cancellationToken);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedReset("PLATFORM_REDIRECT_REJECTED");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return FailedReset(await ReadErrorAsync(response, cancellationToken));
+        }
+
+        EnsureNativeProtocol(response);
+        var result =
+            await response.Content.ReadFromJsonAsync<NativeBkePasswordResetResponse>(
+                JsonOptions,
+                cancellationToken);
+        if (result is null ||
+            result.Status != "accepted" ||
+            result.Error is not null)
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native password-reset response.");
+        }
+
+        return result;
+    }
+
+    private async Task<HttpResponseMessage> SendAsync<TRequest>(
+        Uri endpoint,
+        TRequest request,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutSource =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(DefaultRequestTimeout);
 
-        using var message = new HttpRequestMessage(
-            HttpMethod.Post,
-            endpoint);
+        using var message = new HttpRequestMessage(HttpMethod.Post, endpoint);
         message.Headers.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/json"));
         message.Headers.UserAgent.ParseAdd("bke-launcher");
@@ -127,37 +182,20 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
             Guid.NewGuid().ToString("N"));
         message.Content = JsonContent.Create(request, options: JsonOptions);
 
-        using var response = await _http.SendAsync(
+        return await _http.SendAsync(
             message,
             HttpCompletionOption.ResponseHeadersRead,
             timeoutSource.Token);
+    }
 
-        if (IsRedirect(response.StatusCode))
-        {
-            return FailedReset("PLATFORM_REDIRECT_REJECTED");
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var error = await ReadErrorAsync(response, timeoutSource.Token);
-            return FailedReset(error);
-        }
-
-        EnsureNativeProtocol(response);
-
-        var result =
-            await response.Content.ReadFromJsonAsync<NativeBkePasswordResetResponse>(
-                JsonOptions,
-                timeoutSource.Token);
-        if (result is null ||
-            result.Status != "accepted" ||
-            result.Error is not null)
+    private static void ValidateHandoff(string? handoffCode)
+    {
+        if (string.IsNullOrWhiteSpace(handoffCode) ||
+            handoffCode.Length is < 32 or > 256)
         {
             throw new InvalidDataException(
-                "Digital Solutions returned an invalid native password-reset response.");
+                "Digital Solutions returned an invalid native handoff.");
         }
-
-        return result;
     }
 
     private static void EnsureNativeProtocol(HttpResponseMessage response)
@@ -178,6 +216,12 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
                 "Digital Solutions native protocol version drifted.");
         }
     }
+
+    private static NativeBkeLoginResponse FailedLogin(string error) =>
+        new("failed", Error: error);
+
+    private static NativeBkeMfaVerifyResponse FailedMfa(string error) =>
+        new("failed", Error: error);
 
     private static NativeBkePasswordResetResponse FailedReset(string error) =>
         new("failed", error);
@@ -211,9 +255,6 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
             _ => "NATIVE_LOGIN_FAILED",
         };
     }
-
-    private static NativeBkeLoginResponse Failed(string error) =>
-        new("failed", null, null, null, null, error);
 
     private static void ValidatePlatformBaseAddress(Uri value)
     {

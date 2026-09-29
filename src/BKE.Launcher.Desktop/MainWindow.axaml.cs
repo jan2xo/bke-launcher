@@ -51,6 +51,16 @@ public sealed partial class MainWindow : Window
         await ViewModel.NativeSignInAsync(CancellationToken.None);
     }
 
+    private async void VerifyNativeMfa(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.VerifyNativeMfaAsync(CancellationToken.None);
+    }
+
+    private void DismissMfaRecoveryCodes(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.DismissMfaRecoveryCodes();
+    }
+
     private async void RequestPasswordReset(
         object? sender,
         RoutedEventArgs args)
@@ -66,6 +76,36 @@ public sealed partial class MainWindow : Window
     private async void ChangePassword(object? sender, RoutedEventArgs args)
     {
         await ViewModel.ChangePasswordAsync(CancellationToken.None);
+    }
+
+    private async void RefreshAccountMfa(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.RefreshAccountMfaAsync(CancellationToken.None);
+    }
+
+    private async void StartMfaEnrollment(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.StartMfaEnrollmentAsync(CancellationToken.None);
+    }
+
+    private async void CompleteMfaEnrollment(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.CompleteMfaEnrollmentAsync(CancellationToken.None);
+    }
+
+    private async void StartMfaProof(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.StartMfaProofAsync(CancellationToken.None);
+    }
+
+    private async void DisableMfa(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.DisableMfaAsync(CancellationToken.None);
+    }
+
+    private async void RegenerateMfaRecovery(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.RegenerateMfaRecoveryAsync(CancellationToken.None);
     }
 
     private async void RedeemClaimCode(object? sender, RoutedEventArgs args)
