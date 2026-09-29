@@ -1713,7 +1713,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherSoftwareOpenController(agent),
         new LauncherSoftwareRemoveController(agent),
         new LauncherClaimCodeRedemptionController(agent),
-        new LauncherAccountPasswordChangeController(agent));
+        new LauncherAccountPasswordChangeController(agent),
+        new LauncherAccountMfaController(agent));
 }
 
 static void Require(bool condition, string message)
