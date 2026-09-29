@@ -11,14 +11,41 @@ public sealed class LauncherAccountPasswordChangeController
         _agent = agent;
     }
 
-    public Task<AccountPasswordChangeResponse> ChangeAsync(
+    public async Task<AccountPasswordChangeResponse> ChangeAsync(
         string currentPassword,
         string newPassword,
-        CancellationToken cancellationToken) =>
-        _agent.ChangeAccountPasswordAsync(
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(currentPassword) ||
+            currentPassword.Length > 128)
+        {
+            throw new ArgumentException(
+                "A valid current password is required.",
+                nameof(currentPassword));
+        }
+
+        if (string.IsNullOrEmpty(newPassword) ||
+            newPassword.Length > 128)
+        {
+            throw new ArgumentException(
+                "A valid new password is required.",
+                nameof(newPassword));
+        }
+
+        var response = await _agent.ChangeAccountPasswordAsync(
             new AccountPasswordChangeRequest(
                 Guid.NewGuid().ToString("N"),
                 currentPassword,
                 newPassword),
             cancellationToken);
+
+        if (response.CapabilityId != AgentLocalContract.AccountPasswordChangeCapabilityId ||
+            response.ContractVersion != AgentLocalContract.AccountPasswordChangeContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent account password-change contract drifted.");
+        }
+
+        return response;
+    }
 }
