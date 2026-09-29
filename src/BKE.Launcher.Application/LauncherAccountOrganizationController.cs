@@ -72,6 +72,77 @@ public sealed class LauncherAccountOrganizationController
         return response;
     }
 
+    public async Task<AccountOrganizationProfileUpdateResponse> UpdateProfileAsync(
+        bool updateOrganizationProfile,
+        string? displayName,
+        string? legalName,
+        string? registrationNumber,
+        bool updateBillingProfile,
+        string? billingEmail,
+        string? taxId,
+        CancellationToken cancellationToken)
+    {
+        if (!updateOrganizationProfile && !updateBillingProfile)
+        {
+            throw new ArgumentException(
+                "Choose at least one organization profile group to update.");
+        }
+
+        if (updateOrganizationProfile)
+        {
+            RequireInput(displayName, 2, 120, "display name");
+            RequireInput(legalName, 2, 180, "legal name");
+            RequireOptionalInput(
+                registrationNumber,
+                80,
+                "registration number");
+        }
+        else if (displayName is not null ||
+                 legalName is not null ||
+                 registrationNumber is not null)
+        {
+            throw new ArgumentException(
+                "Disabled organization-profile fields must be empty.");
+        }
+
+        if (updateBillingProfile)
+        {
+            RequireEmail(billingEmail);
+            RequireOptionalInput(taxId, 80, "tax ID");
+        }
+        else if (billingEmail is not null || taxId is not null)
+        {
+            throw new ArgumentException(
+                "Disabled billing-profile fields must be empty.");
+        }
+
+        var response =
+            await _agent.UpdateAccountOrganizationProfileAsync(
+                new AccountOrganizationProfileUpdateRequest(
+                    Guid.NewGuid().ToString("N"),
+                    updateOrganizationProfile,
+                    updateOrganizationProfile
+                        ? displayName!.Trim()
+                        : null,
+                    updateOrganizationProfile
+                        ? legalName!.Trim()
+                        : null,
+                    updateOrganizationProfile
+                        ? NormalizeOptional(registrationNumber)
+                        : null,
+                    updateBillingProfile,
+                    updateBillingProfile
+                        ? billingEmail!.Trim()
+                        : null,
+                    updateBillingProfile
+                        ? NormalizeOptional(taxId)
+                        : null),
+                cancellationToken);
+
+        ValidateProfileUpdateContract(response);
+        return response;
+    }
+
     private static void ValidateContract(
         AccountOrganizationOverviewResponse response)
     {
@@ -165,6 +236,50 @@ public sealed class LauncherAccountOrganizationController
             RequireToken(invitation.Status, 32, "invitation status");
             RequireTimestamp(invitation.ExpiresAt, "invitation expiry");
             RequireTimestamp(invitation.CreatedAt, "invitation creation");
+        }
+    }
+
+    private static void ValidateProfileUpdateContract(
+        AccountOrganizationProfileUpdateResponse response)
+    {
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountOrganizationCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountOrganizationContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-profile contract drifted.");
+        }
+
+        if (response.Status is not (
+            "UPDATED" or
+            "INVALID_INPUT" or
+            "NOT_ORGANIZATION" or
+            "ACCOUNT_FORBIDDEN" or
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN" or
+            "FAILED"))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-profile status drifted.");
+        }
+
+        if (response.Status == "UPDATED")
+        {
+            if (response.Error is not null)
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization-profile success exposed error state.");
+            }
+            return;
+        }
+
+        if (response.Error is null ||
+            string.IsNullOrWhiteSpace(response.Error.Code) ||
+            string.IsNullOrWhiteSpace(response.Error.Message))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-profile failure is missing bounded error state.");
         }
     }
 
