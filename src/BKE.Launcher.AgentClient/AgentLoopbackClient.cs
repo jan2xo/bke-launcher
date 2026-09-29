@@ -12,6 +12,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
     internal static readonly TimeSpan AccountPasswordChangeRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountMfaRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountPrivacyRequestTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan AccountOrganizationRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RepairRequestTimeout = TimeSpan.FromMinutes(10);
@@ -179,6 +180,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AgentLocalContract.AccountPrivacyCreatePath,
             request,
             AccountPrivacyRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountOrganizationOverviewResponse> GetAccountOrganizationAsync(
+        AccountOrganizationOverviewRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountOrganizationOverviewRequest, AccountOrganizationOverviewResponse>(
+            AgentLocalContract.AccountOrganizationOverviewPath,
+            request,
+            AccountOrganizationRequestTimeout,
             cancellationToken);
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
