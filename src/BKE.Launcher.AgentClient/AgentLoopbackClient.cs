@@ -9,6 +9,7 @@ namespace BKE.Launcher.AgentClient;
 public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
 {
     internal static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan AccountPasswordChangeRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RepairRequestTimeout = TimeSpan.FromMinutes(10);
@@ -95,6 +96,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
         PostAsync<AccountSessionLogoutRequest, AccountSessionLogoutResponse>(
             AgentLocalContract.AccountSessionLogoutPath,
             request,
+            cancellationToken);
+
+    public Task<AccountPasswordChangeResponse> ChangeAccountPasswordAsync(
+        AccountPasswordChangeRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountPasswordChangeRequest, AccountPasswordChangeResponse>(
+            AgentLocalContract.AccountPasswordChangePath,
+            request,
+            AccountPasswordChangeRequestTimeout,
             cancellationToken);
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(

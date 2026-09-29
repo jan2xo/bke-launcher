@@ -22,6 +22,8 @@ public static class AgentLocalContract
     public const int SoftwareRemoveContractVersion = 1;
     public const string ClaimCodeRedemptionCapabilityId = "bke.claim-code-redemption";
     public const int ClaimCodeRedemptionContractVersion = 1;
+    public const string AccountPasswordChangeCapabilityId = "bke.account-password-change";
+    public const int AccountPasswordChangeContractVersion = 1;
     public const string StoreCatalogCapabilityId = "bke.store-catalog";
     public const int StoreCatalogContractVersion = 1;
     public const string StoreCheckoutReviewCapabilityId = "bke.store-checkout-review";
@@ -41,6 +43,7 @@ public static class AgentLocalContract
     public const string AccountSessionStartPath = "/v1/account-session/start";
     public const string AccountSessionStatusPath = "/v1/account-session/status";
     public const string AccountSessionLogoutPath = "/v1/account-session/logout";
+    public const string AccountPasswordChangePath = "/v1/account/password-change";
     public const string SoftwareCatalogPath = "/v1/software/catalog";
     public const string SoftwareInstallPath = "/v1/software/install";
     public const string SoftwareUpdatePath = "/v1/software/update";

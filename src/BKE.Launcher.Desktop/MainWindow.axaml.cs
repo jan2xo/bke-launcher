@@ -56,6 +56,11 @@ public sealed partial class MainWindow : Window
         await ViewModel.RefreshStatusAsync(CancellationToken.None);
     }
 
+    private async void ChangePassword(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.ChangePasswordAsync(CancellationToken.None);
+    }
+
     private async void RedeemClaimCode(object? sender, RoutedEventArgs args)
     {
         await ViewModel.RedeemClaimCodeAsync(CancellationToken.None);
