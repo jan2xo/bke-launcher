@@ -106,6 +106,11 @@ public interface ILauncherIdentityClient
         Uri platformBaseAddress,
         NativeBkeLoginRequest request,
         CancellationToken cancellationToken);
+
+    Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
+        Uri platformBaseAddress,
+        NativeBkePasswordResetRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record LauncherNativeSignInResult(
