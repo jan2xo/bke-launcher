@@ -1115,13 +1115,13 @@ Require(
         "/api/agent-sessions/",
         StringComparison.OrdinalIgnoreCase) &&
     !accountPrivacyControllerSource.Contains(
-        ""ACCESS"",
+        "\"ACCESS\"",
         StringComparison.Ordinal) &&
     !accountPrivacyControllerSource.Contains(
-        ""EXPORT"",
+        "\"EXPORT\"",
         StringComparison.Ordinal) &&
     !accountPrivacyControllerSource.Contains(
-        ""DELETION"",
+        "\"DELETION\"",
         StringComparison.Ordinal),
     "Launcher Account Privacy controller absorbed cloud routing or canonical request-type policy.");
 
@@ -1153,16 +1153,16 @@ Require(
     "Launcher presentation bypasses Agent account-privacy mediation.");
 Require(
     mainWindowMarkup.Contains(
-        "ItemsSource="{Binding AccountPrivacyRequestTypes}"",
+        "ItemsSource=\"{Binding AccountPrivacyRequestTypes}\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "ItemsSource="{Binding AccountPrivacyRequests}"",
+        "ItemsSource=\"{Binding AccountPrivacyRequests}\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Click="RefreshAccountPrivacy"",
+        "Click=\"RefreshAccountPrivacy\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Click="CreateAccountPrivacyRequest"",
+        "Click=\"CreateAccountPrivacyRequest\"",
         StringComparison.Ordinal),
     "Launcher Account Privacy desktop surface is incomplete.");
 Require(
