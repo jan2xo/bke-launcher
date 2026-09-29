@@ -88,6 +88,7 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountPrivacyError).GetProperties())
     .Concat(typeof(AccountOrganizationOverviewResponse).GetProperties())
     .Concat(typeof(AccountOrganizationCreateResponse).GetProperties())
+    .Concat(typeof(AccountOrganizationProfileUpdateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationAccount).GetProperties())
     .Concat(typeof(AccountOrganizationPermissions).GetProperties())
     .Concat(typeof(AccountOrganizationProfile).GetProperties())
@@ -163,6 +164,7 @@ Require(agentMethods.SetEquals([
     "CreateAccountPrivacyRequestAsync",
     "GetAccountOrganizationAsync",
     "CreateAccountOrganizationAsync",
+    "UpdateAccountOrganizationProfileAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -328,14 +330,16 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "283487c4a4ec4c23f5623c020eca02ea7b11d083",
-    "Launcher is not pinned to the merged Agent organization-create authority.");
+        "d1011336535867478d05c14b411715faf3245fac",
+    "Launcher is not pinned to the merged Agent organization-profile authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
         "/v1/account/organization" &&
     AgentLocalContract.AccountOrganizationCreatePath ==
         "/v1/account/organization/create" &&
+    AgentLocalContract.AccountOrganizationProfileUpdatePath ==
+        "/v1/account/organization/profile" &&
     AgentLocalContract.AccountOrganizationCapabilityId ==
         "bke.account-organization" &&
     AgentLocalContract.AccountOrganizationContractVersion == 1,
@@ -388,10 +392,55 @@ using (var organizationCreateDocument = JsonDocument.Parse(
         "Launcher organization-create wire request drifted.");
 }
 
+Require(
+    typeof(AccountOrganizationProfileUpdateRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "UpdateOrganizationProfile",
+            "DisplayName",
+            "LegalName",
+            "RegistrationNumber",
+            "UpdateBillingProfile",
+            "BillingEmail",
+            "TaxId"
+        ]),
+    "Launcher widened the Agent organization-profile request.");
+
+using (var organizationProfileDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationProfileUpdateRequest(
+            "organization-profile-cert",
+            true,
+            "Updated Certification Org",
+            "Updated Certification Organization Legal",
+            null,
+            false,
+            null,
+            null))))
+{
+    var root = organizationProfileDocument.RootElement;
+    Require(
+        root.GetProperty("update_organization_profile").GetBoolean() &&
+        !root.GetProperty("update_billing_profile").GetBoolean() &&
+        root.GetProperty("display_name").GetString() ==
+            "Updated Certification Org" &&
+        root.GetProperty("registration_number").ValueKind ==
+            JsonValueKind.Null &&
+        !root.TryGetProperty("billing_email", out _) &&
+        root.GetProperty("tax_id").ValueKind == JsonValueKind.Null &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("owner_id", out _),
+        "Launcher organization-profile wire request widened or hid disabled-group authority.");
+}
+
 foreach (var type in new[]
 {
     typeof(AccountOrganizationOverviewResponse),
     typeof(AccountOrganizationCreateResponse),
+    typeof(AccountOrganizationProfileUpdateResponse),
     typeof(AccountOrganizationAccount),
     typeof(AccountOrganizationMember),
     typeof(AccountOrganizationInvitation),
@@ -445,6 +494,9 @@ Require(
         StringComparison.Ordinal) &&
     organizationClientSource.Contains(
         "AgentLocalContract.AccountOrganizationCreatePath",
+        StringComparison.Ordinal) &&
+    organizationClientSource.Contains(
+        "AgentLocalContract.AccountOrganizationProfileUpdatePath",
         StringComparison.Ordinal),
     "Launcher bypassed the local Agent organization authority.");
 
@@ -1023,6 +1075,26 @@ Require(
         "CreateAccountOrganizationAsync",
         StringComparison.Ordinal),
     "Launcher organization-create Account surface is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationProfileEditor}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding CanEditOrganizationIdentity}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding CanEditOrganizationBilling}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanSaveOrganizationProfile}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"UpdateAccountOrganizationProfile\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "UpdateAccountOrganizationProfileAsync",
+        StringComparison.Ordinal),
+    "Launcher permission-aware organization profile editor is missing.");
 Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
     "Launcher does not resolve Agent-owned authentication state on startup.");
 Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
@@ -2429,6 +2501,61 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         ownerViewModel.ShowOrganizationMembers,
         "Launcher did not render the complete Agent-supplied OWNER organization overview.");
 
+    Require(
+        ownerViewModel.ShowOrganizationProfileEditor &&
+        ownerViewModel.CanEditOrganizationIdentity &&
+        ownerViewModel.CanEditOrganizationBilling &&
+        ownerViewModel.OrganizationEditDisplayName ==
+            "Certification Org" &&
+        ownerViewModel.OrganizationEditLegalName ==
+            "Certification Organization Legal" &&
+        ownerViewModel.OrganizationEditRegistrationNumber ==
+            "REG-001" &&
+        ownerViewModel.OrganizationEditBillingEmail ==
+            "billing@example.test" &&
+        ownerViewModel.OrganizationEditTaxId ==
+            "TAX-001" &&
+        !ownerViewModel.CanSaveOrganizationProfile,
+        "OWNER organization profile editor did not load authoritative values and permissions.");
+
+    ownerViewModel.OrganizationEditDisplayName =
+        "Updated Certification Org";
+    ownerViewModel.OrganizationEditLegalName =
+        "Updated Certification Organization Legal";
+    ownerViewModel.OrganizationEditRegistrationNumber = string.Empty;
+
+    Require(
+        ownerViewModel.OrganizationIdentityProfileDirty &&
+        !ownerViewModel.OrganizationBillingProfileDirty &&
+        ownerViewModel.CanSaveOrganizationProfile,
+        "OWNER organization-only profile edit did not become saveable.");
+
+    await ownerViewModel.UpdateAccountOrganizationProfileAsync(
+        CancellationToken.None);
+
+    Require(
+        ownerAgent.OrganizationProfileUpdateCount == 1 &&
+        ownerAgent.LastOrganizationProfileUpdateRequest is
+            {
+                UpdateOrganizationProfile: true,
+                UpdateBillingProfile: false,
+                DisplayName: "Updated Certification Org",
+                LegalName: "Updated Certification Organization Legal",
+                RegistrationNumber: null,
+                BillingEmail: null,
+                TaxId: null
+            } &&
+        ownerAgent.OrganizationReadCount == 2 &&
+        ownerViewModel.OrganizationProfileUpdateStatus == "UPDATED" &&
+        ownerViewModel.OrganizationDisplayName ==
+            "Updated Certification Org" &&
+        ownerViewModel.OrganizationLegalName ==
+            "Updated Certification Organization Legal" &&
+        string.IsNullOrEmpty(
+            ownerViewModel.OrganizationRegistrationNumber) &&
+        !ownerViewModel.CanSaveOrganizationProfile,
+        "OWNER organization-profile update widened the billing group or failed authoritative refresh.");
+
     var billingCatalog = new CustomerJourneyCatalogSource();
     var billingAgent = new CustomerJourneyAgentClient(billingCatalog)
     {
@@ -2458,6 +2585,60 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         billingViewModel.OrganizationInvitations.Count == 0 &&
         !billingViewModel.ShowOrganizationMembers,
         "Launcher widened a reduced-role organization response beyond Agent-supplied fields.");
+
+    Require(
+        billingViewModel.ShowOrganizationProfileEditor &&
+        !billingViewModel.CanEditOrganizationIdentity &&
+        billingViewModel.CanEditOrganizationBilling &&
+        !billingViewModel.CanSaveOrganizationProfile,
+        "BILLING organization profile editor exposed organization identity fields.");
+
+    billingViewModel.OrganizationEditBillingEmail =
+        "billing-new@example.test";
+    billingViewModel.OrganizationEditTaxId = string.Empty;
+    await billingViewModel.UpdateAccountOrganizationProfileAsync(
+        CancellationToken.None);
+
+    Require(
+        billingAgent.OrganizationProfileUpdateCount == 1 &&
+        billingAgent.LastOrganizationProfileUpdateRequest is
+            {
+                UpdateOrganizationProfile: false,
+                UpdateBillingProfile: true,
+                DisplayName: null,
+                LegalName: null,
+                RegistrationNumber: null,
+                BillingEmail: "billing-new@example.test",
+                TaxId: null
+            } &&
+        billingViewModel.OrganizationProfileUpdateStatus == "UPDATED" &&
+        billingViewModel.OrganizationBillingEmail ==
+            "billing-new@example.test" &&
+        string.IsNullOrEmpty(billingViewModel.OrganizationTaxId) &&
+        !billingViewModel.CanSaveOrganizationProfile,
+        "BILLING profile update widened organization identity fields or failed authoritative refresh.");
+
+    billingViewModel.OrganizationEditBillingEmail =
+        "billing-ambiguous@example.test";
+    billingAgent.OrganizationProfileUpdateOutcomeUnknown = true;
+    var readsBeforeAmbiguous =
+        billingAgent.OrganizationReadCount;
+    await billingViewModel.UpdateAccountOrganizationProfileAsync(
+        CancellationToken.None);
+
+    Require(
+        billingAgent.OrganizationProfileUpdateCount == 2 &&
+        billingAgent.OrganizationReadCount ==
+            readsBeforeAmbiguous + 1 &&
+        billingViewModel.OrganizationProfileUpdateStatus ==
+            "OUTCOME_UNKNOWN" &&
+        billingViewModel.OrganizationEditBillingEmail ==
+            "billing-new@example.test" &&
+        !billingViewModel.CanSaveOrganizationProfile &&
+        billingViewModel.OrganizationProfileUpdateMessage.Contains(
+            "review",
+            StringComparison.OrdinalIgnoreCase),
+        "Ambiguous organization-profile update replayed or failed to force authoritative review.");
 
     ownerAgent.Authenticated = false;
     await ownerViewModel.RefreshAccountOrganizationAsync(
@@ -2500,6 +2681,13 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         switchViewModel.OrganizationMembers.Count == 0 &&
         switchViewModel.OrganizationInvitations.Count == 0,
         "Safe account switching retained old organization presentation state.");
+    Require(
+        string.IsNullOrEmpty(
+            switchViewModel.OrganizationEditDisplayName) &&
+        string.IsNullOrEmpty(
+            switchViewModel.OrganizationEditBillingEmail) &&
+        switchViewModel.OrganizationProfileUpdateStatus == "IDLE",
+        "Safe account switching retained organization-profile edit state.");
 
     switchAgent.Authenticated = true;
     switchAgent.OrganizationDisplayName = "Second Org";
@@ -2995,12 +3183,26 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PrivacyCreateCount { get; private set; }
     public int OrganizationReadCount { get; private set; }
     public int OrganizationCreateCount { get; private set; }
+    public int OrganizationProfileUpdateCount { get; private set; }
     public int PlatformAuthorityCount { get; private set; }
     public bool Authenticated { get; set; } = true;
     public string AccountType { get; set; } = "INDIVIDUAL";
     public string OrganizationRole { get; set; } = "OWNER";
     public string OrganizationDisplayName { get; set; } =
         "Certification Organization";
+    public string OrganizationLegalName { get; set; } =
+        "Certification Organization Legal";
+    public string? OrganizationRegistrationNumber { get; set; } =
+        "REG-001";
+    public string? OrganizationBillingEmail { get; set; } =
+        "billing@example.test";
+    public string? OrganizationTaxId { get; set; } =
+        "TAX-001";
+    public string OrganizationProfileUpdateOutcome { get; set; } =
+        "UPDATED";
+    public bool OrganizationProfileUpdateOutcomeUnknown { get; set; }
+    public AccountOrganizationProfileUpdateRequest? LastOrganizationProfileUpdateRequest
+        { get; private set; }
     public string OrganizationCreateOutcome { get; set; } =
         "CREATED";
     public bool OrganizationCreateOutcomeUnknown { get; set; }
@@ -3517,10 +3719,10 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 viewBilling,
                 viewLicenses),
             new AccountOrganizationProfile(
-                "Certification Organization Legal",
-                "REG-001"),
-            viewBilling ? "billing@example.test" : null,
-            viewBilling ? "TAX-001" : null,
+                OrganizationLegalName,
+                OrganizationRegistrationNumber),
+            viewBilling ? OrganizationBillingEmail : null,
+            viewBilling ? OrganizationTaxId : null,
             new AccountOrganizationCounts(
                 viewLicenses ? 2 : null,
                 viewBilling || viewLicenses ? 4 : null,
@@ -3618,6 +3820,85 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 "CREATED",
                 request.DisplayName,
                 true,
+                null));
+    }
+
+    public Task<AccountOrganizationProfileUpdateResponse> UpdateAccountOrganizationProfileAsync(
+        AccountOrganizationProfileUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OrganizationProfileUpdateCount++;
+        LastOrganizationProfileUpdateRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountOrganizationProfileUpdateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "AUTH_REQUIRED",
+                    new AccountOrganizationError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (OrganizationProfileUpdateOutcomeUnknown)
+        {
+            OrganizationProfileUpdateOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountOrganizationProfileUpdateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    new AccountOrganizationError(
+                        "ORGANIZATION_PROFILE_UPDATE_OUTCOME_UNKNOWN",
+                        "The update result could not be confirmed.",
+                        false)));
+        }
+
+        if (OrganizationProfileUpdateOutcome != "UPDATED")
+        {
+            return Task.FromResult(
+                new AccountOrganizationProfileUpdateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    OrganizationProfileUpdateOutcome,
+                    new AccountOrganizationError(
+                        OrganizationProfileUpdateOutcome,
+                        "The selected role cannot update these fields.",
+                        false)));
+        }
+
+        if (request.UpdateOrganizationProfile)
+        {
+            OrganizationDisplayName =
+                request.DisplayName ??
+                throw new InvalidOperationException(
+                    "Missing certification display name.");
+            OrganizationLegalName =
+                request.LegalName ??
+                throw new InvalidOperationException(
+                    "Missing certification legal name.");
+            OrganizationRegistrationNumber =
+                request.RegistrationNumber;
+        }
+
+        if (request.UpdateBillingProfile)
+        {
+            OrganizationBillingEmail =
+                request.BillingEmail ??
+                throw new InvalidOperationException(
+                    "Missing certification billing email.");
+            OrganizationTaxId = request.TaxId;
+        }
+
+        return Task.FromResult(
+            new AccountOrganizationProfileUpdateResponse(
+                AgentLocalContract.AccountOrganizationCapabilityId,
+                AgentLocalContract.AccountOrganizationContractVersion,
+                "UPDATED",
                 null));
     }
 

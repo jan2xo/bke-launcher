@@ -95,6 +95,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _organizationCreateRegistrationNumber = string.Empty;
     private string _organizationCreateTaxId = string.Empty;
     private bool _organizationCreateRetryBlocked;
+    private string _organizationProfileUpdateStatus = "IDLE";
+    private string _organizationProfileUpdateMessage =
+        "Refresh organization details before editing the selected Organization.";
+    private string _organizationEditDisplayName = string.Empty;
+    private string _organizationEditLegalName = string.Empty;
+    private string _organizationEditRegistrationNumber = string.Empty;
+    private string _organizationEditBillingEmail = string.Empty;
+    private string _organizationEditTaxId = string.Empty;
     private AccountOrganizationAccount? _organizationAccount;
     private AccountOrganizationPermissions? _organizationPermissions;
     private AccountOrganizationProfile? _organizationProfile;
@@ -683,6 +691,73 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool OrganizationCreateRetryBlocked =>
         _organizationCreateRetryBlocked;
 
+    public string OrganizationProfileUpdateStatus
+    {
+        get => _organizationProfileUpdateStatus;
+        private set
+        {
+            SetField(ref _organizationProfileUpdateStatus, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationProfileUpdateMessage
+    {
+        get => _organizationProfileUpdateMessage;
+        private set =>
+            SetField(ref _organizationProfileUpdateMessage, value);
+    }
+
+    public string OrganizationEditDisplayName
+    {
+        get => _organizationEditDisplayName;
+        set
+        {
+            SetField(ref _organizationEditDisplayName, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationEditLegalName
+    {
+        get => _organizationEditLegalName;
+        set
+        {
+            SetField(ref _organizationEditLegalName, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationEditRegistrationNumber
+    {
+        get => _organizationEditRegistrationNumber;
+        set
+        {
+            SetField(ref _organizationEditRegistrationNumber, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationEditBillingEmail
+    {
+        get => _organizationEditBillingEmail;
+        set
+        {
+            SetField(ref _organizationEditBillingEmail, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationEditTaxId
+    {
+        get => _organizationEditTaxId;
+        set
+        {
+            SetField(ref _organizationEditTaxId, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
     public bool ShowOrganizationSection =>
         IsAuthenticated &&
         _authenticatedAccountType == "ORGANIZATION" &&
@@ -758,6 +833,70 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         HasOrganizationLicenseCount ||
         HasOrganizationSubscriptionCount ||
         HasOrganizationOrderCount;
+
+    public bool CanEditOrganizationIdentity =>
+        OrganizationReady &&
+        _organizationPermissions?.ManageMembers == true;
+
+    public bool CanEditOrganizationBilling =>
+        OrganizationReady &&
+        _organizationPermissions?.ViewBilling == true;
+
+    public bool ShowOrganizationProfileEditor =>
+        CanEditOrganizationIdentity ||
+        CanEditOrganizationBilling;
+
+    public bool OrganizationIdentityProfileDirty =>
+        CanEditOrganizationIdentity &&
+        (
+            !string.Equals(
+                OrganizationEditDisplayName.Trim(),
+                _organizationAccount?.DisplayName ?? string.Empty,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                OrganizationEditLegalName.Trim(),
+                _organizationProfile?.LegalName ?? string.Empty,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                NormalizeOrganizationOptional(
+                    OrganizationEditRegistrationNumber),
+                _organizationProfile?.RegistrationNumber,
+                StringComparison.Ordinal)
+        );
+
+    public bool OrganizationBillingProfileDirty =>
+        CanEditOrganizationBilling &&
+        (
+            !string.Equals(
+                OrganizationEditBillingEmail.Trim(),
+                _organizationBillingEmail ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                NormalizeOrganizationOptional(
+                    OrganizationEditTaxId),
+                _organizationTaxId,
+                StringComparison.Ordinal)
+        );
+
+    public bool CanSaveOrganizationProfile =>
+        ShowOrganizationProfileEditor &&
+        OrganizationProfileUpdateStatus != "UPDATING" &&
+        (OrganizationIdentityProfileDirty ||
+         OrganizationBillingProfileDirty) &&
+        (!OrganizationIdentityProfileDirty ||
+            (ValidOrganizationCreateText(
+                OrganizationEditDisplayName,
+                2,
+                120) &&
+             ValidOrganizationCreateText(
+                OrganizationEditLegalName,
+                2,
+                180) &&
+             OrganizationEditRegistrationNumber.Trim().Length <= 80)) &&
+        (!OrganizationBillingProfileDirty ||
+            (ValidOrganizationCreateEmail(
+                OrganizationEditBillingEmail) &&
+             OrganizationEditTaxId.Trim().Length <= 80));
 
     public bool ShowOrganizationMembers =>
         OrganizationReady &&
@@ -3348,6 +3487,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _organizationCounts = response.Counts;
             _organizationBillingEmail = response.BillingEmail;
             _organizationTaxId = response.TaxId;
+            LoadOrganizationProfileEditorFromAuthority();
 
             OrganizationMembers.Clear();
             foreach (var member in response.Members)
@@ -3374,6 +3514,116 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearAccountOrganization(
                 "AGENT_UNAVAILABLE",
                 "Organization details are unavailable or the Licensing Agent returned an invalid response.");
+        }
+    }
+
+    public async Task UpdateAccountOrganizationProfileAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanSaveOrganizationProfile)
+        {
+            OrganizationProfileUpdateStatus = "INVALID_INPUT";
+            OrganizationProfileUpdateMessage =
+                "Refresh the selected Organization, change an authorized field, and provide valid required values before saving.";
+            return;
+        }
+
+        var updateIdentity = OrganizationIdentityProfileDirty;
+        var updateBilling = OrganizationBillingProfileDirty;
+
+        OrganizationProfileUpdateStatus = "UPDATING";
+        OrganizationProfileUpdateMessage =
+            "Updating the selected Organization through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.UpdateProfileAsync(
+                updateIdentity,
+                updateIdentity ? OrganizationEditDisplayName : null,
+                updateIdentity ? OrganizationEditLegalName : null,
+                updateIdentity
+                    ? OrganizationEditRegistrationNumber
+                    : null,
+                updateBilling,
+                updateBilling ? OrganizationEditBillingEmail : null,
+                updateBilling ? OrganizationEditTaxId : null,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                ResetAccountOrganizationState();
+                EnterAccountOrganizationReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "NOT_ORGANIZATION")
+            {
+                ClearAccountOrganization(
+                    "NOT_ORGANIZATION",
+                    "The selected BKE account is not an Organization account.");
+                return;
+            }
+
+            if (response.Status == "UPDATED")
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+                if (IsAuthenticated && OrganizationReady)
+                {
+                    OrganizationProfileUpdateStatus = "UPDATED";
+                    OrganizationProfileUpdateMessage =
+                        "Organization profile updated and refreshed from the authoritative account state.";
+                }
+                return;
+            }
+
+            if (response.Status == "OUTCOME_UNKNOWN")
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+                if (IsAuthenticated)
+                {
+                    OrganizationProfileUpdateStatus =
+                        "OUTCOME_UNKNOWN";
+                    OrganizationProfileUpdateMessage =
+                        "The update result could not be confirmed. The authoritative Organization overview was refreshed; review the current values before making another edit.";
+                }
+                return;
+            }
+
+            OrganizationProfileUpdateStatus = response.Status;
+            OrganizationProfileUpdateMessage =
+                response.Error?.Message ??
+                "The organization profile was not updated.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            try
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+            }
+            catch
+            {
+                // RefreshAccountOrganizationAsync reports its own state.
+            }
+
+            if (IsAuthenticated)
+            {
+                OrganizationProfileUpdateStatus =
+                    "OUTCOME_UNKNOWN";
+                OrganizationProfileUpdateMessage =
+                    "The update result could not be confirmed. The authoritative Organization overview was refreshed when possible; review the current values before making another edit.";
+            }
+        }
+        catch (ArgumentException error)
+        {
+            OrganizationProfileUpdateStatus = "INVALID_INPUT";
+            OrganizationProfileUpdateMessage = error.Message;
         }
     }
 
@@ -3918,12 +4168,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationCreateStatus = "IDLE";
         OrganizationCreateMessage =
             "Create a BKE Organization, then switch accounts to select it.";
+        ResetOrganizationProfileEditor();
         _organizationAccount = null;
         _organizationPermissions = null;
         _organizationProfile = null;
         _organizationCounts = null;
         _organizationBillingEmail = null;
         _organizationTaxId = null;
+        ResetOrganizationProfileEditor();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
         AccountOrganizationStatus = "UNKNOWN";
@@ -3940,6 +4192,44 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationCreateRegistrationNumber = string.Empty;
         OrganizationCreateTaxId = string.Empty;
     }
+
+    private void ResetOrganizationProfileEditor()
+    {
+        OrganizationEditDisplayName = string.Empty;
+        OrganizationEditLegalName = string.Empty;
+        OrganizationEditRegistrationNumber = string.Empty;
+        OrganizationEditBillingEmail = string.Empty;
+        OrganizationEditTaxId = string.Empty;
+        OrganizationProfileUpdateStatus = "IDLE";
+        OrganizationProfileUpdateMessage =
+            "Refresh organization details before editing the selected Organization.";
+    }
+
+    private void LoadOrganizationProfileEditorFromAuthority()
+    {
+        OrganizationEditDisplayName =
+            _organizationAccount?.DisplayName ?? string.Empty;
+        OrganizationEditLegalName =
+            _organizationProfile?.LegalName ?? string.Empty;
+        OrganizationEditRegistrationNumber =
+            _organizationProfile?.RegistrationNumber ?? string.Empty;
+        OrganizationEditBillingEmail =
+            _organizationBillingEmail ?? string.Empty;
+        OrganizationEditTaxId =
+            _organizationTaxId ?? string.Empty;
+        OrganizationProfileUpdateStatus = "IDLE";
+        OrganizationProfileUpdateMessage =
+            _organizationPermissions?.ManageMembers == true ||
+            _organizationPermissions?.ViewBilling == true
+                ? "Edit only the fields allowed by the selected Organization role."
+                : "This Organization role has no profile-edit permissions.";
+    }
+
+    private static string? NormalizeOrganizationOptional(
+        string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Trim();
 
     private static bool ValidOrganizationCreateText(
         string? value,
@@ -3971,6 +4261,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _organizationCounts = null;
         _organizationBillingEmail = null;
         _organizationTaxId = null;
+        ResetOrganizationProfileEditor();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
         AccountOrganizationStatus = status;
@@ -3991,6 +4282,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowOrganizationCreateSection));
         Raise(nameof(CanCreateOrganization));
         Raise(nameof(OrganizationCreateRetryBlocked));
+        Raise(nameof(OrganizationProfileUpdateStatus));
+        Raise(nameof(OrganizationProfileUpdateMessage));
         Raise(nameof(ShowOrganizationSection));
         Raise(nameof(CanRefreshAccountOrganization));
         Raise(nameof(OrganizationReady));
@@ -4012,6 +4305,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(OrganizationSubscriptionCount));
         Raise(nameof(OrganizationOrderCount));
         Raise(nameof(ShowOrganizationUsage));
+        Raise(nameof(CanEditOrganizationIdentity));
+        Raise(nameof(CanEditOrganizationBilling));
+        Raise(nameof(ShowOrganizationProfileEditor));
+        Raise(nameof(OrganizationIdentityProfileDirty));
+        Raise(nameof(OrganizationBillingProfileDirty));
+        Raise(nameof(CanSaveOrganizationProfile));
         Raise(nameof(ShowOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationInvitations));

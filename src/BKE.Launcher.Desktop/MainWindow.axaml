@@ -357,6 +357,71 @@
                       </StackPanel>
                     </StackPanel>
 
+                    <Border IsVisible="{Binding ShowOrganizationProfileEditor}"
+                            Classes="content-card"
+                            Padding="12"
+                            Margin="0,6,0,0">
+                      <StackPanel Spacing="7">
+                        <TextBlock Text="Edit organization"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Only fields authorized for the selected Organization role are editable."
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.68" />
+
+                        <StackPanel IsVisible="{Binding CanEditOrganizationIdentity}"
+                                    Spacing="5">
+                          <TextBlock Text="Organization profile"
+                                     FontWeight="SemiBold" />
+                          <TextBlock Text="Display name"
+                                     FontSize="11"
+                                     Opacity="0.68" />
+                          <TextBox Text="{Binding OrganizationEditDisplayName, Mode=TwoWay}"
+                                   MaxLength="120" />
+                          <TextBlock Text="Legal name"
+                                     FontSize="11"
+                                     Opacity="0.68" />
+                          <TextBox Text="{Binding OrganizationEditLegalName, Mode=TwoWay}"
+                                   MaxLength="180" />
+                          <TextBlock Text="Registration number"
+                                     FontSize="11"
+                                     Opacity="0.68" />
+                          <TextBox Text="{Binding OrganizationEditRegistrationNumber, Mode=TwoWay}"
+                                   MaxLength="80"
+                                   Watermark="Optional" />
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding CanEditOrganizationBilling}"
+                                    Spacing="5"
+                                    Margin="0,4,0,0">
+                          <TextBlock Text="Billing profile"
+                                     FontWeight="SemiBold" />
+                          <TextBlock Text="Billing email"
+                                     FontSize="11"
+                                     Opacity="0.68" />
+                          <TextBox Text="{Binding OrganizationEditBillingEmail, Mode=TwoWay}"
+                                   MaxLength="320" />
+                          <TextBlock Text="Tax ID"
+                                     FontSize="11"
+                                     Opacity="0.68" />
+                          <TextBox Text="{Binding OrganizationEditTaxId, Mode=TwoWay}"
+                                   MaxLength="80"
+                                   Watermark="Optional" />
+                        </StackPanel>
+
+                        <Button Content="Save organization changes"
+                                IsEnabled="{Binding CanSaveOrganizationProfile}"
+                                Click="UpdateAccountOrganizationProfile" />
+                        <TextBlock Text="{Binding OrganizationProfileUpdateStatus}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding OrganizationProfileUpdateMessage}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.72" />
+                      </StackPanel>
+                    </Border>
+
                     <StackPanel IsVisible="{Binding ShowOrganizationUsage}"
                                 Spacing="4"
                                 Margin="0,6,0,0">
