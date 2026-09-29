@@ -400,18 +400,6 @@ Require(
         StringComparison.Ordinal),
     "Launcher bypassed the local Agent organization authority.");
 
-Require(
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowOrganizationSection}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"RefreshAccountOrganization\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "RefreshAccountOrganizationAsync",
-        StringComparison.Ordinal),
-    "Launcher organization Account surface is missing.");
-
 var nativeMfaVerifyRequestProperties = typeof(NativeBkeMfaVerifyRequest)
     .GetProperties()
     .Select(property => property.Name)
@@ -959,6 +947,17 @@ Require(mainWindowMarkup.Contains("SelectedIndex=\"{Binding SelectedModuleIndex,
     "Launcher shell does not preserve an explicitly unselected module state.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", StringComparison.Ordinal),
     "Launcher Account surface is not explicitly user-selected.");
+Require(
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationSection}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"RefreshAccountOrganization\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "RefreshAccountOrganizationAsync",
+        StringComparison.Ordinal),
+    "Launcher organization Account surface is missing.");
 Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
     "Launcher does not resolve Agent-owned authentication state on startup.");
 Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
