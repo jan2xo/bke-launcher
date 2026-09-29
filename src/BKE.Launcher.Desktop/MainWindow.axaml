@@ -12,97 +12,191 @@
   <Grid>
     <Border IsVisible="{Binding ShowLoginPage}"
             Classes="surface"
-            Width="420"
+            Width="680"
             Padding="34"
             CornerRadius="18"
             HorizontalAlignment="Center"
             VerticalAlignment="Center">
-      <StackPanel Spacing="14">
-        <TextBlock Text="BKE"
-                   Classes="brand"
-                   FontSize="38"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="Your software. One account. One place."
-                   Classes="muted"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="{Binding Message}"
-                   Classes="muted"
-                   TextWrapping="Wrap"
-                   TextAlignment="Center" />
-
-        <TextBlock Text="Email"
-                   FontWeight="SemiBold"
-                   Margin="0,8,0,0" />
-        <TextBox Text="{Binding Email, Mode=TwoWay}"
-                 Watermark="you@example.com" />
-
-        <TextBlock Text="Password"
-                   FontWeight="SemiBold" />
-        <TextBox Text="{Binding Password, Mode=TwoWay}"
-                 PasswordChar="●" />
-
-        <StackPanel IsVisible="{Binding HasAccountChoices}" Spacing="6">
-          <TextBlock Text="Account" FontWeight="SemiBold" />
-          <ComboBox ItemsSource="{Binding AvailableAccounts}"
-                    SelectedItem="{Binding SelectedAccount, Mode=TwoWay}">
-            <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="contracts:NativeBkeAccountChoice">
-                <TextBlock Text="{Binding AccountDisplayName}" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-        </StackPanel>
-
-        <Button Content="Sign in with BKE"
-                Classes="primary"
-                HorizontalAlignment="Stretch"
-                Click="NativeSignIn" />
-
-        <StackPanel IsVisible="{Binding ShowNativeMfaChallenge}" Spacing="8">
-          <TextBlock Text="Multi-factor verification"
-                     FontWeight="SemiBold" />
-          <TextBlock Text="{Binding NativeMfaMessage}"
+      <ScrollViewer MaxHeight="650"
+                    VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="14">
+          <TextBlock Text="BKE"
+                     Classes="brand"
+                     FontSize="38"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="Your software. One account. One place."
+                     Classes="muted"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding Message}"
                      Classes="muted"
                      TextWrapping="Wrap"
                      TextAlignment="Center" />
-          <TextBlock Text="{Binding NativeMfaReference}"
-                     FontWeight="SemiBold"
-                     TextAlignment="Center" />
-          <TextBox Text="{Binding NativeMfaCode, Mode=TwoWay}"
-                   Watermark="Verification code" />
-          <Button Content="Verify and sign in"
-                  Classes="primary"
-                  IsEnabled="{Binding CanVerifyNativeMfa}"
-                  Click="VerifyNativeMfa" />
-        </StackPanel>
 
-        <Border IsVisible="{Binding HasMfaRecoveryCodes}"
-                Classes="content-card"
-                Padding="12">
-          <StackPanel Spacing="8">
-            <TextBlock Text="Save your recovery codes"
+          <StackPanel IsVisible="{Binding ShowSignInForm}" Spacing="14">
+            <TextBlock Text="Email"
+                       FontWeight="SemiBold"
+                       Margin="0,8,0,0" />
+            <TextBox Text="{Binding Email, Mode=TwoWay}"
+                     Watermark="you@example.com" />
+
+            <TextBlock Text="Password"
                        FontWeight="SemiBold" />
-            <TextBlock Text="These codes are shown only from the authoritative MFA operation. Save them somewhere secure before dismissing this message."
-                       Classes="muted"
-                       TextWrapping="Wrap" />
-            <TextBox Text="{Binding AccountMfaRecoveryCodes}"
-                     IsReadOnly="True"
-                     AcceptsReturn="True"
-                     MinHeight="100" />
-            <Button Content="I saved these codes"
-                    Click="DismissMfaRecoveryCodes" />
-          </StackPanel>
-        </Border>
+            <TextBox Text="{Binding Password, Mode=TwoWay}"
+                     PasswordChar="●" />
 
-        <Button Content="Forgot password?"
-                HorizontalAlignment="Stretch"
-                IsEnabled="{Binding CanRequestPasswordReset}"
-                Click="RequestPasswordReset" />
-        <TextBlock Text="{Binding PasswordResetMessage}"
-                   Classes="muted"
-                   TextWrapping="Wrap"
-                   TextAlignment="Center" />
-      </StackPanel>
+            <StackPanel IsVisible="{Binding HasAccountChoices}" Spacing="6">
+              <TextBlock Text="Account" FontWeight="SemiBold" />
+              <ComboBox ItemsSource="{Binding AvailableAccounts}"
+                        SelectedItem="{Binding SelectedAccount, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="contracts:NativeBkeAccountChoice">
+                    <TextBlock Text="{Binding AccountDisplayName}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+
+            <Button Content="Sign in with BKE"
+                    Classes="primary"
+                    HorizontalAlignment="Stretch"
+                    Click="NativeSignIn" />
+
+            <StackPanel IsVisible="{Binding ShowNativeMfaChallenge}" Spacing="8">
+              <TextBlock Text="Multi-factor verification"
+                         FontWeight="SemiBold" />
+              <TextBlock Text="{Binding NativeMfaMessage}"
+                         Classes="muted"
+                         TextWrapping="Wrap"
+                         TextAlignment="Center" />
+              <TextBlock Text="{Binding NativeMfaReference}"
+                         FontWeight="SemiBold"
+                         TextAlignment="Center" />
+              <TextBox Text="{Binding NativeMfaCode, Mode=TwoWay}"
+                       Watermark="Verification code" />
+              <Button Content="Verify and sign in"
+                      Classes="primary"
+                      IsEnabled="{Binding CanVerifyNativeMfa}"
+                      Click="VerifyNativeMfa" />
+            </StackPanel>
+
+            <Button Content="Create a BKE account"
+                    HorizontalAlignment="Stretch"
+                    Click="OpenRegistration" />
+            <Button Content="Forgot password?"
+                    HorizontalAlignment="Stretch"
+                    IsEnabled="{Binding CanRequestPasswordReset}"
+                    Click="RequestPasswordReset" />
+            <TextBlock Text="{Binding PasswordResetMessage}"
+                       Classes="muted"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center" />
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding ShowRegistration}" Spacing="14">
+            <TextBlock Text="Create your BKE account"
+                       FontSize="24"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding RegistrationMessage}"
+                       Classes="muted"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center" />
+
+            <StackPanel IsVisible="{Binding ShowRegistrationEntry}" Spacing="12">
+              <TextBlock Text="Name" FontWeight="SemiBold" />
+              <TextBox Text="{Binding RegistrationName, Mode=TwoWay}"
+                       Watermark="Your name" />
+              <TextBlock Text="Email" FontWeight="SemiBold" />
+              <TextBox Text="{Binding RegistrationEmail, Mode=TwoWay}"
+                       Watermark="you@example.com" />
+              <TextBlock Text="Password" FontWeight="SemiBold" />
+              <TextBox Text="{Binding RegistrationPassword, Mode=TwoWay}"
+                       PasswordChar="●" />
+
+              <TextBlock Text="Current legal documents"
+                         FontSize="18"
+                         FontWeight="SemiBold"
+                         Margin="0,8,0,0" />
+              <TextBlock Text="These exact published versions come from BKE Digital Solutions. Review both before accepting."
+                         Classes="muted"
+                         TextWrapping="Wrap" />
+
+              <ItemsControl ItemsSource="{Binding RegistrationLegalDocuments}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:RegistrationLegalDocumentViewModel">
+                    <Border Classes="content-card"
+                            Padding="14"
+                            Margin="0,0,0,10">
+                      <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding Title}"
+                                   FontWeight="SemiBold"
+                                   FontSize="16" />
+                        <TextBlock Text="{Binding VersionLabel}"
+                                   Classes="muted" />
+                        <TextBox Text="{Binding ContentMarkdown}"
+                                 IsReadOnly="True"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MinHeight="120"
+                                 MaxHeight="190"
+                                 VerticalScrollBarVisibility="Auto" />
+                        <CheckBox IsChecked="{Binding IsAccepted, Mode=TwoWay}"
+                                  Content="I have reviewed and accept this exact published version." />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Button Content="Create account"
+                      Classes="primary"
+                      IsEnabled="{Binding CanCreateAccount}"
+                      Click="CreateNativeAccount" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ShowRegistrationVerification}" Spacing="10">
+              <TextBlock Text="Verify your email"
+                         FontSize="18"
+                         FontWeight="SemiBold"
+                         HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding RegistrationEmail}"
+                         FontWeight="SemiBold"
+                         TextAlignment="Center" />
+              <TextBox Text="{Binding RegistrationCode, Mode=TwoWay}"
+                       Watermark="8-character verification code" />
+              <Button Content="Verify email"
+                      Classes="primary"
+                      IsEnabled="{Binding CanVerifyRegistrationEmail}"
+                      Click="VerifyRegistrationEmail" />
+              <Button Content="Resend verification code"
+                      IsEnabled="{Binding CanResendRegistrationEmail}"
+                      Click="ResendRegistrationVerification" />
+            </StackPanel>
+
+            <Button Content="Back to sign in"
+                    HorizontalAlignment="Stretch"
+                    Click="CancelRegistration" />
+          </StackPanel>
+
+          <Border IsVisible="{Binding HasMfaRecoveryCodes}"
+                  Classes="content-card"
+                  Padding="12">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Save your recovery codes"
+                         FontWeight="SemiBold" />
+              <TextBlock Text="These codes are shown only from the authoritative MFA operation. Save them somewhere secure before dismissing this message."
+                         Classes="muted"
+                         TextWrapping="Wrap" />
+              <TextBox Text="{Binding AccountMfaRecoveryCodes}"
+                       IsReadOnly="True"
+                       AcceptsReturn="True"
+                       MinHeight="100" />
+              <Button Content="I saved these codes"
+                      Click="DismissMfaRecoveryCodes" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
     </Border>
 
     <Grid IsVisible="{Binding ShowAuthenticatedShell}"

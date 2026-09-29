@@ -11,6 +11,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly LauncherAccountSessionController _accountSession;
     private readonly LauncherNativeSignInController _nativeSignIn;
+    private readonly LauncherNativeRegistrationController _nativeRegistration;
     private readonly LauncherPasswordResetRequestController _passwordResetRequest;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherStoreService _store;
@@ -35,6 +36,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _passwordResetStatus = "IDLE";
     private string _passwordResetMessage =
         "Forgot your password? Request a one-time reset link by email.";
+    private bool _showRegistration;
+    private string _registrationName = string.Empty;
+    private string _registrationEmail = string.Empty;
+    private string _registrationPassword = string.Empty;
+    private string _registrationCode = string.Empty;
+    private string _registrationStatus = "IDLE";
+    private string _registrationMessage =
+        "Create your BKE account without leaving the Launcher.";
     private NativeBkeAccountChoice? _selectedAccount;
     private string _accountDisplay = "Not signed in";
     private string _userCode = string.Empty;
@@ -95,6 +104,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
         LauncherNativeSignInController nativeSignIn,
+        LauncherNativeRegistrationController nativeRegistration,
         LauncherPasswordResetRequestController passwordResetRequest,
         LauncherCatalogService catalog,
         LauncherStoreService store,
@@ -116,6 +126,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
+        _nativeRegistration = nativeRegistration;
         _passwordResetRequest = passwordResetRequest;
         _catalog = catalog;
         _store = store;
@@ -143,7 +154,90 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
     public ObservableCollection<PurchaseLegalDocumentViewModel> PurchaseLegalDocuments { get; } = [];
+    public ObservableCollection<RegistrationLegalDocumentViewModel> RegistrationLegalDocuments { get; } = [];
     public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
+
+    public string RegistrationName
+    {
+        get => _registrationName;
+        set
+        {
+            SetField(ref _registrationName, value);
+            RaiseRegistrationCapabilities();
+        }
+    }
+
+    public string RegistrationEmail
+    {
+        get => _registrationEmail;
+        set
+        {
+            SetField(ref _registrationEmail, value);
+            RaiseRegistrationCapabilities();
+        }
+    }
+
+    public string RegistrationPassword
+    {
+        get => _registrationPassword;
+        set
+        {
+            SetField(ref _registrationPassword, value);
+            RaiseRegistrationCapabilities();
+        }
+    }
+
+    public string RegistrationCode
+    {
+        get => _registrationCode;
+        set
+        {
+            SetField(ref _registrationCode, value);
+            RaiseRegistrationCapabilities();
+        }
+    }
+
+    public string RegistrationStatus
+    {
+        get => _registrationStatus;
+        private set
+        {
+            SetField(ref _registrationStatus, value);
+            RaiseRegistrationCapabilities();
+        }
+    }
+
+    public string RegistrationMessage
+    {
+        get => _registrationMessage;
+        private set => SetField(ref _registrationMessage, value);
+    }
+
+    public bool ShowSignInForm => ShowLoginPage && !_showRegistration;
+    public bool ShowRegistration => ShowLoginPage && _showRegistration;
+    public bool ShowRegistrationEntry =>
+        ShowRegistration && RegistrationStatus != "VERIFICATION_REQUIRED";
+    public bool ShowRegistrationVerification =>
+        ShowRegistration && RegistrationStatus == "VERIFICATION_REQUIRED";
+
+    public bool CanCreateAccount =>
+        ShowRegistrationEntry &&
+        RegistrationStatus is not ("LOADING" or "CREATING") &&
+        !string.IsNullOrWhiteSpace(RegistrationName) &&
+        !string.IsNullOrWhiteSpace(RegistrationEmail) &&
+        !string.IsNullOrEmpty(RegistrationPassword) &&
+        RegistrationLegalDocuments.Count == 2 &&
+        RegistrationLegalDocuments.All(document => document.IsAccepted);
+
+    public bool CanVerifyRegistrationEmail =>
+        ShowRegistrationVerification &&
+        RegistrationStatus != "VERIFYING" &&
+        RegistrationCode.Length == 8;
+
+    public bool CanResendRegistrationEmail =>
+        ShowRegistrationVerification &&
+        RegistrationStatus != "RESENDING" &&
+        !string.IsNullOrWhiteSpace(RegistrationEmail);
 
     public string Email
     {
@@ -435,6 +529,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(IsAuthenticated));
             Raise(nameof(ShowLoginPage));
             Raise(nameof(ShowAuthenticatedShell));
+            RaiseRegistrationCapabilities();
             Raise(nameof(CanRequestPasswordReset));
             Raise(nameof(CanRedeemClaimCode));
             Raise(nameof(CanChangePassword));
@@ -753,6 +848,214 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task OpenRegistrationAsync(CancellationToken cancellationToken)
+    {
+        if (IsAuthenticated)
+        {
+            return;
+        }
+
+        ClearNativeMfaState();
+        Password = string.Empty;
+        ResetPasswordResetState();
+        ResetRegistrationFields(clearEmail: true);
+        _showRegistration = true;
+        RegistrationStatus = "LOADING";
+        RegistrationMessage =
+            "Loading the current BKE Terms of Service and Privacy Policy…";
+        RaiseRegistrationCapabilities();
+
+        try
+        {
+            var result = await _nativeRegistration.LoadAsync(cancellationToken);
+            RegistrationLegalDocuments.Clear();
+
+            if (result.Status != "READY")
+            {
+                RegistrationStatus = result.Status;
+                RegistrationMessage =
+                    result.ErrorMessage ??
+                    "BKE account registration is temporarily unavailable.";
+                return;
+            }
+
+            foreach (var document in result.LegalDocuments)
+            {
+                var item = RegistrationLegalDocumentViewModel.From(document);
+                item.PropertyChanged += RegistrationLegalAcceptanceChanged;
+                RegistrationLegalDocuments.Add(item);
+            }
+
+            RegistrationStatus = "READY";
+            RegistrationMessage =
+                "Review and explicitly accept the exact current legal documents before creating your account.";
+            RaiseRegistrationCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            RegistrationStatus = "UNAVAILABLE";
+            RegistrationMessage =
+                "BKE account registration is temporarily unavailable.";
+        }
+    }
+
+    public void CancelRegistration()
+    {
+        if (!string.IsNullOrWhiteSpace(RegistrationEmail))
+        {
+            Email = RegistrationEmail.Trim();
+        }
+
+        ResetRegistrationFields(clearEmail: true);
+        _showRegistration = false;
+        RegistrationStatus = "IDLE";
+        RegistrationMessage =
+            "Create your BKE account without leaving the Launcher.";
+        RaiseRegistrationCapabilities();
+    }
+
+    public async Task CreateNativeAccountAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanCreateAccount)
+        {
+            RegistrationStatus = "INVALID_INPUT";
+            RegistrationMessage =
+                "Enter your name, email, password, and accept both current legal documents.";
+            return;
+        }
+
+        var password = RegistrationPassword;
+        var legalVersionIds = RegistrationLegalDocuments
+            .Where(document => document.IsAccepted)
+            .Select(document => document.VersionId)
+            .ToArray();
+
+        RegistrationStatus = "CREATING";
+        RegistrationMessage = "Creating your BKE account…";
+
+        try
+        {
+            var result = await _nativeRegistration.RegisterAsync(
+                RegistrationEmail,
+                RegistrationName,
+                password,
+                legalVersionIds,
+                cancellationToken);
+
+            RegistrationStatus = result.Status;
+            RegistrationMessage =
+                result.ErrorMessage ??
+                "BKE account registration could not be completed.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            RegistrationStatus = "UNAVAILABLE";
+            RegistrationMessage =
+                "BKE account registration is temporarily unavailable.";
+        }
+        finally
+        {
+            RegistrationPassword = string.Empty;
+        }
+    }
+
+    public async Task VerifyRegistrationEmailAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanVerifyRegistrationEmail)
+        {
+            RegistrationMessage =
+                "Enter the 8-character verification code sent to your email.";
+            return;
+        }
+
+        var code = RegistrationCode;
+        RegistrationCode = string.Empty;
+        RegistrationStatus = "VERIFYING";
+        RegistrationMessage = "Verifying your BKE account email…";
+
+        try
+        {
+            var result = await _nativeRegistration.VerifyEmailAsync(
+                RegistrationEmail,
+                code,
+                cancellationToken);
+
+            if (result.Status != "VERIFIED")
+            {
+                RegistrationStatus = "VERIFICATION_REQUIRED";
+                RegistrationMessage =
+                    result.ErrorMessage ??
+                    "The verification code could not be confirmed.";
+                return;
+            }
+
+            var verifiedEmail = RegistrationEmail.Trim();
+            ResetRegistrationFields(clearEmail: true);
+            _showRegistration = false;
+            RegistrationStatus = "VERIFIED";
+            RegistrationMessage = result.ErrorMessage ??
+                "Email verified. Sign in to finish connecting BKE on this machine.";
+            Email = verifiedEmail;
+            Password = string.Empty;
+            Message =
+                "Email verified. Sign in with your new BKE account to connect this machine.";
+            RaiseRegistrationCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            RegistrationStatus = "VERIFICATION_REQUIRED";
+            RegistrationMessage =
+                "BKE email verification is temporarily unavailable.";
+        }
+    }
+
+    public async Task ResendRegistrationVerificationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanResendRegistrationEmail)
+        {
+            return;
+        }
+
+        RegistrationStatus = "RESENDING";
+        RegistrationMessage = "Requesting a new verification code…";
+
+        try
+        {
+            var result = await _nativeRegistration.ResendAsync(
+                RegistrationEmail,
+                cancellationToken);
+            RegistrationStatus = "VERIFICATION_REQUIRED";
+            RegistrationMessage =
+                result.ErrorMessage ??
+                "If this account still needs verification, a new code will be sent.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            RegistrationStatus = "VERIFICATION_REQUIRED";
+            RegistrationMessage =
+                "Verification-code resend is temporarily unavailable.";
+        }
+    }
+
     public async Task RequestPasswordResetAsync(
         CancellationToken cancellationToken)
     {
@@ -955,6 +1258,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void ApplyNativeSignInResult(LauncherNativeSignInResult result)
     {
         Password = string.Empty;
+        ResetRegistrationState();
         ResetPasswordResetState();
         ClaimCode = string.Empty;
         ClaimStatus = "AUTH_REQUIRED";
@@ -2879,6 +3183,50 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanSubmitMfaProof));
     }
 
+    private void RegistrationLegalAcceptanceChanged(
+        object? sender,
+        PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(RegistrationLegalDocumentViewModel.IsAccepted))
+        {
+            Raise(nameof(CanCreateAccount));
+        }
+    }
+
+    private void ResetRegistrationFields(bool clearEmail)
+    {
+        RegistrationPassword = string.Empty;
+        RegistrationCode = string.Empty;
+        RegistrationName = string.Empty;
+        if (clearEmail)
+        {
+            RegistrationEmail = string.Empty;
+        }
+        RegistrationLegalDocuments.Clear();
+        RaiseRegistrationCapabilities();
+    }
+
+    private void ResetRegistrationState()
+    {
+        ResetRegistrationFields(clearEmail: true);
+        _showRegistration = false;
+        RegistrationStatus = "IDLE";
+        RegistrationMessage =
+            "Create your BKE account without leaving the Launcher.";
+        RaiseRegistrationCapabilities();
+    }
+
+    private void RaiseRegistrationCapabilities()
+    {
+        Raise(nameof(ShowSignInForm));
+        Raise(nameof(ShowRegistration));
+        Raise(nameof(ShowRegistrationEntry));
+        Raise(nameof(ShowRegistrationVerification));
+        Raise(nameof(CanCreateAccount));
+        Raise(nameof(CanVerifyRegistrationEmail));
+        Raise(nameof(CanResendRegistrationEmail));
+    }
+
     private void ResetPasswordResetState()
     {
         PasswordResetStatus = "IDLE";
@@ -3122,6 +3470,71 @@ public sealed record NotificationViewModel(
                 ? "BKE"
                 : item.ProductId);
     }
+}
+
+public sealed class RegistrationLegalDocumentViewModel : INotifyPropertyChanged
+{
+    private bool _isAccepted;
+
+    private RegistrationLegalDocumentViewModel(
+        string documentType,
+        string title,
+        string slug,
+        string versionId,
+        int versionNumber,
+        string? effectiveAt,
+        string contentMarkdown)
+    {
+        DocumentType = documentType;
+        Title = title;
+        Slug = slug;
+        VersionId = versionId;
+        VersionNumber = versionNumber;
+        EffectiveAt = effectiveAt ?? string.Empty;
+        ContentMarkdown = contentMarkdown;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string DocumentType { get; }
+    public string Title { get; }
+    public string Slug { get; }
+    public string VersionId { get; }
+    public int VersionNumber { get; }
+    public string EffectiveAt { get; }
+    public string ContentMarkdown { get; }
+    public string VersionLabel =>
+        string.IsNullOrWhiteSpace(EffectiveAt)
+            ? $"Version {VersionNumber}"
+            : $"Version {VersionNumber} · effective {EffectiveAt}";
+
+    public bool IsAccepted
+    {
+        get => _isAccepted;
+        set
+        {
+            if (_isAccepted == value)
+            {
+                return;
+            }
+
+            _isAccepted = value;
+            PropertyChanged?.Invoke(
+                this,
+                new PropertyChangedEventArgs(nameof(IsAccepted)));
+        }
+    }
+
+    public static RegistrationLegalDocumentViewModel From(
+        NativeBkeRegistrationLegalDocument document) =>
+        new(
+            document.DocumentType,
+            document.Title,
+            document.Slug,
+            document.VersionId,
+            document.VersionNumber,
+            document.EffectiveAt,
+            document.ContentMarkdown);
 }
 
 public sealed class PurchaseLegalDocumentViewModel : INotifyPropertyChanged

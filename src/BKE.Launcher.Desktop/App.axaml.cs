@@ -27,6 +27,9 @@ public sealed partial class App : Avalonia.Application
                 agentClient,
                 platformAuthority,
                 identityClient);
+            var nativeRegistration = new LauncherNativeRegistrationController(
+                platformAuthority,
+                identityClient);
             var passwordResetRequest =
                 new LauncherPasswordResetRequestController(
                     platformAuthority,
@@ -53,6 +56,7 @@ public sealed partial class App : Avalonia.Application
             var viewModel = new MainWindowViewModel(
                 accountSession,
                 nativeSignIn,
+                nativeRegistration,
                 passwordResetRequest,
                 catalog,
                 store,

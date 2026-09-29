@@ -46,6 +46,36 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void OpenRegistration(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenRegistrationAsync(CancellationToken.None);
+    }
+
+    private void CancelRegistration(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.CancelRegistration();
+    }
+
+    private async void CreateNativeAccount(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.CreateNativeAccountAsync(CancellationToken.None);
+    }
+
+    private async void VerifyRegistrationEmail(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.VerifyRegistrationEmailAsync(CancellationToken.None);
+    }
+
+    private async void ResendRegistrationVerification(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.ResendRegistrationVerificationAsync(
+            CancellationToken.None);
+    }
+
     private async void NativeSignIn(object? sender, RoutedEventArgs args)
     {
         await ViewModel.NativeSignInAsync(CancellationToken.None);
