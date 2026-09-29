@@ -11,6 +11,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly LauncherAccountSessionController _accountSession;
     private readonly LauncherNativeSignInController _nativeSignIn;
+    private readonly LauncherPasswordResetRequestController _passwordResetRequest;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherStoreService _store;
     private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
@@ -30,6 +31,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
+    private string _passwordResetStatus = "IDLE";
+    private string _passwordResetMessage =
+        "Forgot your password? Request a one-time reset link by email.";
     private NativeBkeAccountChoice? _selectedAccount;
     private string _accountDisplay = "Not signed in";
     private string _userCode = string.Empty;
@@ -75,6 +79,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
         LauncherNativeSignInController nativeSignIn,
+        LauncherPasswordResetRequestController passwordResetRequest,
         LauncherCatalogService catalog,
         LauncherStoreService store,
         LauncherStoreCheckoutReviewService storeCheckoutReview,
@@ -94,6 +99,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
+        _passwordResetRequest = passwordResetRequest;
         _catalog = catalog;
         _store = store;
         _storeCheckoutReview = storeCheckoutReview;
@@ -124,7 +130,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string Email
     {
         get => _email;
-        set => SetField(ref _email, value);
+        set
+        {
+            SetField(ref _email, value);
+            Raise(nameof(CanRequestPasswordReset));
+        }
+    }
+
+    public string PasswordResetStatus
+    {
+        get => _passwordResetStatus;
+        private set
+        {
+            SetField(ref _passwordResetStatus, value);
+            Raise(nameof(CanRequestPasswordReset));
+        }
+    }
+
+    public string PasswordResetMessage
+    {
+        get => _passwordResetMessage;
+        private set => SetField(ref _passwordResetMessage, value);
     }
 
     public string Password
@@ -198,6 +224,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool ShowLoginPage => !IsAuthenticated;
     public bool ShowAuthenticatedShell => IsAuthenticated;
+    public bool CanRequestPasswordReset =>
+        ShowLoginPage &&
+        PasswordResetStatus != "REQUESTING" &&
+        !string.IsNullOrWhiteSpace(Email);
 
     public int SelectedModuleIndex
     {
@@ -220,6 +250,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(IsAuthenticated));
             Raise(nameof(ShowLoginPage));
             Raise(nameof(ShowAuthenticatedShell));
+            Raise(nameof(CanRequestPasswordReset));
             Raise(nameof(CanRedeemClaimCode));
             Raise(nameof(CanChangePassword));
             Raise(nameof(CanRefreshNotifications));
@@ -531,6 +562,63 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             case 2:
                 await RefreshStoreAsync(cancellationToken);
                 break;
+        }
+    }
+
+    public async Task RequestPasswordResetAsync(
+        CancellationToken cancellationToken)
+    {
+        if (IsAuthenticated)
+        {
+            PasswordResetStatus = "AUTHENTICATED";
+            PasswordResetMessage =
+                "Password reset is available from the sign-in screen.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(Email))
+        {
+            PasswordResetStatus = "INVALID_INPUT";
+            PasswordResetMessage = "Enter your BKE account email first.";
+            return;
+        }
+
+        PasswordResetStatus = "REQUESTING";
+        PasswordResetMessage = "Requesting a one-time BKE password reset…";
+
+        try
+        {
+            var response = await _passwordResetRequest.RequestAsync(
+                Email,
+                cancellationToken);
+
+            Password = string.Empty;
+
+            if (response.Status == "accepted")
+            {
+                PasswordResetStatus = "ACCEPTED";
+                PasswordResetMessage =
+                    "If a BKE account exists for this email, a one-time reset link has been sent. Complete the reset, then return here and sign in with the new password.";
+                return;
+            }
+
+            PasswordResetStatus = response.Error == "INVALID_INPUT"
+                ? "INVALID_INPUT"
+                : "UNAVAILABLE";
+            PasswordResetMessage = response.Error == "INVALID_INPUT"
+                ? "Enter a valid BKE account email."
+                : "BKE password recovery is temporarily unavailable.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            Password = string.Empty;
+            PasswordResetStatus = "UNAVAILABLE";
+            PasswordResetMessage =
+                "BKE password recovery is temporarily unavailable.";
         }
     }
 
