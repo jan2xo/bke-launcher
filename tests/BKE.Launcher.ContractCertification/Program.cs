@@ -3336,22 +3336,24 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 viewBilling || viewLicenses ? 4 : null,
                 viewBilling ? 3 : null),
             manageMembers
-                ? [
+                ? new[]
+                {
                     new AccountOrganizationMember(
                         "owner@example.test",
                         "Owner",
                         "OWNER"),
-                ]
+                }
                 : Array.Empty<AccountOrganizationMember>(),
             manageMembers
-                ? [
+                ? new[]
+                {
                     new AccountOrganizationInvitation(
                         "invitee@example.test",
                         "MEMBER",
                         "PENDING",
                         "2026-10-01T12:00:00.000Z",
                         "2026-09-29T12:00:00.000Z"),
-                ]
+                }
                 : Array.Empty<AccountOrganizationInvitation>(),
             null));
     }
