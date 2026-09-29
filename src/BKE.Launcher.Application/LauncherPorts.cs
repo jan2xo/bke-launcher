@@ -28,6 +28,10 @@ public interface ILauncherAgentClient
         AccountSessionLogoutRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountPasswordChangeResponse> ChangeAccountPasswordAsync(
+        AccountPasswordChangeRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,
         CancellationToken cancellationToken);
