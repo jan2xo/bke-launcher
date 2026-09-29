@@ -26,6 +26,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherSoftwareOpenController _softwareOpen;
     private readonly LauncherSoftwareRemoveController _softwareRemove;
     private readonly LauncherClaimCodeRedemptionController _claimCodeRedemption;
+    private readonly LauncherAccountPasswordChangeController _accountPasswordChange;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
@@ -39,6 +40,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _claimCode = string.Empty;
     private string _claimStatus = "AUTH_REQUIRED";
     private string _claimMessage = "Sign in to redeem a Claim Code.";
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _confirmNewPassword = string.Empty;
+    private string _passwordChangeStatus = "IDLE";
+    private string _passwordChangeMessage = "Use your current password to set a new BKE password.";
     private string _storeStatus = "AUTH_REQUIRED";
     private string _storeMessage = "Sign in to browse the BKE Store.";
     private string _notificationStatus = "AUTH_REQUIRED";
@@ -83,7 +89,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherSoftwareRepairController softwareRepair,
         LauncherSoftwareOpenController softwareOpen,
         LauncherSoftwareRemoveController softwareRemove,
-        LauncherClaimCodeRedemptionController claimCodeRedemption)
+        LauncherClaimCodeRedemptionController claimCodeRedemption,
+        LauncherAccountPasswordChangeController accountPasswordChange)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -102,6 +109,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _softwareOpen = softwareOpen;
         _softwareRemove = softwareRemove;
         _claimCodeRedemption = claimCodeRedemption;
+        _accountPasswordChange = accountPasswordChange;
         RestoreCheckoutRecoveryState();
     }
 
@@ -129,6 +137,52 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _claimCode;
         set => SetField(ref _claimCode, value);
+    }
+
+    public string CurrentPassword
+    {
+        get => _currentPassword;
+        set
+        {
+            SetField(ref _currentPassword, value);
+            Raise(nameof(CanChangePassword));
+        }
+    }
+
+    public string NewPassword
+    {
+        get => _newPassword;
+        set
+        {
+            SetField(ref _newPassword, value);
+            Raise(nameof(CanChangePassword));
+        }
+    }
+
+    public string ConfirmNewPassword
+    {
+        get => _confirmNewPassword;
+        set
+        {
+            SetField(ref _confirmNewPassword, value);
+            Raise(nameof(CanChangePassword));
+        }
+    }
+
+    public string PasswordChangeStatus
+    {
+        get => _passwordChangeStatus;
+        private set
+        {
+            SetField(ref _passwordChangeStatus, value);
+            Raise(nameof(CanChangePassword));
+        }
+    }
+
+    public string PasswordChangeMessage
+    {
+        get => _passwordChangeMessage;
+        private set => SetField(ref _passwordChangeMessage, value);
     }
 
     public NativeBkeAccountChoice? SelectedAccount
@@ -167,6 +221,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(ShowLoginPage));
             Raise(nameof(ShowAuthenticatedShell));
             Raise(nameof(CanRedeemClaimCode));
+            Raise(nameof(CanChangePassword));
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
             Raise(nameof(CanRetryOriginalCheckout));
@@ -393,6 +448,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool CanRedeemClaimCode =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
 
+    public bool CanChangePassword =>
+        IsAuthenticated &&
+        PasswordChangeStatus != "CHANGING" &&
+        !string.IsNullOrEmpty(CurrentPassword) &&
+        !string.IsNullOrEmpty(NewPassword) &&
+        !string.IsNullOrEmpty(ConfirmNewPassword);
+
     public bool CanRefreshNotifications =>
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
 
@@ -515,6 +577,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClaimCode = string.Empty;
             ClaimStatus = "AUTH_REQUIRED";
             ClaimMessage = "Sign in to redeem a Claim Code.";
+            ResetPasswordChangeState();
             AvailableAccounts.Clear();
             SelectedAccount = null;
             Raise(nameof(HasAccountChoices));
@@ -524,6 +587,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
                 Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
+                ResetPasswordChangeState();
                 ResetShellSurface();
                 return;
             }
@@ -1984,6 +2048,70 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task ChangePasswordAsync(CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            PasswordChangeStatus = "AUTH_REQUIRED";
+            PasswordChangeMessage = "Sign in with BKE before changing your password.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(CurrentPassword) ||
+            string.IsNullOrEmpty(NewPassword) ||
+            string.IsNullOrEmpty(ConfirmNewPassword))
+        {
+            PasswordChangeStatus = "INVALID_INPUT";
+            PasswordChangeMessage = "Enter your current password, new password, and confirmation.";
+            return;
+        }
+
+        if (!string.Equals(NewPassword, ConfirmNewPassword, StringComparison.Ordinal))
+        {
+            PasswordChangeStatus = "INVALID_INPUT";
+            PasswordChangeMessage = "The new password and confirmation do not match.";
+            return;
+        }
+
+        PasswordChangeStatus = "CHANGING";
+        PasswordChangeMessage = "Changing your BKE password through the Licensing Agent…";
+
+        try
+        {
+            var response = await _accountPasswordChange.ChangeAsync(
+                CurrentPassword,
+                NewPassword,
+                cancellationToken);
+
+            if (response.ReauthenticationRequired)
+            {
+                var message = response.Status == "CHANGED"
+                    ? "Password changed. Sign in again with your new password."
+                    : response.Error?.Message ??
+                      "Your BKE session must be authenticated again before continuing.";
+                EnterPasswordChangeReauthentication(response.Status, message);
+                return;
+            }
+
+            PasswordChangeStatus = response.Status;
+            PasswordChangeMessage = response.Error?.Message ?? response.Status switch
+            {
+                "INVALID_CREDENTIALS" => "The current password was not accepted.",
+                "INVALID_INPUT" => "The new password does not satisfy BKE account requirements.",
+                _ => "Password change could not be completed.",
+            };
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            EnterPasswordChangeReauthentication(
+                "REAUTHENTICATION_REQUIRED",
+                "The password-change result could not be confirmed. Sign in again before retrying.");
+        }
+    }
+
     public async Task LogoutAsync(CancellationToken cancellationToken)
     {
         var preserveCheckoutRecovery =
@@ -2030,6 +2158,46 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         ShowAccountSurface = false;
         SelectedModuleIndex = -1;
+    }
+
+    private void EnterPasswordChangeReauthentication(
+        string status,
+        string message)
+    {
+        ClearPasswordChangeFields();
+        PasswordChangeStatus = status;
+        PasswordChangeMessage = message;
+        ResetShellSurface();
+        SessionStatus = "SIGNED_OUT";
+        AccountDisplay = "Not signed in";
+        UserCode = string.Empty;
+        VerificationUri = string.Empty;
+        Password = string.Empty;
+        ClaimCode = string.Empty;
+        ClaimStatus = "AUTH_REQUIRED";
+        ClaimMessage = "Sign in to redeem a Claim Code.";
+        AvailableAccounts.Clear();
+        SelectedAccount = null;
+        Raise(nameof(HasAccountChoices));
+        GiftClaimCode = string.Empty;
+        Message = message;
+        ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+        ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
+        ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
+    }
+
+    private void ClearPasswordChangeFields()
+    {
+        CurrentPassword = string.Empty;
+        NewPassword = string.Empty;
+        ConfirmNewPassword = string.Empty;
+    }
+
+    private void ResetPasswordChangeState()
+    {
+        ClearPasswordChangeFields();
+        PasswordChangeStatus = "IDLE";
+        PasswordChangeMessage = "Use your current password to set a new BKE password.";
     }
 
     private void ApplyStatus(AccountSessionStatusResponse response)
