@@ -503,6 +503,94 @@ Require(!nativePasswordResetResponseProperties.Any(name =>
         name.Contains("Recipient", StringComparison.OrdinalIgnoreCase)),
     "Launcher native password-reset response exposes reset material or delivery identity.");
 
+var registrationPreflightProperties = typeof(NativeBkeRegistrationPreflightResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(registrationPreflightProperties.SetEquals(["Status", "LegalDocuments", "Error"]),
+    "Launcher native registration preflight response drifted.");
+
+var registrationResponseProperties = typeof(NativeBkeRegistrationResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(registrationResponseProperties.SetEquals(["Status", "Error"]),
+    "Launcher native registration response widened beyond status/error.");
+
+var registrationVerifyResponseProperties = typeof(NativeBkeEmailVerificationResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(registrationVerifyResponseProperties.SetEquals(["Status", "Error"]),
+    "Launcher native registration verification response widened beyond status/error.");
+
+var registrationResendResponseProperties = typeof(NativeBkeVerificationResendResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(registrationResendResponseProperties.SetEquals(["Status", "Error"]),
+    "Launcher native verification-resend response widened beyond status/error.");
+
+foreach (var responseType in new[]
+{
+    typeof(NativeBkeRegistrationResponse),
+    typeof(NativeBkeEmailVerificationResponse),
+    typeof(NativeBkeVerificationResendResponse),
+})
+{
+    Require(responseType.GetProperties().All(property =>
+            !property.Name.Contains("Password", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Code", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Token", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Handoff", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Session", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Access", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Refresh", StringComparison.OrdinalIgnoreCase)),
+        $"Launcher native registration response {responseType.Name} exposes secret/session material.");
+}
+
+var registrationRequestProperties = typeof(NativeBkeRegistrationRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(registrationRequestProperties.SequenceEqual([
+    "Email",
+    "Name",
+    "Password",
+    "LegalVersionIds"
+]), "Launcher native registration request drifted.");
+
+using (var registrationRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new NativeBkeRegistrationRequest(
+            "new-customer@example.test",
+            "New Customer",
+            "transient-registration-password",
+            ["terms-current", "privacy-current"]))))
+{
+    var fields = registrationRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(fields.SequenceEqual([
+        "email",
+        "name",
+        "password",
+        "legal_version_ids"
+    ]), "Launcher native registration wire request drifted.");
+}
+
+var registrationClientMethods = typeof(ILauncherRegistrationClient)
+    .GetMethods()
+    .Select(method => method.Name)
+    .ToHashSet(StringComparer.Ordinal);
+Require(registrationClientMethods.SetEquals([
+    "GetRegistrationPreflightAsync",
+    "RegisterAsync",
+    "VerifyEmailAsync",
+    "ResendVerificationAsync"
+]), "Launcher native registration client port drifted.");
+
 var identityMethods = typeof(ILauncherIdentityClient)
     .GetMethods()
     .Select(method => method.Name)
@@ -517,6 +605,10 @@ Require(!typeof(BkePlatformContract).GetFields(BindingFlags.Public | BindingFlag
     "Launcher platform contract regained an independent default authority.");
 Require(BkePlatformContract.NativeLoginPath == "/api/agent-sessions/native/login", "native login path drifted.");
 Require(BkePlatformContract.NativePasswordResetRequestPath == "/api/agent-sessions/native/password-reset/request", "native password-reset request path drifted.");
+Require(BkePlatformContract.NativeRegistrationPreflightPath == "/api/agent-sessions/native/registration", "native registration preflight path drifted.");
+Require(BkePlatformContract.NativeRegistrationPath == "/api/agent-sessions/native/register", "native registration path drifted.");
+Require(BkePlatformContract.NativeEmailVerifyPath == "/api/agent-sessions/native/verify-email", "native registration verify path drifted.");
+Require(BkePlatformContract.NativeVerificationResendPath == "/api/agent-sessions/native/verification/resend", "native registration resend path drifted.");
 Require(BkePlatformContract.AccountSessionProtocolVersion == "bke.account-session.v1", "account-session protocol version drifted.");
 
 var platformIdentitySource = File.ReadAllText(
@@ -551,6 +643,47 @@ Require(platformIdentitySource.Contains(
         "EnsureNativeProtocol(response);",
         StringComparison.Ordinal),
     "Launcher native password-reset request does not verify the DS protocol response.");
+
+Require(platformIdentitySource.Contains(
+        "GetRegistrationPreflightAsync(",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "BkePlatformContract.NativeRegistrationPreflightPath",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "BkePlatformContract.NativeRegistrationPath",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "BkePlatformContract.NativeEmailVerifyPath",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "BkePlatformContract.NativeVerificationResendPath",
+        StringComparison.Ordinal),
+    "Launcher platform client lacks the canonical native registration routes.");
+Require(platformIdentitySource.Contains(
+        "AddNativeHeaders(message);",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "EnsureNativeProtocol(response);",
+        StringComparison.Ordinal),
+    "Launcher native registration client does not enforce the shared protocol boundary.");
+
+var nativeRegistrationControllerSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherNativeRegistrationController.cs"));
+Require(nativeRegistrationControllerSource.Contains(
+        "await _platformAuthority.ResolveAsync(cancellationToken)",
+        StringComparison.Ordinal),
+    "Launcher registration does not inherit Digital Solutions authority from the Agent.");
+Require(!nativeRegistrationControllerSource.Contains(
+        "AgentLoopbackClient",
+        StringComparison.Ordinal) &&
+    !nativeRegistrationControllerSource.Contains(
+        "BKE_PLATFORM_BASE_URL",
+        StringComparison.Ordinal) &&
+    !nativeRegistrationControllerSource.Contains(
+        "jl-bke.com",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher registration absorbed independent Agent/cloud authority.");
 
 var platformAuthorityResolverSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherPlatformAuthorityResolver.cs"));
@@ -612,6 +745,43 @@ var mainWindowMarkup = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml"));
 var desktopProjectSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "BKE.Launcher.Desktop.csproj"));
+Require(mainWindowMarkup.Contains(
+        "I have reviewed and accept this exact published version.",
+        StringComparison.Ordinal),
+    "Launcher Create Account UX does not require explicit exact-version legal acceptance.");
+Require(mainWindowMarkup.Contains(
+        "Text=\"{Binding ContentMarkdown}\"",
+        StringComparison.Ordinal),
+    "Launcher Create Account UX does not present authoritative registration legal text.");
+Require(mainWindowMarkup.Contains(
+        "Click=\"CreateNativeAccount\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"VerifyRegistrationEmail\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"ResendRegistrationVerification\"",
+        StringComparison.Ordinal),
+    "Launcher Create Account UX lacks registration/verification actions.");
+
+var viewModelSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
+Require(viewModelSource.Contains(
+        "finally\n        {\n            RegistrationPassword = string.Empty;",
+        StringComparison.Ordinal),
+    "Launcher registration UX does not clear the transient password after registration.");
+Require(viewModelSource.Contains(
+        "var code = RegistrationCode;\n        RegistrationCode = string.Empty;",
+        StringComparison.Ordinal),
+    "Launcher registration UX does not clear the transient verification code before submission.");
+Require(viewModelSource.Contains(
+        "Email = verifiedEmail;",
+        StringComparison.Ordinal) &&
+    viewModelSource.Contains(
+        "_showRegistration = false;",
+        StringComparison.Ordinal),
+    "Launcher verified-registration UX does not return to the normal sign-in surface.");
+
 Require(desktopProjectSource.Contains("Avalonia\" Version=\"12.1.3\"", StringComparison.Ordinal),
     "Launcher Avalonia package baseline is not 12.1.3.");
 Require(!desktopProjectSource.Contains("12.1.1", StringComparison.Ordinal),
@@ -1388,12 +1558,14 @@ Require(removeTimeout > defaultTimeout,
     "Launcher remove operation does not have a dedicated long-running timeout.");
 
 await CertifyNativePasswordResetRequestAsync();
+await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
+Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
@@ -1415,6 +1587,97 @@ Console.WriteLine("Bounded long-running remove transport certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
 
+
+static async Task CertifyNativeRegistrationJourneyAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+    };
+    var identity = new CustomerJourneyIdentityClient();
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator(),
+        identity);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    Require(viewModel.ShowSignInForm && !viewModel.IsAuthenticated,
+        "Native registration certification did not begin on the signed-out sign-in surface.");
+
+    await viewModel.OpenRegistrationAsync(CancellationToken.None);
+
+    Require(identity.RegistrationPreflightCount == 1 &&
+            identity.LastRegistrationAuthority ==
+                new Uri("https://digital-solutions.example.test/"),
+        "Launcher registration preflight did not use the Agent-inherited Digital Solutions authority.");
+    Require(agent.PlatformAuthorityCount == 1,
+        "Launcher registration preflight did not resolve platform authority exactly once.");
+    Require(viewModel.ShowRegistration &&
+            viewModel.RegistrationStatus == "READY" &&
+            viewModel.RegistrationLegalDocuments.Count == 2 &&
+            viewModel.RegistrationLegalDocuments.All(document =>
+                !string.IsNullOrWhiteSpace(document.ContentMarkdown)),
+        "Launcher did not present both exact authoritative registration legal documents.");
+
+    viewModel.RegistrationName = "New Customer";
+    viewModel.RegistrationEmail = "new-customer@example.test";
+    viewModel.RegistrationPassword = "transient-registration-password";
+    Require(!viewModel.CanCreateAccount,
+        "Launcher enabled Create Account before both exact legal versions were accepted.");
+
+    foreach (var document in viewModel.RegistrationLegalDocuments)
+    {
+        document.IsAccepted = true;
+    }
+    Require(viewModel.CanCreateAccount,
+        "Launcher did not enable Create Account after complete legal acceptance.");
+
+    await viewModel.CreateNativeAccountAsync(CancellationToken.None);
+
+    Require(identity.RegistrationCount == 1 &&
+            identity.LastRegistrationRequest is not null &&
+            identity.LastRegistrationRequest.Email == "new-customer@example.test" &&
+            identity.LastRegistrationRequest.Name == "New Customer" &&
+            identity.LastRegistrationRequest.Password == "transient-registration-password" &&
+            identity.LastRegistrationRequest.LegalVersionIds.SequenceEqual([
+                "terms-current",
+                "privacy-current"
+            ]),
+        "Launcher registration did not submit the transient credential and exact accepted legal version IDs.");
+    Require(string.IsNullOrEmpty(viewModel.RegistrationPassword),
+        "Launcher retained the registration password after account creation.");
+    Require(viewModel.RegistrationStatus == "VERIFICATION_REQUIRED" &&
+            viewModel.ShowRegistrationVerification &&
+            !viewModel.IsAuthenticated,
+        "Launcher registration incorrectly created an authenticated Agent session or skipped email verification.");
+
+    await viewModel.ResendRegistrationVerificationAsync(CancellationToken.None);
+    Require(identity.ResendCount == 1 &&
+            viewModel.RegistrationStatus == "VERIFICATION_REQUIRED" &&
+            viewModel.RegistrationMessage.Contains(
+                "If this account still needs verification",
+                StringComparison.Ordinal),
+        "Launcher verification resend did not preserve the generic enumeration-resistant UX.");
+
+    viewModel.RegistrationCode = "ABCD2345";
+    await viewModel.VerifyRegistrationEmailAsync(CancellationToken.None);
+
+    Require(identity.VerificationCount == 1 &&
+            identity.LastVerificationCode == "ABCD2345",
+        "Launcher did not submit the transient native email verification code.");
+    Require(string.IsNullOrEmpty(viewModel.RegistrationCode),
+        "Launcher retained the native email verification code after submission.");
+    Require(viewModel.RegistrationStatus == "VERIFIED" &&
+            viewModel.ShowSignInForm &&
+            !viewModel.ShowRegistration &&
+            viewModel.Email == "new-customer@example.test" &&
+            string.IsNullOrEmpty(viewModel.Password) &&
+            !viewModel.IsAuthenticated,
+        "Verified registration did not return to normal signed-out BKE login with only the verified email prefilled.");
+}
 
 static async Task CertifyNativePasswordResetRequestAsync()
 {
@@ -1696,6 +1959,9 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
             agent,
             platformAuthority,
             identity),
+        new LauncherNativeRegistrationController(
+            platformAuthority,
+            identity),
         new LauncherPasswordResetRequestController(
             platformAuthority,
             identity),
@@ -1785,9 +2051,18 @@ sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
     }
 }
 
-sealed class CustomerJourneyIdentityClient : ILauncherIdentityClient
+sealed class CustomerJourneyIdentityClient :
+    ILauncherIdentityClient,
+    ILauncherRegistrationClient
 {
     public int ResetRequestCount { get; private set; }
+    public int RegistrationPreflightCount { get; private set; }
+    public int RegistrationCount { get; private set; }
+    public int VerificationCount { get; private set; }
+    public int ResendCount { get; private set; }
+    public Uri? LastRegistrationAuthority { get; private set; }
+    public NativeBkeRegistrationRequest? LastRegistrationRequest { get; private set; }
+    public string? LastVerificationCode { get; private set; }
     public string? LastResetEmail { get; private set; }
     public Uri? LastResetAuthority { get; private set; }
 
@@ -1803,6 +2078,77 @@ sealed class CustomerJourneyIdentityClient : ILauncherIdentityClient
         NativeBkeMfaVerifyRequest request,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException();
+
+    public Task<NativeBkeRegistrationPreflightResponse> GetRegistrationPreflightAsync(
+        Uri platformBaseAddress,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RegistrationPreflightCount++;
+        LastRegistrationAuthority = platformBaseAddress;
+        return Task.FromResult(new NativeBkeRegistrationPreflightResponse(
+            "ready",
+            new[]
+            {
+                new NativeBkeRegistrationLegalDocument(
+                    "TERMS_OF_SERVICE",
+                    "Terms of Service",
+                    "terms-of-service",
+                    "terms-current",
+                    7,
+                    "2026-09-29T00:00:00.000Z",
+                    "# Terms of Service\n\nCurrent certification terms."),
+                new NativeBkeRegistrationLegalDocument(
+                    "PRIVACY_POLICY",
+                    "Privacy Policy",
+                    "privacy-policy",
+                    "privacy-current",
+                    4,
+                    "2026-09-29T00:00:00.000Z",
+                    "# Privacy Policy\n\nCurrent certification privacy policy."),
+            },
+            null));
+    }
+
+    public Task<NativeBkeRegistrationResponse> RegisterAsync(
+        Uri platformBaseAddress,
+        NativeBkeRegistrationRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RegistrationCount++;
+        LastRegistrationAuthority = platformBaseAddress;
+        LastRegistrationRequest = request;
+        return Task.FromResult(
+            new NativeBkeRegistrationResponse(
+                "verification_required",
+                null));
+    }
+
+    public Task<NativeBkeEmailVerificationResponse> VerifyEmailAsync(
+        Uri platformBaseAddress,
+        NativeBkeEmailVerificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        VerificationCount++;
+        LastRegistrationAuthority = platformBaseAddress;
+        LastVerificationCode = request.Code;
+        return Task.FromResult(
+            new NativeBkeEmailVerificationResponse("verified", null));
+    }
+
+    public Task<NativeBkeVerificationResendResponse> ResendVerificationAsync(
+        Uri platformBaseAddress,
+        NativeBkeVerificationResendRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ResendCount++;
+        LastRegistrationAuthority = platformBaseAddress;
+        return Task.FromResult(
+            new NativeBkeVerificationResendResponse("accepted", null));
+    }
 
     public Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
         Uri platformBaseAddress,
