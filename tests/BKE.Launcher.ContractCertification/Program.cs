@@ -509,6 +509,7 @@ var identityMethods = typeof(ILauncherIdentityClient)
     .ToHashSet(StringComparer.Ordinal);
 Require(identityMethods.SetEquals([
     "LoginAsync",
+    "VerifyMfaAsync",
     "RequestPasswordResetAsync"
 ]), "Launcher identity client port drifted.");
 Require(!typeof(BkePlatformContract).GetFields(BindingFlags.Public | BindingFlags.Static)
