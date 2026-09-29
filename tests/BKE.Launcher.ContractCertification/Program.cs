@@ -434,10 +434,31 @@ var nativeLoginResponseProperties = typeof(NativeBkeLoginResponse)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 Require(!nativeLoginResponseProperties.Contains("AccessToken"), "Launcher platform response exposes access token.");
 Require(!nativeLoginResponseProperties.Contains("RefreshToken"), "Launcher platform response exposes refresh token.");
+var nativePasswordResetResponseProperties = typeof(NativeBkePasswordResetResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(nativePasswordResetResponseProperties.SetEquals(["Status", "Error"]),
+    "Launcher native password-reset response widened beyond generic status/error.");
+Require(!nativePasswordResetResponseProperties.Any(name =>
+        name.Contains("Token", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Delivery", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Recipient", StringComparison.OrdinalIgnoreCase)),
+    "Launcher native password-reset response exposes reset material or delivery identity.");
+
+var identityMethods = typeof(ILauncherIdentityClient)
+    .GetMethods()
+    .Select(method => method.Name)
+    .ToHashSet(StringComparer.Ordinal);
+Require(identityMethods.SetEquals([
+    "LoginAsync",
+    "RequestPasswordResetAsync"
+]), "Launcher identity client port drifted.");
 Require(!typeof(BkePlatformContract).GetFields(BindingFlags.Public | BindingFlags.Static)
         .Any(field => field.Name.Contains("DefaultBaseAddress", StringComparison.Ordinal)),
     "Launcher platform contract regained an independent default authority.");
 Require(BkePlatformContract.NativeLoginPath == "/api/agent-sessions/native/login", "native login path drifted.");
+Require(BkePlatformContract.NativePasswordResetRequestPath == "/api/agent-sessions/native/password-reset/request", "native password-reset request path drifted.");
 Require(BkePlatformContract.AccountSessionProtocolVersion == "bke.account-session.v1", "account-session protocol version drifted.");
 
 var platformIdentitySource = File.ReadAllText(
@@ -461,6 +482,17 @@ Require(platformIdentitySource.Contains(
         "value.AbsolutePath != \"/\"",
         StringComparison.Ordinal),
     "Launcher platform identity client no longer requires an HTTPS origin.");
+Require(platformIdentitySource.Contains(
+        "RequestPasswordResetAsync(",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "BkePlatformContract.NativePasswordResetRequestPath",
+        StringComparison.Ordinal),
+    "Launcher platform identity client lacks native password-reset request support.");
+Require(platformIdentitySource.Contains(
+        "EnsureNativeProtocol(response);",
+        StringComparison.Ordinal),
+    "Launcher native password-reset request does not verify the DS protocol response.");
 
 var platformAuthorityResolverSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherPlatformAuthorityResolver.cs"));
@@ -501,6 +533,21 @@ Require(nativeSignInControllerSource.Contains(
         StringComparison.Ordinal),
     "Native Launcher sign-in does not bind credential validation to the Agent authority.");
 
+var passwordResetControllerSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherPasswordResetRequestController.cs"));
+Require(passwordResetControllerSource.Contains(
+        "await _platformAuthority.ResolveAsync(cancellationToken)",
+        StringComparison.Ordinal),
+    "Launcher password reset does not inherit Digital Solutions authority from the Agent.");
+Require(passwordResetControllerSource.Contains(
+        "await _identity.RequestPasswordResetAsync(",
+        StringComparison.Ordinal),
+    "Launcher password reset does not delegate issuance to Digital Solutions.");
+Require(!passwordResetControllerSource.Contains(
+        "AgentLoopbackClient",
+        StringComparison.Ordinal),
+    "Launcher password reset incorrectly moved unauthenticated recovery into Agent session custody.");
+
 var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
 var mainWindowMarkup = File.ReadAllText(
@@ -529,6 +576,12 @@ Require(mainWindowSource.Contains("ViewModel.OpenAccountSurface();", StringCompa
 Require(!mainWindowSource.Contains("Process.Start", StringComparison.Ordinal), "Native sign-in still launches a browser.");
 Require(!mainWindowMarkup.Contains("Device code", StringComparison.Ordinal), "Device-code UX remains visible in Launcher.");
 Require(mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Native sign-in action is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Forgot password?\"", StringComparison.Ordinal),
+    "Native Forgot Password action is missing.");
+Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRequestPasswordReset}\"", StringComparison.Ordinal),
+    "Native Forgot Password action is not recovery-state-bound.");
+Require(mainWindowSource.Contains("RequestPasswordReset", StringComparison.Ordinal),
+    "Native Forgot Password click handler is missing.");
 Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Native password field is not masked.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode, Mode=OneWay}\"", StringComparison.Ordinal),
     "Launcher Store does not render the recovered gift Claim Code.");
