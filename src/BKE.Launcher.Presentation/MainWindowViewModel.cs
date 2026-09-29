@@ -4219,7 +4219,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _organizationTaxId ?? string.Empty;
         OrganizationProfileUpdateStatus = "IDLE";
         OrganizationProfileUpdateMessage =
-            ShowOrganizationProfileEditor
+            _organizationPermissions?.ManageMembers == true ||
+            _organizationPermissions?.ViewBilling == true
                 ? "Edit only the fields allowed by the selected Organization role."
                 : "This Organization role has no profile-edit permissions.";
     }
