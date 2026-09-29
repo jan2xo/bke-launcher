@@ -19,6 +19,9 @@ Require(AgentLocalContract.AccountSessionCompletePath == "/v1/account-session/co
 Require(AgentLocalContract.AccountSessionStartPath == "/v1/account-session/start", "account-session start path drifted");
 Require(AgentLocalContract.AccountSessionStatusPath == "/v1/account-session/status", "account-session status path drifted");
 Require(AgentLocalContract.AccountSessionLogoutPath == "/v1/account-session/logout", "account-session logout path drifted");
+Require(AgentLocalContract.AccountPasswordChangePath == "/v1/account/password-change", "account password-change path drifted");
+Require(AgentLocalContract.AccountPasswordChangeCapabilityId == "bke.account-password-change", "account password-change capability id drifted");
+Require(AgentLocalContract.AccountPasswordChangeContractVersion == 1, "account password-change contract version drifted");
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
 Require(AgentLocalContract.SoftwareCatalogCapabilityId == "bke.software-catalog", "software catalog capability id drifted");
 Require(AgentLocalContract.SoftwareCatalogContractVersion == 1, "software catalog contract version drifted");
@@ -60,6 +63,8 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountSessionStartResponse).GetProperties())
     .Concat(typeof(AccountSessionStatusResponse).GetProperties())
     .Concat(typeof(AccountSessionLogoutResponse).GetProperties())
+    .Concat(typeof(AccountPasswordChangeResponse).GetProperties())
+    .Concat(typeof(AccountPasswordChangeError).GetProperties())
     .Concat(typeof(SoftwareCatalogResponse).GetProperties())
     .Concat(typeof(SoftwareCatalogItem).GetProperties())
     .Concat(typeof(SoftwareInstallResponse).GetProperties())
@@ -117,6 +122,7 @@ Require(agentMethods.SetEquals([
     "StartAccountSessionAsync",
     "GetAccountSessionStatusAsync",
     "LogoutAccountSessionAsync",
+    "ChangeAccountPasswordAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -159,6 +165,46 @@ Require(
         name.Contains("Password", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Email", StringComparison.OrdinalIgnoreCase)),
     "Launcher Agent native-complete request contains credentials.");
+
+var passwordChangeRequestProperties = typeof(AccountPasswordChangeRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    passwordChangeRequestProperties.SequenceEqual([
+        "CorrelationId",
+        "CurrentPassword",
+        "NewPassword"
+    ]),
+    "Launcher widened the Agent password-change request.");
+
+using (var passwordChangeRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountPasswordChangeRequest(
+            "cert-password-correlation",
+            "current-password-cert",
+            "new-password-cert"))))
+{
+    var passwordChangeWireFields = passwordChangeRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        passwordChangeWireFields.SequenceEqual([
+            "correlation_id",
+            "current_password",
+            "new_password"
+        ]),
+        "Launcher password-change wire request drifted.");
+}
+
+Require(
+    typeof(AccountPasswordChangeResponse)
+        .GetProperties()
+        .All(property =>
+            !property.Name.Contains("CurrentPassword", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("NewPassword", StringComparison.OrdinalIgnoreCase)),
+    "Launcher password-change response reflects credential material.");
 
 var claimRequestProperties = typeof(ClaimCodeRedeemRequest)
     .GetProperties()
@@ -505,6 +551,20 @@ Require(mainWindowSource.Contains("RepairProduct", StringComparison.Ordinal), "S
 Require(mainWindowMarkup.Contains("Content=\"Redeem Claim Code\"", StringComparison.Ordinal), "Claim Code redemption action is missing.");
 Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRedeemClaimCode}\"", StringComparison.Ordinal), "Claim Code redemption action is not session-bound.");
 Require(mainWindowSource.Contains("RedeemClaimCode", StringComparison.Ordinal), "Claim Code redemption click handler is missing.");
+Require(mainWindowMarkup.Contains("Text=\"Security\"", StringComparison.Ordinal),
+    "Launcher Account Security section is missing.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding CurrentPassword, Mode=TwoWay}\"", StringComparison.Ordinal),
+    "Launcher current-password field is missing.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding NewPassword, Mode=TwoWay}\"", StringComparison.Ordinal),
+    "Launcher new-password field is missing.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding ConfirmNewPassword, Mode=TwoWay}\"", StringComparison.Ordinal),
+    "Launcher password confirmation field is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Change password\"", StringComparison.Ordinal),
+    "Launcher Change Password action is missing.");
+Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanChangePassword}\"", StringComparison.Ordinal),
+    "Launcher Change Password action is not state-bound.");
+Require(mainWindowSource.Contains("ChangePassword", StringComparison.Ordinal),
+    "Launcher Change Password click handler is missing.");
 Require(mainWindowMarkup.Contains("Header=\"Notifications\"", StringComparison.Ordinal),
     "BKE Notifications tab is missing.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding Notifications}\"", StringComparison.Ordinal),
@@ -616,6 +676,23 @@ Require(!refreshStatusSource.Contains(
         "await RefreshNotificationsAsync(cancellationToken);",
         StringComparison.Ordinal),
     "Launcher account-session refresh still auto-loads a customer module.");
+Require(normalizedViewModelSource.Contains(
+    "await _accountPasswordChange.ChangeAsync(",
+    StringComparison.Ordinal),
+    "Launcher Account Security UX does not delegate password mutation to the Agent.");
+Require(normalizedViewModelSource.Contains(
+    "EnterPasswordChangeReauthentication(",
+    StringComparison.Ordinal),
+    "Launcher lacks fail-closed password-change reauthentication handling.");
+Require(normalizedViewModelSource.Contains(
+    "ClearPasswordChangeFields();",
+    StringComparison.Ordinal),
+    "Launcher does not clear transient password-change fields on reauthentication.");
+Require(!normalizedViewModelSource.Contains(
+    "/api/agent-sessions/account/password-change",
+    StringComparison.OrdinalIgnoreCase),
+    "Launcher Account Security UX bypasses the Agent loopback boundary.");
+
 Require(normalizedViewModelSource.Contains(
     "ClearNotifications(",
     StringComparison.Ordinal),
@@ -1142,10 +1219,12 @@ Require(removeTimeout == TimeSpan.FromMinutes(10),
 Require(removeTimeout > defaultTimeout,
     "Launcher remove operation does not have a dedicated long-running timeout.");
 
+await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
+Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
@@ -1166,6 +1245,86 @@ Console.WriteLine("Bounded long-running remove transport certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
 
+
+static async Task CertifyAccountPasswordChangeSettingsAsync()
+{
+    var successCatalog = new CustomerJourneyCatalogSource();
+    var successAgent = new CustomerJourneyAgentClient(successCatalog);
+    var successViewModel = BuildCustomerJourneyViewModel(
+        successAgent,
+        successCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await successViewModel.InitializeAsync(CancellationToken.None);
+    successViewModel.OpenAccountSurface();
+    successViewModel.CurrentPassword = "current-password-cert";
+    successViewModel.NewPassword = "new-password-cert";
+    successViewModel.ConfirmNewPassword = "new-password-cert";
+
+    await successViewModel.ChangePasswordAsync(CancellationToken.None);
+
+    Require(successAgent.PasswordChangeCount == 1,
+        "Launcher password change did not invoke the Agent exactly once.");
+    Require(successAgent.LastPasswordChangeRequest is not null &&
+            successAgent.LastPasswordChangeRequest.CurrentPassword == "current-password-cert" &&
+            successAgent.LastPasswordChangeRequest.NewPassword == "new-password-cert",
+        "Launcher password change did not forward the transient credential intent.");
+    Require(!successViewModel.IsAuthenticated &&
+            successViewModel.ShowLoginPage &&
+            successViewModel.PasswordChangeStatus == "CHANGED",
+        "Successful password change did not require clean native reauthentication.");
+    Require(string.IsNullOrEmpty(successViewModel.CurrentPassword) &&
+            string.IsNullOrEmpty(successViewModel.NewPassword) &&
+            string.IsNullOrEmpty(successViewModel.ConfirmNewPassword),
+        "Successful password change retained transient credential fields.");
+
+    var deniedCatalog = new CustomerJourneyCatalogSource();
+    var deniedAgent = new CustomerJourneyAgentClient(deniedCatalog)
+    {
+        PasswordChangeOutcome = "INVALID_CREDENTIALS",
+    };
+    var deniedViewModel = BuildCustomerJourneyViewModel(
+        deniedAgent,
+        deniedCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await deniedViewModel.InitializeAsync(CancellationToken.None);
+    deniedViewModel.OpenAccountSurface();
+    deniedViewModel.CurrentPassword = "wrong-current-cert";
+    deniedViewModel.NewPassword = "new-password-cert";
+    deniedViewModel.ConfirmNewPassword = "new-password-cert";
+
+    await deniedViewModel.ChangePasswordAsync(CancellationToken.None);
+
+    Require(deniedAgent.PasswordChangeCount == 1,
+        "Invalid-credential password change did not reach the Agent exactly once.");
+    Require(deniedViewModel.IsAuthenticated &&
+            deniedViewModel.ShowAuthenticatedShell &&
+            deniedViewModel.PasswordChangeStatus == "INVALID_CREDENTIALS",
+        "Explicit invalid credentials incorrectly destroyed the authenticated shell.");
+
+    var mismatchCatalog = new CustomerJourneyCatalogSource();
+    var mismatchAgent = new CustomerJourneyAgentClient(mismatchCatalog);
+    var mismatchViewModel = BuildCustomerJourneyViewModel(
+        mismatchAgent,
+        mismatchCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await mismatchViewModel.InitializeAsync(CancellationToken.None);
+    mismatchViewModel.CurrentPassword = "current-password-cert";
+    mismatchViewModel.NewPassword = "new-password-cert";
+    mismatchViewModel.ConfirmNewPassword = "different-password-cert";
+
+    await mismatchViewModel.ChangePasswordAsync(CancellationToken.None);
+
+    Require(mismatchAgent.PasswordChangeCount == 0 &&
+            mismatchViewModel.IsAuthenticated &&
+            mismatchViewModel.PasswordChangeStatus == "INVALID_INPUT",
+        "Launcher submitted a password mutation despite local confirmation mismatch.");
+}
 
 static async Task CertifyCustomerAcquisitionToMySoftwareAsync()
 {
@@ -1332,7 +1491,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherSoftwareRepairController(agent),
         new LauncherSoftwareOpenController(agent),
         new LauncherSoftwareRemoveController(agent),
-        new LauncherClaimCodeRedemptionController(agent));
+        new LauncherClaimCodeRedemptionController(agent),
+        new LauncherAccountPasswordChangeController(agent));
 }
 
 static void Require(bool condition, string message)
@@ -1429,6 +1589,9 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public int CheckoutStartCount { get; private set; }
     public int RedeemCount { get; private set; }
+    public int PasswordChangeCount { get; private set; }
+    public string PasswordChangeOutcome { get; set; } = "CHANGED";
+    public AccountPasswordChangeRequest? LastPasswordChangeRequest { get; private set; }
 
     public Task<AccountSessionStatusResponse> GetAccountSessionStatusAsync(
         AccountSessionStatusRequest request,
@@ -1676,6 +1839,52 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         AccountSessionLogoutRequest request,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException();
+
+    public Task<AccountPasswordChangeResponse> ChangeAccountPasswordAsync(
+        AccountPasswordChangeRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PasswordChangeCount++;
+        LastPasswordChangeRequest = request;
+
+        return Task.FromResult(PasswordChangeOutcome switch
+        {
+            "CHANGED" => new AccountPasswordChangeResponse(
+                AgentLocalContract.AccountPasswordChangeCapabilityId,
+                AgentLocalContract.AccountPasswordChangeContractVersion,
+                "CHANGED",
+                true,
+                null),
+            "INVALID_CREDENTIALS" => new AccountPasswordChangeResponse(
+                AgentLocalContract.AccountPasswordChangeCapabilityId,
+                AgentLocalContract.AccountPasswordChangeContractVersion,
+                "INVALID_CREDENTIALS",
+                false,
+                new AccountPasswordChangeError(
+                    "INVALID_CREDENTIALS",
+                    "The current password was not accepted.",
+                    false)),
+            "INVALID_INPUT" => new AccountPasswordChangeResponse(
+                AgentLocalContract.AccountPasswordChangeCapabilityId,
+                AgentLocalContract.AccountPasswordChangeContractVersion,
+                "INVALID_INPUT",
+                false,
+                new AccountPasswordChangeError(
+                    "INVALID_INPUT",
+                    "The new password is invalid.",
+                    false)),
+            _ => new AccountPasswordChangeResponse(
+                AgentLocalContract.AccountPasswordChangeCapabilityId,
+                AgentLocalContract.AccountPasswordChangeContractVersion,
+                "REAUTHENTICATION_REQUIRED",
+                true,
+                new AccountPasswordChangeError(
+                    "PASSWORD_CHANGE_OUTCOME_UNKNOWN",
+                    "Sign in again before retrying.",
+                    false)),
+        });
+    }
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,
