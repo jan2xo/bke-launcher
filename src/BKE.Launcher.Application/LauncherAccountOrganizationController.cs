@@ -44,6 +44,34 @@ public sealed class LauncherAccountOrganizationController
         return response;
     }
 
+    public async Task<AccountOrganizationCreateResponse> CreateAsync(
+        string displayName,
+        string legalName,
+        string billingEmail,
+        string? registrationNumber,
+        string? taxId,
+        CancellationToken cancellationToken)
+    {
+        RequireInput(displayName, 2, 120, "display name");
+        RequireInput(legalName, 2, 180, "legal name");
+        RequireEmail(billingEmail);
+        RequireOptionalInput(registrationNumber, 80, "registration number");
+        RequireOptionalInput(taxId, 80, "tax ID");
+
+        var response = await _agent.CreateAccountOrganizationAsync(
+            new AccountOrganizationCreateRequest(
+                Guid.NewGuid().ToString("N"),
+                displayName.Trim(),
+                legalName.Trim(),
+                billingEmail.Trim(),
+                NormalizeOptional(registrationNumber),
+                NormalizeOptional(taxId)),
+            cancellationToken);
+
+        ValidateCreateContract(response);
+        return response;
+    }
+
     private static void ValidateContract(
         AccountOrganizationOverviewResponse response)
     {
@@ -139,6 +167,115 @@ public sealed class LauncherAccountOrganizationController
             RequireTimestamp(invitation.CreatedAt, "invitation creation");
         }
     }
+
+    private static void ValidateCreateContract(
+        AccountOrganizationCreateResponse response)
+    {
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountOrganizationCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountOrganizationContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-create contract drifted.");
+        }
+
+        if (response.Status is not (
+            "CREATED" or
+            "INVALID_INPUT" or
+            "EMAIL_NOT_VERIFIED" or
+            "LEGAL_REACCEPTANCE_REQUIRED" or
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN" or
+            "FAILED"))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-create status drifted.");
+        }
+
+        if (response.Status == "CREATED")
+        {
+            RequireBounded(
+                response.DisplayName,
+                120,
+                "created display name");
+            if (!response.SwitchRequired || response.Error is not null)
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization-create success drifted.");
+            }
+            return;
+        }
+
+        if (response.DisplayName is not null ||
+            response.SwitchRequired)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-create failure exposed success state.");
+        }
+
+        if (response.Error is null ||
+            string.IsNullOrWhiteSpace(response.Error.Code) ||
+            string.IsNullOrWhiteSpace(response.Error.Message))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-create failure is missing bounded error state.");
+        }
+    }
+
+    private static void RequireInput(
+        string? value,
+        int minimum,
+        int maximum,
+        string label)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Trim().Length < minimum ||
+            value.Trim().Length > maximum ||
+            value.Any(character => character < 32))
+        {
+            throw new ArgumentException(
+                $"Organization {label} is invalid.");
+        }
+    }
+
+    private static void RequireOptionalInput(
+        string? value,
+        int maximum,
+        string label)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        if (value.Trim().Length > maximum ||
+            value.Any(character => character < 32))
+        {
+            throw new ArgumentException(
+                $"Organization {label} is invalid.");
+        }
+    }
+
+    private static void RequireEmail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Length > 320 ||
+            !System.Net.Mail.MailAddress.TryCreate(
+                value.Trim(),
+                out var parsed) ||
+            !string.Equals(
+                parsed.Address,
+                value.Trim(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Organization billing email is invalid.");
+        }
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static void RequireRole(string value)
     {
