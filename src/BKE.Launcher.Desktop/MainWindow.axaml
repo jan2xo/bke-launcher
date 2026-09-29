@@ -329,8 +329,7 @@
               <TextBlock Text="Request type"
                          FontWeight="SemiBold" />
               <ComboBox ItemsSource="{Binding AccountPrivacyRequestTypes}"
-                        SelectedItem="{Binding SelectedAccountPrivacyRequestType, Mode=TwoWay}"
-                        Watermark="Refresh to load request types" />
+                        SelectedItem="{Binding SelectedAccountPrivacyRequestType, Mode=TwoWay}" />
 
               <TextBlock Text="Summary"
                          FontWeight="SemiBold" />
