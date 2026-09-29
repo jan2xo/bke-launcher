@@ -747,6 +747,22 @@ Require(!normalizedViewModelSource.Contains(
     "Launcher Account Security UX bypasses the Agent loopback boundary.");
 
 Require(normalizedViewModelSource.Contains(
+    "await _passwordResetRequest.RequestAsync(",
+    StringComparison.Ordinal),
+    "Launcher login recovery does not delegate reset issuance to its recovery controller.");
+Require(normalizedViewModelSource.Contains(
+    "If a BKE account exists for this email",
+    StringComparison.Ordinal),
+    "Launcher recovery UX lost its enumeration-safe generic confirmation.");
+Require(!normalizedViewModelSource.Contains(
+    "ResetToken",
+    StringComparison.Ordinal) &&
+    !normalizedViewModelSource.Contains(
+        "reset_token",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher presentation absorbed password-reset token material.");
+
+Require(normalizedViewModelSource.Contains(
     "ClearNotifications(",
     StringComparison.Ordinal),
     "Launcher does not clear account notification presentation across session changes.");
@@ -1283,11 +1299,13 @@ Require(removeTimeout == TimeSpan.FromMinutes(10),
 Require(removeTimeout > defaultTimeout,
     "Launcher remove operation does not have a dedicated long-running timeout.");
 
+await CertifyNativePasswordResetRequestAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
+Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
@@ -1309,6 +1327,53 @@ Console.WriteLine("Bounded long-running remove transport certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
 
+
+static async Task CertifyNativePasswordResetRequestAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+    };
+    var identity = new CustomerJourneyIdentityClient();
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator(),
+        identity);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    Require(viewModel.ShowLoginPage && !viewModel.IsAuthenticated,
+        "Password-reset certification did not begin on the signed-out native login surface.");
+
+    viewModel.Email = "customer@example.test";
+    viewModel.Password = "stale-password-cert";
+
+    await viewModel.RequestPasswordResetAsync(CancellationToken.None);
+
+    Require(agent.PlatformAuthorityCount == 1,
+        "Launcher password reset did not inherit Digital Solutions authority from the Agent.");
+    Require(identity.ResetRequestCount == 1 &&
+            identity.LastResetEmail == "customer@example.test" &&
+            identity.LastResetAuthority == new Uri("https://digital-solutions.example.test/"),
+        "Launcher password reset did not delegate exactly one generic reset request to Digital Solutions.");
+    Require(viewModel.PasswordResetStatus == "ACCEPTED" &&
+            viewModel.PasswordResetMessage.Contains(
+                "If a BKE account exists for this email",
+                StringComparison.Ordinal),
+        "Launcher password reset did not preserve enumeration-safe accepted UX.");
+    Require(string.IsNullOrEmpty(viewModel.Password),
+        "Launcher password reset retained the stale sign-in password field.");
+    Require(viewModel.ShowLoginPage && !viewModel.IsAuthenticated,
+        "Password reset request incorrectly created or mutated an authenticated Agent session.");
+
+    viewModel.Email = string.Empty;
+    await viewModel.RequestPasswordResetAsync(CancellationToken.None);
+    Require(identity.ResetRequestCount == 1 &&
+            viewModel.PasswordResetStatus == "INVALID_INPUT",
+        "Launcher submitted password reset without an email.");
+}
 
 static async Task CertifyAccountPasswordChangeSettingsAsync()
 {
