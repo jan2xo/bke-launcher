@@ -142,6 +142,28 @@ public interface ILauncherIdentityClient
         CancellationToken cancellationToken);
 }
 
+public interface ILauncherRegistrationClient
+{
+    Task<NativeBkeRegistrationPreflightResponse> GetRegistrationPreflightAsync(
+        Uri platformBaseAddress,
+        CancellationToken cancellationToken);
+
+    Task<NativeBkeRegistrationResponse> RegisterAsync(
+        Uri platformBaseAddress,
+        NativeBkeRegistrationRequest request,
+        CancellationToken cancellationToken);
+
+    Task<NativeBkeEmailVerificationResponse> VerifyEmailAsync(
+        Uri platformBaseAddress,
+        NativeBkeEmailVerificationRequest request,
+        CancellationToken cancellationToken);
+
+    Task<NativeBkeVerificationResendResponse> ResendVerificationAsync(
+        Uri platformBaseAddress,
+        NativeBkeVerificationResendRequest request,
+        CancellationToken cancellationToken);
+}
+
 public sealed record LauncherNativeSignInResult(
     string Status,
     IReadOnlyList<NativeBkeAccountChoice> Accounts,
