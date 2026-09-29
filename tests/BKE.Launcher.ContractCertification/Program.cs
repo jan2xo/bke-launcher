@@ -30,6 +30,10 @@ Require(AgentLocalContract.AccountMfaDisablePath == "/v1/account/mfa/disable", "
 Require(AgentLocalContract.AccountMfaRecoveryRegeneratePath == "/v1/account/mfa/recovery/regenerate", "account MFA recovery path drifted");
 Require(AgentLocalContract.AccountMfaCapabilityId == "bke.account-mfa", "account MFA capability id drifted");
 Require(AgentLocalContract.AccountMfaContractVersion == 1, "account MFA contract version drifted");
+Require(AgentLocalContract.AccountPrivacyListPath == "/v1/account/privacy/requests/list", "account privacy list path drifted");
+Require(AgentLocalContract.AccountPrivacyCreatePath == "/v1/account/privacy/requests/create", "account privacy create path drifted");
+Require(AgentLocalContract.AccountPrivacyCapabilityId == "bke.account-privacy", "account privacy capability id drifted");
+Require(AgentLocalContract.AccountPrivacyContractVersion == 1, "account privacy contract version drifted");
 Require(BkePlatformContract.NativeMfaVerifyPath == "/api/agent-sessions/native/mfa/verify", "native MFA verify path drifted");
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
 Require(AgentLocalContract.SoftwareCatalogCapabilityId == "bke.software-catalog", "software catalog capability id drifted");
@@ -78,6 +82,10 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountMfaChallengeResponse).GetProperties())
     .Concat(typeof(AccountMfaMutationResponse).GetProperties())
     .Concat(typeof(AccountMfaError).GetProperties())
+    .Concat(typeof(AccountPrivacyListResponse).GetProperties())
+    .Concat(typeof(AccountPrivacyCreateResponse).GetProperties())
+    .Concat(typeof(AccountPrivacyItem).GetProperties())
+    .Concat(typeof(AccountPrivacyError).GetProperties())
     .Concat(typeof(SoftwareCatalogResponse).GetProperties())
     .Concat(typeof(SoftwareCatalogItem).GetProperties())
     .Concat(typeof(SoftwareInstallResponse).GetProperties())
@@ -142,6 +150,8 @@ Require(agentMethods.SetEquals([
     "StartAccountMfaProofAsync",
     "DisableAccountMfaAsync",
     "RegenerateAccountMfaRecoveryAsync",
+    "GetAccountPrivacyRequestsAsync",
+    "CreateAccountPrivacyRequestAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -246,6 +256,63 @@ Require(
             !property.Name.Contains("AccessToken", StringComparison.OrdinalIgnoreCase) &&
             !property.Name.Contains("RefreshToken", StringComparison.OrdinalIgnoreCase)),
     "Launcher account MFA response exposes durable session or password material.");
+
+
+var privacyListRequestProperties = typeof(AccountPrivacyListRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    privacyListRequestProperties.SequenceEqual([
+        "CorrelationId",
+        "Limit"
+    ]),
+    "Launcher widened the Agent account privacy list request.");
+
+var privacyCreateRequestProperties = typeof(AccountPrivacyCreateRequest)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToArray();
+Require(
+    privacyCreateRequestProperties.SequenceEqual([
+        "CorrelationId",
+        "RequestType",
+        "Summary"
+    ]),
+    "Launcher widened the Agent account privacy create request.");
+
+Require(
+    typeof(AccountPrivacyListResponse)
+        .GetProperties()
+        .Concat(typeof(AccountPrivacyCreateResponse).GetProperties())
+        .Concat(typeof(AccountPrivacyItem).GetProperties())
+        .All(property =>
+            !property.Name.Contains("AccessToken", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("RefreshToken", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Handoff", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("AccountId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("UserId", StringComparison.OrdinalIgnoreCase)),
+    "Launcher account privacy response exposes cloud/session authority material.");
+
+using (var privacyCreateDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountPrivacyCreateRequest(
+            "privacy-cert-correlation",
+            "EXPORT",
+            "Please export the data associated with this account."))))
+{
+    var fields = privacyCreateDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "request_type",
+            "summary"
+        ]),
+        "Launcher account privacy create wire request widened.");
+}
 
 var nativeMfaVerifyRequestProperties = typeof(NativeBkeMfaVerifyRequest)
     .GetProperties()
@@ -1029,6 +1096,84 @@ Require(normalizedViewModelSource.Contains(
     StringComparison.Ordinal),
     "Launcher lacks fail-closed MFA reauthentication handling.");
 
+
+var accountPrivacyControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherAccountPrivacyController.cs"));
+Require(
+    accountPrivacyControllerSource.Contains(
+        "GetAccountPrivacyRequestsAsync",
+        StringComparison.Ordinal) &&
+    accountPrivacyControllerSource.Contains(
+        "CreateAccountPrivacyRequestAsync",
+        StringComparison.Ordinal),
+    "Launcher Account Privacy controller does not delegate to the Agent loopback client.");
+Require(
+    !accountPrivacyControllerSource.Contains(
+        "/api/agent-sessions/",
+        StringComparison.OrdinalIgnoreCase) &&
+    !accountPrivacyControllerSource.Contains(
+        "\"ACCESS\"",
+        StringComparison.Ordinal) &&
+    !accountPrivacyControllerSource.Contains(
+        "\"EXPORT\"",
+        StringComparison.Ordinal) &&
+    !accountPrivacyControllerSource.Contains(
+        "\"DELETION\"",
+        StringComparison.Ordinal),
+    "Launcher Account Privacy controller absorbed cloud routing or canonical request-type policy.");
+
+Require(
+    normalizedViewModelSource.Contains(
+        "await _accountPrivacy.ListAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "await _accountPrivacy.CreateAsync(",
+        StringComparison.Ordinal),
+    "Launcher Account Privacy UX does not delegate through the Agent-backed controller.");
+Require(
+    normalizedViewModelSource.Contains(
+        "AccountPrivacyRequestTypes.Contains(",
+        StringComparison.Ordinal),
+    "Launcher Account Privacy create action is not restricted to authoritative Agent-returned request types.");
+Require(
+    normalizedViewModelSource.Contains(
+        "AccountPrivacySummary = string.Empty;",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "await RefreshAccountPrivacyAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "Launcher Account Privacy mutation does not clear transient summary and refresh authoritative state.");
+Require(
+    !normalizedViewModelSource.Contains(
+        "/api/agent-sessions/privacy/requests",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher presentation bypasses Agent account-privacy mediation.");
+Require(
+    mainWindowMarkup.Contains(
+        "ItemsSource=\"{Binding AccountPrivacyRequestTypes}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ItemsSource=\"{Binding AccountPrivacyRequests}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"RefreshAccountPrivacy\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"CreateAccountPrivacyRequest\"",
+        StringComparison.Ordinal),
+    "Launcher Account Privacy desktop surface is incomplete.");
+Require(
+    mainWindowSource.Contains(
+        "RefreshAccountPrivacy",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "CreateAccountPrivacyRequest",
+        StringComparison.Ordinal),
+    "Launcher Account Privacy desktop handlers are missing.");
+
 Require(normalizedViewModelSource.Contains(
     "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
     StringComparison.Ordinal),
@@ -1498,6 +1643,9 @@ var defaultTimeoutField = typeof(AgentLoopbackClient).GetField(
 var passwordChangeTimeoutField = typeof(AgentLoopbackClient).GetField(
     "AccountPasswordChangeRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
+var privacyTimeoutField = typeof(AgentLoopbackClient).GetField(
+    "AccountPrivacyRequestTimeout",
+    BindingFlags.Static | BindingFlags.NonPublic);
 var installTimeoutField = typeof(AgentLoopbackClient).GetField(
     "InstallRequestTimeout",
     BindingFlags.Static | BindingFlags.NonPublic);
@@ -1512,6 +1660,7 @@ var removeTimeoutField = typeof(AgentLoopbackClient).GetField(
     BindingFlags.Static | BindingFlags.NonPublic);
 var defaultTimeoutValue = defaultTimeoutField?.GetValue(null);
 var passwordChangeTimeoutValue = passwordChangeTimeoutField?.GetValue(null);
+var privacyTimeoutValue = privacyTimeoutField?.GetValue(null);
 var installTimeoutValue = installTimeoutField?.GetValue(null);
 var updateTimeoutValue = updateTimeoutField?.GetValue(null);
 var repairTimeoutValue = repairTimeoutField?.GetValue(null);
@@ -1520,6 +1669,8 @@ Require(defaultTimeoutValue is TimeSpan,
     "Launcher default loopback timeout field is unavailable.");
 Require(passwordChangeTimeoutValue is TimeSpan,
     "Launcher password-change timeout field is unavailable.");
+Require(privacyTimeoutValue is TimeSpan,
+    "Launcher account-privacy timeout field is unavailable.");
 Require(installTimeoutValue is TimeSpan,
     "Launcher install-operation timeout field is unavailable.");
 Require(updateTimeoutValue is TimeSpan,
@@ -1530,6 +1681,7 @@ Require(removeTimeoutValue is TimeSpan,
     "Launcher remove-operation timeout field is unavailable.");
 var defaultTimeout = (TimeSpan)defaultTimeoutValue!;
 var passwordChangeTimeout = (TimeSpan)passwordChangeTimeoutValue!;
+var privacyTimeout = (TimeSpan)privacyTimeoutValue!;
 var installTimeout = (TimeSpan)installTimeoutValue!;
 var updateTimeout = (TimeSpan)updateTimeoutValue!;
 var repairTimeout = (TimeSpan)repairTimeoutValue!;
@@ -1540,6 +1692,10 @@ Require(passwordChangeTimeout == TimeSpan.FromSeconds(30),
     "Launcher password-change timeout drifted.");
 Require(passwordChangeTimeout > defaultTimeout,
     "Launcher password change does not have a dedicated bounded mutation timeout.");
+Require(privacyTimeout == TimeSpan.FromSeconds(30),
+    "Launcher account-privacy timeout drifted.");
+Require(privacyTimeout > defaultTimeout,
+    "Launcher account privacy does not have a dedicated bounded timeout.");
 Require(installTimeout == TimeSpan.FromMinutes(10),
     "Launcher install-operation timeout drifted.");
 Require(installTimeout > defaultTimeout,
@@ -1560,6 +1716,7 @@ Require(removeTimeout > defaultTimeout,
 await CertifyNativePasswordResetRequestAsync();
 await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
+await CertifyAccountPrivacySettingsAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
@@ -1567,6 +1724,7 @@ Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
+Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
@@ -1806,6 +1964,85 @@ static async Task CertifyAccountPasswordChangeSettingsAsync()
         "Launcher submitted a password mutation despite local confirmation mismatch.");
 }
 
+static async Task CertifyAccountPrivacySettingsAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    Require(viewModel.IsAuthenticated,
+        "Account Privacy certification did not begin authenticated.");
+
+    viewModel.OpenAccountSurface();
+    await viewModel.RefreshAccountPrivacyAsync(CancellationToken.None);
+
+    Require(agent.PrivacyListCount == 1 &&
+            viewModel.AccountPrivacyStatus == "READY" &&
+            viewModel.AccountPrivacyRequestTypes.SequenceEqual([
+                "ACCESS",
+                "EXPORT",
+                "DELETION"
+            ]) &&
+            viewModel.SelectedAccountPrivacyRequestType == "ACCESS" &&
+            viewModel.AccountPrivacyRequests.Count == 0,
+        "Launcher did not load authoritative Agent-mediated privacy request types.");
+
+    viewModel.SelectedAccountPrivacyRequestType = "BREACH_REPORT";
+    viewModel.AccountPrivacySummary =
+        "This request type was not returned by the authoritative privacy list.";
+    Require(!viewModel.CanCreateAccountPrivacyRequest,
+        "Launcher enabled an unadvertised privacy request type.");
+
+    viewModel.SelectedAccountPrivacyRequestType = "EXPORT";
+    viewModel.AccountPrivacySummary =
+        "Please export the personal data associated with this account.";
+    Require(viewModel.CanCreateAccountPrivacyRequest,
+        "Launcher did not enable an authoritative privacy request type.");
+
+    await viewModel.CreateAccountPrivacyRequestAsync(
+        CancellationToken.None);
+
+    Require(agent.PrivacyCreateCount == 1 &&
+            agent.PrivacyListCount == 2 &&
+            viewModel.AccountPrivacyStatus == "READY" &&
+            string.IsNullOrEmpty(viewModel.AccountPrivacySummary) &&
+            viewModel.AccountPrivacyRequests.Count == 1 &&
+            viewModel.AccountPrivacyRequests[0].RequestType == "EXPORT" &&
+            viewModel.AccountPrivacyRequests[0].Status == "OPEN",
+        "Launcher privacy create did not clear transient summary and refresh authoritative history.");
+
+    agent.PrivacyCreateOutcomeUnknown = true;
+    viewModel.SelectedAccountPrivacyRequestType = "ACCESS";
+    viewModel.AccountPrivacySummary =
+        "Please provide the personal data associated with this account.";
+
+    await viewModel.CreateAccountPrivacyRequestAsync(
+        CancellationToken.None);
+
+    Require(agent.PrivacyCreateCount == 2 &&
+            agent.PrivacyListCount == 3 &&
+            viewModel.AccountPrivacyRequests.Count == 1 &&
+            string.IsNullOrEmpty(viewModel.AccountPrivacySummary) &&
+            viewModel.AccountPrivacyMessage.Contains(
+                "could not be confirmed",
+                StringComparison.OrdinalIgnoreCase),
+        "Launcher ambiguous privacy create replayed or failed to refresh safely.");
+
+    agent.Authenticated = false;
+    await viewModel.RefreshAccountPrivacyAsync(
+        CancellationToken.None);
+
+    Require(!viewModel.IsAuthenticated &&
+            viewModel.AccountPrivacyRequests.Count == 0 &&
+            viewModel.AccountPrivacyRequestTypes.Count == 0,
+        "Launcher retained privacy state after Agent session invalidation.");
+}
+
 static async Task CertifyCustomerAcquisitionToMySoftwareAsync()
 {
     await CertifySelfPurchaseRefreshesMySoftwareAsync();
@@ -1981,7 +2218,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherSoftwareRemoveController(agent),
         new LauncherClaimCodeRedemptionController(agent),
         new LauncherAccountPasswordChangeController(agent),
-        new LauncherAccountMfaController(agent));
+        new LauncherAccountMfaController(agent),
+        new LauncherAccountPrivacyController(agent));
 }
 
 static void Require(bool condition, string message)
@@ -2182,8 +2420,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int CheckoutStartCount { get; private set; }
     public int RedeemCount { get; private set; }
     public int PasswordChangeCount { get; private set; }
+    public int PrivacyListCount { get; private set; }
+    public int PrivacyCreateCount { get; private set; }
     public int PlatformAuthorityCount { get; private set; }
     public bool Authenticated { get; set; } = true;
+    public bool PrivacyCreateOutcomeUnknown { get; set; }
+    private readonly List<AccountPrivacyItem> _privacyRequests = [];
     public string PasswordChangeOutcome { get; set; } = "CHANGED";
     public AccountPasswordChangeRequest? LastPasswordChangeRequest { get; private set; }
 
@@ -2526,6 +2768,97 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         AccountMfaMutationRequest request,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException();
+
+    public Task<AccountPrivacyListResponse> GetAccountPrivacyRequestsAsync(
+        AccountPrivacyListRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PrivacyListCount++;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(new AccountPrivacyListResponse(
+                AgentLocalContract.AccountPrivacyCapabilityId,
+                AgentLocalContract.AccountPrivacyContractVersion,
+                "AUTH_REQUIRED",
+                Array.Empty<string>(),
+                Array.Empty<AccountPrivacyItem>(),
+                new AccountPrivacyError(
+                    "SESSION_INVALID",
+                    "Sign in again.",
+                    false)));
+        }
+
+        return Task.FromResult(new AccountPrivacyListResponse(
+            AgentLocalContract.AccountPrivacyCapabilityId,
+            AgentLocalContract.AccountPrivacyContractVersion,
+            "READY",
+            new[] { "ACCESS", "EXPORT", "DELETION" },
+            _privacyRequests.Take(request.Limit).ToArray(),
+            null));
+    }
+
+    public Task<AccountPrivacyCreateResponse> CreateAccountPrivacyRequestAsync(
+        AccountPrivacyCreateRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PrivacyCreateCount++;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(new AccountPrivacyCreateResponse(
+                AgentLocalContract.AccountPrivacyCapabilityId,
+                AgentLocalContract.AccountPrivacyContractVersion,
+                "AUTH_REQUIRED",
+                null,
+                null,
+                null,
+                new AccountPrivacyError(
+                    "SESSION_INVALID",
+                    "Sign in again.",
+                    false)));
+        }
+
+        if (PrivacyCreateOutcomeUnknown)
+        {
+            PrivacyCreateOutcomeUnknown = false;
+            return Task.FromResult(new AccountPrivacyCreateResponse(
+                AgentLocalContract.AccountPrivacyCapabilityId,
+                AgentLocalContract.AccountPrivacyContractVersion,
+                "OUTCOME_UNKNOWN",
+                null,
+                null,
+                null,
+                new AccountPrivacyError(
+                    "PRIVACY_CREATE_OUTCOME_UNKNOWN",
+                    "The result could not be confirmed.",
+                    false)));
+        }
+
+        var id = $"privacy-cert-{_privacyRequests.Count + 1}";
+        var item = new AccountPrivacyItem(
+            id,
+            "ACCOUNT",
+            request.RequestType,
+            "OPEN",
+            request.Summary,
+            null,
+            null,
+            null,
+            "2026-09-29T12:00:00.000Z");
+        _privacyRequests.Insert(0, item);
+
+        return Task.FromResult(new AccountPrivacyCreateResponse(
+            AgentLocalContract.AccountPrivacyCapabilityId,
+            AgentLocalContract.AccountPrivacyContractVersion,
+            "CREATED",
+            id,
+            request.RequestType,
+            "OPEN",
+            null));
+    }
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,

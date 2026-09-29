@@ -30,6 +30,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherClaimCodeRedemptionController _claimCodeRedemption;
     private readonly LauncherAccountPasswordChangeController _accountPasswordChange;
     private readonly LauncherAccountMfaController _accountMfa;
+    private readonly LauncherAccountPrivacyController _accountPrivacy;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
@@ -74,6 +75,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _accountMfaReference = string.Empty;
     private string _accountMfaChallengePurpose = string.Empty;
     private string _accountMfaRecoveryCodes = string.Empty;
+    private string _accountPrivacyStatus = "UNKNOWN";
+    private string _accountPrivacyMessage =
+        "Refresh privacy requests to load the authoritative request types and history.";
+    private string _accountPrivacySummary = string.Empty;
+    private string? _selectedAccountPrivacyRequestType;
     private string _storeStatus = "AUTH_REQUIRED";
     private string _storeMessage = "Sign in to browse the BKE Store.";
     private string _notificationStatus = "AUTH_REQUIRED";
@@ -122,7 +128,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherSoftwareRemoveController softwareRemove,
         LauncherClaimCodeRedemptionController claimCodeRedemption,
         LauncherAccountPasswordChangeController accountPasswordChange,
-        LauncherAccountMfaController accountMfa)
+        LauncherAccountMfaController accountMfa,
+        LauncherAccountPrivacyController accountPrivacy)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -145,6 +152,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _claimCodeRedemption = claimCodeRedemption;
         _accountPasswordChange = accountPasswordChange;
         _accountMfa = accountMfa;
+        _accountPrivacy = accountPrivacy;
         RestoreCheckoutRecoveryState();
     }
 
@@ -153,6 +161,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
+    public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
+    public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
     public ObservableCollection<PurchaseLegalDocumentViewModel> PurchaseLegalDocuments { get; } = [];
     public ObservableCollection<RegistrationLegalDocumentViewModel> RegistrationLegalDocuments { get; } = [];
     public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
@@ -489,6 +499,61 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         AccountMfaCode.Length is >= 6 and <= 32 &&
         !string.IsNullOrEmpty(AccountMfaCurrentPassword);
 
+
+    public string AccountPrivacyStatus
+    {
+        get => _accountPrivacyStatus;
+        private set
+        {
+            SetField(ref _accountPrivacyStatus, value);
+            RaiseAccountPrivacyCapabilities();
+        }
+    }
+
+    public string AccountPrivacyMessage
+    {
+        get => _accountPrivacyMessage;
+        private set => SetField(ref _accountPrivacyMessage, value);
+    }
+
+    public string AccountPrivacySummary
+    {
+        get => _accountPrivacySummary;
+        set
+        {
+            SetField(ref _accountPrivacySummary, value);
+            Raise(nameof(CanCreateAccountPrivacyRequest));
+        }
+    }
+
+    public string? SelectedAccountPrivacyRequestType
+    {
+        get => _selectedAccountPrivacyRequestType;
+        set
+        {
+            SetField(ref _selectedAccountPrivacyRequestType, value);
+            Raise(nameof(CanCreateAccountPrivacyRequest));
+        }
+    }
+
+    public bool CanRefreshAccountPrivacy =>
+        IsAuthenticated &&
+        AccountPrivacyStatus is not ("LOADING" or "CREATING");
+
+    public bool CanCreateAccountPrivacyRequest =>
+        IsAuthenticated &&
+        AccountPrivacyStatus == "READY" &&
+        !string.IsNullOrWhiteSpace(SelectedAccountPrivacyRequestType) &&
+        AccountPrivacyRequestTypes.Contains(
+            SelectedAccountPrivacyRequestType,
+            StringComparer.Ordinal) &&
+        !string.IsNullOrWhiteSpace(AccountPrivacySummary) &&
+        AccountPrivacySummary.Trim().Length is >= 10 and <= 2_000;
+
+    public bool ShowEmptyAccountPrivacyRequests =>
+        AccountPrivacyStatus == "READY" &&
+        AccountPrivacyRequests.Count == 0;
+
     public NativeBkeAccountChoice? SelectedAccount
     {
         get => _selectedAccount;
@@ -536,6 +601,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(ShowNativeMfaChallenge));
             Raise(nameof(CanVerifyNativeMfa));
             RaiseAccountMfaCapabilities();
+            RaiseAccountPrivacyCapabilities();
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
             Raise(nameof(CanRetryOriginalCheckout));
@@ -1180,6 +1246,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearNativeMfaState();
             ResetPasswordChangeState();
             ResetAccountMfaState(clearRecoveryCodes: true);
+            ResetAccountPrivacyState();
             SessionStatus = "SIGN_IN_UNAVAILABLE";
             AccountDisplay = "Not signed in";
             Message = "BKE native sign-in is unavailable or returned an invalid response.";
@@ -1265,6 +1332,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClaimMessage = "Sign in to redeem a Claim Code.";
         ResetPasswordChangeState();
         ResetAccountMfaState(clearRecoveryCodes: true);
+        ResetAccountPrivacyState();
         AvailableAccounts.Clear();
         SelectedAccount = null;
         Raise(nameof(HasAccountChoices));
@@ -1330,6 +1398,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 ClearNativeMfaState();
                 ResetAccountMfaState(clearRecoveryCodes: true);
+            ResetAccountPrivacyState();
                 ResetPasswordChangeState();
                 ResetShellSurface();
                 ClearCatalog(
@@ -2859,6 +2928,175 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         AccountMfaRecoveryCodes = string.Empty;
     }
 
+
+    public async Task RefreshAccountPrivacyAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ClearAccountPrivacy(
+                "AUTH_REQUIRED",
+                "Sign in with BKE before opening privacy requests.",
+                clearSummary: true);
+            return;
+        }
+
+        AccountPrivacyStatus = "LOADING";
+        AccountPrivacyMessage =
+            "Loading privacy requests through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountPrivacy.ListAsync(
+                100,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPrivacyReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            AccountPrivacyRequestTypes.Clear();
+            AccountPrivacyRequests.Clear();
+            SelectedAccountPrivacyRequestType = null;
+
+            if (response.Status != "READY")
+            {
+                AccountPrivacyStatus = response.Status;
+                AccountPrivacyMessage =
+                    response.Error?.Message ??
+                    "BKE privacy requests are temporarily unavailable.";
+                RaiseAccountPrivacyCapabilities();
+                return;
+            }
+
+            foreach (var requestType in response.RequestTypes)
+            {
+                AccountPrivacyRequestTypes.Add(requestType);
+            }
+            SelectedAccountPrivacyRequestType =
+                AccountPrivacyRequestTypes.FirstOrDefault();
+
+            foreach (var item in response.Items)
+            {
+                AccountPrivacyRequests.Add(
+                    AccountPrivacyRequestViewModel.From(item));
+            }
+
+            AccountPrivacyStatus = "READY";
+            AccountPrivacyMessage = AccountPrivacyRequests.Count == 0
+                ? "No privacy requests are currently recorded for this BKE identity and selected account."
+                : $"{AccountPrivacyRequests.Count} privacy request(s) loaded from BKE Digital Solutions.";
+            RaiseAccountPrivacyCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentOutOfRangeException)
+        {
+            AccountPrivacyRequestTypes.Clear();
+            AccountPrivacyRequests.Clear();
+            SelectedAccountPrivacyRequestType = null;
+            AccountPrivacyStatus = "AGENT_UNAVAILABLE";
+            AccountPrivacyMessage =
+                "Privacy requests are unavailable or the Licensing Agent returned an invalid response.";
+            RaiseAccountPrivacyCapabilities();
+        }
+    }
+
+    public async Task CreateAccountPrivacyRequestAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanCreateAccountPrivacyRequest ||
+            string.IsNullOrWhiteSpace(SelectedAccountPrivacyRequestType))
+        {
+            AccountPrivacyStatus = "INVALID_INPUT";
+            AccountPrivacyMessage =
+                "Refresh privacy requests, choose an authoritative request type, and enter a 10–2,000 character summary.";
+            return;
+        }
+
+        var requestType = SelectedAccountPrivacyRequestType;
+        var summary = AccountPrivacySummary;
+
+        AccountPrivacyStatus = "CREATING";
+        AccountPrivacyMessage =
+            "Submitting the privacy request through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountPrivacy.CreateAsync(
+                requestType,
+                summary,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPrivacyReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "CREATED")
+            {
+                AccountPrivacySummary = string.Empty;
+                await RefreshAccountPrivacyAsync(cancellationToken);
+                if (IsAuthenticated)
+                {
+                    AccountPrivacyMessage =
+                        $"Privacy request {response.RequestId ?? string.Empty} was created and the request list was refreshed.";
+                }
+                return;
+            }
+
+            if (response.Status == "OUTCOME_UNKNOWN")
+            {
+                AccountPrivacySummary = string.Empty;
+                await RefreshAccountPrivacyAsync(cancellationToken);
+                if (IsAuthenticated)
+                {
+                    AccountPrivacyMessage =
+                        "The create result could not be confirmed. The request list was refreshed; verify that a matching request is not already present before submitting again.";
+                }
+                return;
+            }
+
+            AccountPrivacyStatus = response.Status;
+            AccountPrivacyMessage =
+                response.Error?.Message ??
+                "The privacy request was not created.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            AccountPrivacySummary = string.Empty;
+            try
+            {
+                await RefreshAccountPrivacyAsync(cancellationToken);
+            }
+            catch
+            {
+                // RefreshAccountPrivacyAsync already reports its own failure state.
+            }
+
+            if (IsAuthenticated)
+            {
+                AccountPrivacyMessage =
+                    "The create result could not be confirmed. The request list was refreshed when possible; verify that a matching request is not already present before submitting again.";
+            }
+        }
+        catch (ArgumentException error)
+        {
+            AccountPrivacyStatus = "INVALID_INPUT";
+            AccountPrivacyMessage = error.Message;
+        }
+    }
+
     private void ApplyAccountMfaChallenge(
         AccountMfaChallengeResponse response,
         string purpose)
@@ -3035,6 +3273,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var response = await _accountSession.LogoutAsync(cancellationToken);
             ClearNativeMfaState();
             ResetAccountMfaState(clearRecoveryCodes: true);
+            ResetAccountPrivacyState();
             ResetShellSurface();
             SessionStatus = response.Status;
             AccountDisplay = "Not signed in";
@@ -3081,6 +3320,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearPasswordChangeFields();
         ClearNativeMfaState();
         ResetAccountMfaState(clearRecoveryCodes: true);
+        ResetAccountPrivacyState();
         PasswordChangeStatus = status;
         PasswordChangeMessage = message;
         ResetShellSurface();
@@ -3149,6 +3389,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         ClearNativeMfaState();
         ResetAccountMfaState(clearRecoveryCodes);
+        ResetAccountPrivacyState();
         ResetPasswordChangeState();
         ResetShellSurface();
         SessionStatus = "SIGNED_OUT";
@@ -3167,6 +3408,51 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
         ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
         ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
+    }
+
+
+    private void ResetAccountPrivacyState()
+    {
+        AccountPrivacySummary = string.Empty;
+        SelectedAccountPrivacyRequestType = null;
+        AccountPrivacyRequestTypes.Clear();
+        AccountPrivacyRequests.Clear();
+        AccountPrivacyStatus = "UNKNOWN";
+        AccountPrivacyMessage =
+            "Refresh privacy requests to load the authoritative request types and history.";
+        RaiseAccountPrivacyCapabilities();
+    }
+
+    private void ClearAccountPrivacy(
+        string status,
+        string message,
+        bool clearSummary)
+    {
+        if (clearSummary)
+        {
+            AccountPrivacySummary = string.Empty;
+        }
+
+        SelectedAccountPrivacyRequestType = null;
+        AccountPrivacyRequestTypes.Clear();
+        AccountPrivacyRequests.Clear();
+        AccountPrivacyStatus = status;
+        AccountPrivacyMessage = message;
+        RaiseAccountPrivacyCapabilities();
+    }
+
+    private void EnterAccountPrivacyReauthentication(string message)
+    {
+        EnterAccountMfaReauthentication(
+            message,
+            clearRecoveryCodes: true);
+    }
+
+    private void RaiseAccountPrivacyCapabilities()
+    {
+        Raise(nameof(CanRefreshAccountPrivacy));
+        Raise(nameof(CanCreateAccountPrivacyRequest));
+        Raise(nameof(ShowEmptyAccountPrivacyRequests));
     }
 
     private void RaiseAccountMfaCapabilities()
@@ -3435,6 +3721,51 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void Raise(string? propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+public sealed record AccountPrivacyRequestViewModel(
+    string Id,
+    string RequestType,
+    string Status,
+    string ScopeLabel,
+    string Summary,
+    string ResponseSummary,
+    bool HasResponseSummary,
+    string CreatedLabel,
+    string LifecycleLabel)
+{
+    public static AccountPrivacyRequestViewModel From(AccountPrivacyItem item)
+    {
+        var created = FormatTimestamp(item.CreatedAt);
+        var reviewed = string.IsNullOrWhiteSpace(item.ReviewedAt)
+            ? null
+            : $"reviewed {FormatTimestamp(item.ReviewedAt)}";
+        var closed = string.IsNullOrWhiteSpace(item.ClosedAt)
+            ? null
+            : $"closed {FormatTimestamp(item.ClosedAt)}";
+        var lifecycle = string.Join(
+            " · ",
+            new[] { reviewed, closed }
+                .Where(value => !string.IsNullOrWhiteSpace(value))!);
+
+        return new AccountPrivacyRequestViewModel(
+            item.Id,
+            item.RequestType,
+            item.Status,
+            item.Scope == "ACCOUNT"
+                ? "Selected account"
+                : "BKE identity",
+            item.Summary,
+            item.ResponseSummary ?? string.Empty,
+            !string.IsNullOrWhiteSpace(item.ResponseSummary),
+            $"Created {created}",
+            lifecycle);
+    }
+
+    private static string FormatTimestamp(string value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+            : value;
 }
 
 public sealed record NotificationViewModel(
