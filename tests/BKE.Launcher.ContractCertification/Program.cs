@@ -86,6 +86,14 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountPrivacyCreateResponse).GetProperties())
     .Concat(typeof(AccountPrivacyItem).GetProperties())
     .Concat(typeof(AccountPrivacyError).GetProperties())
+    .Concat(typeof(AccountOrganizationOverviewResponse).GetProperties())
+    .Concat(typeof(AccountOrganizationAccount).GetProperties())
+    .Concat(typeof(AccountOrganizationPermissions).GetProperties())
+    .Concat(typeof(AccountOrganizationProfile).GetProperties())
+    .Concat(typeof(AccountOrganizationCounts).GetProperties())
+    .Concat(typeof(AccountOrganizationMember).GetProperties())
+    .Concat(typeof(AccountOrganizationInvitation).GetProperties())
+    .Concat(typeof(AccountOrganizationError).GetProperties())
     .Concat(typeof(SoftwareCatalogResponse).GetProperties())
     .Concat(typeof(SoftwareCatalogItem).GetProperties())
     .Concat(typeof(SoftwareInstallResponse).GetProperties())
@@ -152,6 +160,7 @@ Require(agentMethods.SetEquals([
     "RegenerateAccountMfaRecoveryAsync",
     "GetAccountPrivacyRequestsAsync",
     "CreateAccountPrivacyRequestAsync",
+    "GetAccountOrganizationAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -313,6 +322,83 @@ using (var privacyCreateDocument = JsonDocument.Parse(
         ]),
         "Launcher account privacy create wire request widened.");
 }
+
+Require(
+    File.ReadAllText(
+        Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
+        "726a8d6a96c731c9ce58742e51618f56926df52a",
+    "Launcher is not pinned to the merged Agent organization authority.");
+
+Require(
+    AgentLocalContract.AccountOrganizationOverviewPath ==
+        "/v1/account/organization" &&
+    AgentLocalContract.AccountOrganizationCapabilityId ==
+        "bke.account-organization" &&
+    AgentLocalContract.AccountOrganizationContractVersion == 1,
+    "Launcher organization Agent contract drifted.");
+
+Require(
+    typeof(AccountOrganizationOverviewRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId"]),
+    "Launcher widened the Agent organization request.");
+
+foreach (var type in new[]
+{
+    typeof(AccountOrganizationOverviewResponse),
+    typeof(AccountOrganizationAccount),
+    typeof(AccountOrganizationMember),
+    typeof(AccountOrganizationInvitation),
+})
+{
+    Require(
+        type.GetProperties().All(property =>
+            !property.Name.Contains(
+                "AccessToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "RefreshToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Handoff",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "AccountId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "UserId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "OwnerId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "InvitationId",
+                StringComparison.OrdinalIgnoreCase)),
+        $"Launcher organization contract {type.Name} exposes authority/mutation identifiers.");
+}
+
+var organizationControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherAccountOrganizationController.cs"));
+var organizationClientSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.AgentClient",
+        "AgentLoopbackClient.cs"));
+Require(
+    !organizationControllerSource.Contains(
+        "/api/agent-sessions/account/organization",
+        StringComparison.OrdinalIgnoreCase) &&
+    !organizationClientSource.Contains(
+        "/api/agent-sessions/account/organization",
+        StringComparison.OrdinalIgnoreCase) &&
+    organizationClientSource.Contains(
+        "AgentLocalContract.AccountOrganizationOverviewPath",
+        StringComparison.Ordinal),
+    "Launcher bypassed the local Agent organization authority.");
 
 var nativeMfaVerifyRequestProperties = typeof(NativeBkeMfaVerifyRequest)
     .GetProperties()
@@ -861,6 +947,17 @@ Require(mainWindowMarkup.Contains("SelectedIndex=\"{Binding SelectedModuleIndex,
     "Launcher shell does not preserve an explicitly unselected module state.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", StringComparison.Ordinal),
     "Launcher Account surface is not explicitly user-selected.");
+Require(
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationSection}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"RefreshAccountOrganization\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "RefreshAccountOrganizationAsync",
+        StringComparison.Ordinal),
+    "Launcher organization Account surface is missing.");
 Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
     "Launcher does not resolve Agent-owned authentication state on startup.");
 Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
@@ -1771,6 +1868,7 @@ await CertifyNativePasswordResetRequestAsync();
 await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
+await CertifyAccountOrganizationSettingsAsync();
 await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 
@@ -1780,6 +1878,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
+Console.WriteLine("Agent-mediated read-only Organization Overview presentation certified");
 Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
@@ -2099,6 +2198,141 @@ static async Task CertifyAccountPrivacySettingsAsync()
         "Launcher retained privacy state after Agent session invalidation.");
 }
 
+static async Task CertifyAccountOrganizationSettingsAsync()
+{
+    var ownerCatalog = new CustomerJourneyCatalogSource();
+    var ownerAgent = new CustomerJourneyAgentClient(ownerCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "OWNER",
+        OrganizationDisplayName = "Certification Org",
+    };
+    var ownerViewModel = BuildCustomerJourneyViewModel(
+        ownerAgent,
+        ownerCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await ownerViewModel.InitializeAsync(CancellationToken.None);
+
+    Require(
+        ownerViewModel.IsAuthenticated &&
+        ownerViewModel.AccountTypeLabel == "Organization account" &&
+        ownerViewModel.ShowOrganizationSection,
+        "Organization overview certification did not begin in an Organization account.");
+
+    ownerViewModel.OpenAccountSurface();
+    await ownerViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+
+    Require(
+        ownerAgent.OrganizationReadCount == 1 &&
+        ownerViewModel.AccountOrganizationStatus == "READY" &&
+        ownerViewModel.OrganizationReady &&
+        ownerViewModel.OrganizationDisplayName == "Certification Org" &&
+        ownerViewModel.OrganizationRole == "OWNER" &&
+        ownerViewModel.OrganizationLegalName ==
+            "Certification Organization Legal" &&
+        ownerViewModel.HasOrganizationRegistrationNumber &&
+        ownerViewModel.HasOrganizationBillingEmail &&
+        ownerViewModel.HasOrganizationTaxId &&
+        ownerViewModel.HasOrganizationLicenseCount &&
+        ownerViewModel.HasOrganizationSubscriptionCount &&
+        ownerViewModel.HasOrganizationOrderCount &&
+        ownerViewModel.OrganizationMembers.Count == 1 &&
+        ownerViewModel.OrganizationInvitations.Count == 1 &&
+        ownerViewModel.ShowOrganizationMembers,
+        "Launcher did not render the complete Agent-supplied OWNER organization overview.");
+
+    var billingCatalog = new CustomerJourneyCatalogSource();
+    var billingAgent = new CustomerJourneyAgentClient(billingCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "BILLING",
+        OrganizationDisplayName = "Billing Org",
+    };
+    var billingViewModel = BuildCustomerJourneyViewModel(
+        billingAgent,
+        billingCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await billingViewModel.InitializeAsync(CancellationToken.None);
+    await billingViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+
+    Require(
+        billingViewModel.AccountOrganizationStatus == "READY" &&
+        billingViewModel.OrganizationRole == "BILLING" &&
+        billingViewModel.HasOrganizationBillingEmail &&
+        billingViewModel.HasOrganizationTaxId &&
+        !billingViewModel.HasOrganizationLicenseCount &&
+        billingViewModel.HasOrganizationSubscriptionCount &&
+        billingViewModel.HasOrganizationOrderCount &&
+        billingViewModel.OrganizationMembers.Count == 0 &&
+        billingViewModel.OrganizationInvitations.Count == 0 &&
+        !billingViewModel.ShowOrganizationMembers,
+        "Launcher widened a reduced-role organization response beyond Agent-supplied fields.");
+
+    ownerAgent.Authenticated = false;
+    await ownerViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+
+    Require(
+        !ownerViewModel.IsAuthenticated &&
+        !ownerViewModel.OrganizationReady &&
+        ownerViewModel.OrganizationMembers.Count == 0 &&
+        ownerViewModel.OrganizationInvitations.Count == 0 &&
+        !ownerViewModel.ShowOrganizationSection,
+        "AUTH_REQUIRED did not clear Launcher organization presentation state.");
+
+    var switchCatalog = new CustomerJourneyCatalogSource();
+    var switchAgent = new CustomerJourneyAgentClient(switchCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "OWNER",
+        OrganizationDisplayName = "First Org",
+    };
+    var switchViewModel = BuildCustomerJourneyViewModel(
+        switchAgent,
+        switchCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await switchViewModel.InitializeAsync(CancellationToken.None);
+    await switchViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        switchViewModel.OrganizationDisplayName == "First Org" &&
+        switchViewModel.OrganizationMembers.Count == 1,
+        "Account-switch organization certification did not load initial organization state.");
+
+    await switchViewModel.SwitchAccountAsync(CancellationToken.None);
+
+    Require(
+        switchViewModel.SessionStatus == "SIGNED_OUT" &&
+        !switchViewModel.OrganizationReady &&
+        switchViewModel.OrganizationMembers.Count == 0 &&
+        switchViewModel.OrganizationInvitations.Count == 0,
+        "Safe account switching retained old organization presentation state.");
+
+    switchAgent.Authenticated = true;
+    switchAgent.OrganizationDisplayName = "Second Org";
+    await switchViewModel.InitializeAsync(CancellationToken.None);
+
+    Require(
+        switchViewModel.IsAuthenticated &&
+        switchViewModel.AccountOrganizationStatus == "UNKNOWN" &&
+        switchViewModel.OrganizationMembers.Count == 0,
+        "Fresh Organization authentication inherited old organization state.");
+
+    await switchViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        switchViewModel.OrganizationDisplayName == "Second Org",
+        "Fresh Organization authentication did not load the new Agent-authoritative organization.");
+}
+
 static async Task CertifySafeAccountSwitchingAsync()
 {
     var catalog = new CustomerJourneyCatalogSource();
@@ -2369,7 +2603,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherClaimCodeRedemptionController(agent),
         new LauncherAccountPasswordChangeController(agent),
         new LauncherAccountMfaController(agent),
-        new LauncherAccountPrivacyController(agent));
+        new LauncherAccountPrivacyController(agent),
+        new LauncherAccountOrganizationController(agent));
 }
 
 static void Require(bool condition, string message)
@@ -2573,8 +2808,13 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PasswordChangeCount { get; private set; }
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
+    public int OrganizationReadCount { get; private set; }
     public int PlatformAuthorityCount { get; private set; }
     public bool Authenticated { get; set; } = true;
+    public string AccountType { get; set; } = "INDIVIDUAL";
+    public string OrganizationRole { get; set; } = "OWNER";
+    public string OrganizationDisplayName { get; set; } =
+        "Certification Organization";
     public bool PrivacyCreateOutcomeUnknown { get; set; }
     private readonly List<AccountPrivacyItem> _privacyRequests = [];
     public string PasswordChangeOutcome { get; set; } = "CHANGED";
@@ -2594,8 +2834,10 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                     "user-cert",
                     "customer@example.test",
                     AccountId,
-                    "INDIVIDUAL",
-                    "Certification Customer"),
+                    AccountType,
+                    AccountType == "ORGANIZATION"
+                        ? OrganizationDisplayName
+                        : "Certification Customer"),
                 null)
             : new AccountSessionStatusResponse(
                 AgentLocalContract.CapabilityId,
@@ -3017,6 +3259,101 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             id,
             request.RequestType,
             "OPEN",
+            null));
+    }
+
+    public Task<AccountOrganizationOverviewResponse> GetAccountOrganizationAsync(
+        AccountOrganizationOverviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OrganizationReadCount++;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(new AccountOrganizationOverviewResponse(
+                AgentLocalContract.AccountOrganizationCapabilityId,
+                AgentLocalContract.AccountOrganizationContractVersion,
+                "AUTH_REQUIRED",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Array.Empty<AccountOrganizationMember>(),
+                Array.Empty<AccountOrganizationInvitation>(),
+                new AccountOrganizationError(
+                    "SESSION_INVALID",
+                    "Sign in again.",
+                    false)));
+        }
+
+        if (AccountType != "ORGANIZATION")
+        {
+            return Task.FromResult(new AccountOrganizationOverviewResponse(
+                AgentLocalContract.AccountOrganizationCapabilityId,
+                AgentLocalContract.AccountOrganizationContractVersion,
+                "NOT_ORGANIZATION",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Array.Empty<AccountOrganizationMember>(),
+                Array.Empty<AccountOrganizationInvitation>(),
+                null));
+        }
+
+        var owner = OrganizationRole == "OWNER";
+        var billing = OrganizationRole == "BILLING";
+        var licenseManager = OrganizationRole == "LICENSE_MANAGER";
+        var manageMembers = owner;
+        var viewBilling = owner || billing;
+        var viewLicenses = owner || licenseManager;
+
+        return Task.FromResult(new AccountOrganizationOverviewResponse(
+            AgentLocalContract.AccountOrganizationCapabilityId,
+            AgentLocalContract.AccountOrganizationContractVersion,
+            "READY",
+            new AccountOrganizationAccount(
+                OrganizationDisplayName,
+                "ACTIVE",
+                OrganizationRole),
+            new AccountOrganizationPermissions(
+                manageMembers,
+                viewBilling,
+                viewLicenses),
+            new AccountOrganizationProfile(
+                "Certification Organization Legal",
+                "REG-001"),
+            viewBilling ? "billing@example.test" : null,
+            viewBilling ? "TAX-001" : null,
+            new AccountOrganizationCounts(
+                viewLicenses ? 2 : null,
+                viewBilling || viewLicenses ? 4 : null,
+                viewBilling ? 3 : null),
+            manageMembers
+                ? new[]
+                {
+                    new AccountOrganizationMember(
+                        "owner@example.test",
+                        "Owner",
+                        "OWNER"),
+                }
+                : Array.Empty<AccountOrganizationMember>(),
+            manageMembers
+                ? new[]
+                {
+                    new AccountOrganizationInvitation(
+                        "invitee@example.test",
+                        "MEMBER",
+                        "PENDING",
+                        "2026-10-01T12:00:00.000Z",
+                        "2026-09-29T12:00:00.000Z"),
+                }
+                : Array.Empty<AccountOrganizationInvitation>(),
             null));
     }
 

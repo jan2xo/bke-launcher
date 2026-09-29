@@ -245,6 +245,162 @@
                          Opacity="0.68" />
               <Button Content="Sign out on this machine" Click="Logout" />
 
+              <Border IsVisible="{Binding ShowOrganizationSection}"
+                      Classes="content-card"
+                      Padding="14"
+                      Margin="0,8,0,0">
+                <StackPanel Spacing="9">
+                  <TextBlock Text="Organization"
+                             FontSize="18"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding AccountOrganizationStatus}"
+                             FontSize="11"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding AccountOrganizationMessage}"
+                             TextWrapping="Wrap"
+                             Opacity="0.72" />
+                  <Button Content="Refresh organization"
+                          IsEnabled="{Binding CanRefreshAccountOrganization}"
+                          Click="RefreshAccountOrganization" />
+
+                  <StackPanel IsVisible="{Binding OrganizationReady}"
+                              Spacing="7">
+                    <TextBlock Text="{Binding OrganizationDisplayName}"
+                               FontSize="17"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding OrganizationLegalName}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding OrganizationRole}"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding OrganizationLifecycle}"
+                               FontSize="11"
+                               Opacity="0.72" />
+
+                    <StackPanel IsVisible="{Binding HasOrganizationRegistrationNumber}"
+                                Spacing="2">
+                      <TextBlock Text="Registration"
+                                 FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding OrganizationRegistrationNumber}"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowOrganizationBilling}"
+                                Spacing="4"
+                                Margin="0,6,0,0">
+                      <TextBlock Text="Billing"
+                                 FontWeight="SemiBold" />
+                      <StackPanel IsVisible="{Binding HasOrganizationBillingEmail}"
+                                  Spacing="2">
+                        <TextBlock Text="Billing email"
+                                   FontSize="11"
+                                   Opacity="0.68" />
+                        <TextBlock Text="{Binding OrganizationBillingEmail}"
+                                   TextWrapping="Wrap" />
+                      </StackPanel>
+                      <StackPanel IsVisible="{Binding HasOrganizationTaxId}"
+                                  Spacing="2">
+                        <TextBlock Text="Tax ID"
+                                   FontSize="11"
+                                   Opacity="0.68" />
+                        <TextBlock Text="{Binding OrganizationTaxId}"
+                                   TextWrapping="Wrap" />
+                      </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowOrganizationUsage}"
+                                Spacing="4"
+                                Margin="0,6,0,0">
+                      <TextBlock Text="Usage / rights"
+                                 FontWeight="SemiBold" />
+                      <StackPanel IsVisible="{Binding HasOrganizationLicenseCount}"
+                                  Orientation="Horizontal"
+                                  Spacing="6">
+                        <TextBlock Text="Licenses:" />
+                        <TextBlock Text="{Binding OrganizationLicenseCount}"
+                                   FontWeight="SemiBold" />
+                      </StackPanel>
+                      <StackPanel IsVisible="{Binding HasOrganizationSubscriptionCount}"
+                                  Orientation="Horizontal"
+                                  Spacing="6">
+                        <TextBlock Text="Subscriptions:" />
+                        <TextBlock Text="{Binding OrganizationSubscriptionCount}"
+                                   FontWeight="SemiBold" />
+                      </StackPanel>
+                      <StackPanel IsVisible="{Binding HasOrganizationOrderCount}"
+                                  Orientation="Horizontal"
+                                  Spacing="6">
+                        <TextBlock Text="Orders:" />
+                        <TextBlock Text="{Binding OrganizationOrderCount}"
+                                   FontWeight="SemiBold" />
+                      </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowOrganizationMembers}"
+                                Spacing="7"
+                                Margin="0,6,0,0">
+                      <TextBlock Text="Members"
+                                 FontWeight="SemiBold" />
+                      <ItemsControl ItemsSource="{Binding OrganizationMembers}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="contracts:AccountOrganizationMember">
+                            <Border Classes="content-card"
+                                    Padding="9"
+                                    Margin="0,0,0,5">
+                              <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding Name}"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Email}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Role}"
+                                           FontSize="11"
+                                           Opacity="0.72" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock Text="No organization members were returned."
+                                 IsVisible="{Binding ShowEmptyOrganizationMembers}"
+                                 Opacity="0.68"
+                                 TextWrapping="Wrap" />
+
+                      <TextBlock Text="Pending invitations"
+                                 FontWeight="SemiBold"
+                                 Margin="0,5,0,0" />
+                      <ItemsControl ItemsSource="{Binding OrganizationInvitations}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="contracts:AccountOrganizationInvitation">
+                            <Border Classes="content-card"
+                                    Padding="9"
+                                    Margin="0,0,0,5">
+                              <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding Email}"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Role}" />
+                                <TextBlock Text="{Binding Status}"
+                                           FontSize="11"
+                                           Opacity="0.72" />
+                                <TextBlock Text="{Binding ExpiresAt}"
+                                           FontSize="11"
+                                           Opacity="0.72"
+                                           TextWrapping="Wrap" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock Text="No pending invitations were returned."
+                                 IsVisible="{Binding ShowEmptyOrganizationInvitations}"
+                                 Opacity="0.68"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
               <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
 
               <TextBlock Text="Security" FontSize="18" FontWeight="SemiBold" />

@@ -54,6 +54,7 @@ public sealed partial class App : Avalonia.Application
             var accountPasswordChange = new LauncherAccountPasswordChangeController(agentClient);
             var accountMfa = new LauncherAccountMfaController(agentClient);
             var accountPrivacy = new LauncherAccountPrivacyController(agentClient);
+            var accountOrganization = new LauncherAccountOrganizationController(agentClient);
             var viewModel = new MainWindowViewModel(
                 accountSession,
                 nativeSignIn,
@@ -76,7 +77,8 @@ public sealed partial class App : Avalonia.Application
                 claimCodeRedemption,
                 accountPasswordChange,
                 accountMfa,
-                accountPrivacy);
+                accountPrivacy,
+                accountOrganization);
 
             desktop.MainWindow = new MainWindow
             {
