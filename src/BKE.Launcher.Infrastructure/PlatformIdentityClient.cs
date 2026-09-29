@@ -99,6 +99,89 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         return result;
     }
 
+    public async Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
+        Uri platformBaseAddress,
+        NativeBkePasswordResetRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        var endpoint = new Uri(
+            platformBaseAddress,
+            BkePlatformContract.NativePasswordResetRequestPath);
+
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        timeoutSource.CancelAfter(DefaultRequestTimeout);
+
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            endpoint);
+        message.Headers.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
+        message.Headers.UserAgent.ParseAdd("bke-launcher");
+        message.Headers.TryAddWithoutValidation(
+            "x-bke-account-session-version",
+            BkePlatformContract.AccountSessionProtocolVersion);
+        message.Headers.TryAddWithoutValidation(
+            "x-request-id",
+            Guid.NewGuid().ToString("N"));
+        message.Content = JsonContent.Create(request, options: JsonOptions);
+
+        using var response = await _http.SendAsync(
+            message,
+            HttpCompletionOption.ResponseHeadersRead,
+            timeoutSource.Token);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedReset("PLATFORM_REDIRECT_REJECTED");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await ReadErrorAsync(response, timeoutSource.Token);
+            return FailedReset(error);
+        }
+
+        EnsureNativeProtocol(response);
+
+        var result =
+            await response.Content.ReadFromJsonAsync<NativeBkePasswordResetResponse>(
+                JsonOptions,
+                timeoutSource.Token);
+        if (result is null ||
+            result.Status != "accepted" ||
+            result.Error is not null)
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native password-reset response.");
+        }
+
+        return result;
+    }
+
+    private static void EnsureNativeProtocol(HttpResponseMessage response)
+    {
+        if (!response.Headers.TryGetValues(
+                "x-bke-account-session-version",
+                out var values))
+        {
+            throw new InvalidDataException(
+                "Digital Solutions native response is missing its protocol version.");
+        }
+
+        var versions = values.ToArray();
+        if (versions.Length != 1 ||
+            versions[0] != BkePlatformContract.AccountSessionProtocolVersion)
+        {
+            throw new InvalidDataException(
+                "Digital Solutions native protocol version drifted.");
+        }
+    }
+
+    private static NativeBkePasswordResetResponse FailedReset(string error) =>
+        new("failed", error);
+
     private static async Task<string> ReadErrorAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
