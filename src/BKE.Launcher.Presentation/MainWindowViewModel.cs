@@ -1246,7 +1246,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearNativeMfaState();
             ResetPasswordChangeState();
             ResetAccountMfaState(clearRecoveryCodes: true);
-        ResetAccountPrivacyState();
+            ResetAccountPrivacyState();
             SessionStatus = "SIGN_IN_UNAVAILABLE";
             AccountDisplay = "Not signed in";
             Message = "BKE native sign-in is unavailable or returned an invalid response.";
@@ -1398,7 +1398,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 ClearNativeMfaState();
                 ResetAccountMfaState(clearRecoveryCodes: true);
-        ResetAccountPrivacyState();
+            ResetAccountPrivacyState();
                 ResetPasswordChangeState();
                 ResetShellSurface();
                 ClearCatalog(
@@ -3273,7 +3273,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var response = await _accountSession.LogoutAsync(cancellationToken);
             ClearNativeMfaState();
             ResetAccountMfaState(clearRecoveryCodes: true);
-        ResetAccountPrivacyState();
+            ResetAccountPrivacyState();
             ResetShellSurface();
             SessionStatus = response.Status;
             AccountDisplay = "Not signed in";
@@ -3389,6 +3389,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         ClearNativeMfaState();
         ResetAccountMfaState(clearRecoveryCodes);
+        ResetAccountPrivacyState();
         ResetPasswordChangeState();
         ResetShellSurface();
         SessionStatus = "SIGNED_OUT";
