@@ -2066,6 +2066,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        if (CurrentPassword.Length > 128 ||
+            NewPassword.Length > 128 ||
+            ConfirmNewPassword.Length > 128)
+        {
+            PasswordChangeStatus = "INVALID_INPUT";
+            PasswordChangeMessage = "Password fields must be 128 characters or fewer.";
+            return;
+        }
+
         if (!string.Equals(NewPassword, ConfirmNewPassword, StringComparison.Ordinal))
         {
             PasswordChangeStatus = "INVALID_INPUT";
