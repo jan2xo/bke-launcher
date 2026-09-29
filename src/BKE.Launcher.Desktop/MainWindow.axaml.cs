@@ -138,6 +138,22 @@ public sealed partial class MainWindow : Window
         await ViewModel.RegenerateMfaRecoveryAsync(CancellationToken.None);
     }
 
+    private async void RefreshAccountPrivacy(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RefreshAccountPrivacyAsync(
+            CancellationToken.None);
+    }
+
+    private async void CreateAccountPrivacyRequest(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.CreateAccountPrivacyRequestAsync(
+            CancellationToken.None);
+    }
+
     private async void RedeemClaimCode(object? sender, RoutedEventArgs args)
     {
         await ViewModel.RedeemClaimCodeAsync(CancellationToken.None);
