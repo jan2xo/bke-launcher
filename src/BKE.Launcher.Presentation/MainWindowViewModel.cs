@@ -662,6 +662,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
 
             Password = string.Empty;
+            ResetPasswordResetState();
             ClaimCode = string.Empty;
             ClaimStatus = "AUTH_REQUIRED";
             ClaimMessage = "Sign in to redeem a Claim Code.";
@@ -675,6 +676,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
                 Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
+                ResetPasswordResetState();
                 ResetShellSurface();
                 return;
             }
@@ -2289,6 +2291,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CurrentPassword = string.Empty;
         NewPassword = string.Empty;
         ConfirmNewPassword = string.Empty;
+    }
+
+    private void ResetPasswordResetState()
+    {
+        PasswordResetStatus = "IDLE";
+        PasswordResetMessage =
+            "Forgot your password? Request a one-time reset link by email.";
     }
 
     private void ResetPasswordChangeState()
