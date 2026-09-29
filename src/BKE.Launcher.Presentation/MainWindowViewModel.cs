@@ -28,6 +28,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherSoftwareRemoveController _softwareRemove;
     private readonly LauncherClaimCodeRedemptionController _claimCodeRedemption;
     private readonly LauncherAccountPasswordChangeController _accountPasswordChange;
+    private readonly LauncherAccountMfaController _accountMfa;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
@@ -49,6 +50,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _confirmNewPassword = string.Empty;
     private string _passwordChangeStatus = "IDLE";
     private string _passwordChangeMessage = "Use your current password to set a new BKE password.";
+    private string _nativeMfaCode = string.Empty;
+    private string? _nativeMfaChallengeToken;
+    private string _nativeMfaReference = string.Empty;
+    private string _nativeMfaMessage = string.Empty;
+    private string _accountMfaStatus = "UNKNOWN";
+    private string _accountMfaMessage = "Refresh MFA status to manage account security.";
+    private bool _accountMfaEnabled;
+    private bool _accountMfaEnrollmentPending;
+    private int _accountMfaRecoveryCodesRemaining;
+    private string _accountMfaCurrentPassword = string.Empty;
+    private string _accountMfaCode = string.Empty;
+    private string? _accountMfaChallengeToken;
+    private string _accountMfaReference = string.Empty;
+    private string _accountMfaChallengePurpose = string.Empty;
+    private string _accountMfaRecoveryCodes = string.Empty;
     private string _storeStatus = "AUTH_REQUIRED";
     private string _storeMessage = "Sign in to browse the BKE Store.";
     private string _notificationStatus = "AUTH_REQUIRED";
@@ -95,7 +111,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherSoftwareOpenController softwareOpen,
         LauncherSoftwareRemoveController softwareRemove,
         LauncherClaimCodeRedemptionController claimCodeRedemption,
-        LauncherAccountPasswordChangeController accountPasswordChange)
+        LauncherAccountPasswordChangeController accountPasswordChange,
+        LauncherAccountMfaController accountMfa)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -116,6 +133,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _softwareRemove = softwareRemove;
         _claimCodeRedemption = claimCodeRedemption;
         _accountPasswordChange = accountPasswordChange;
+        _accountMfa = accountMfa;
         RestoreCheckoutRecoveryState();
     }
 
@@ -211,6 +229,172 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _passwordChangeMessage, value);
     }
 
+
+    public string NativeMfaCode
+    {
+        get => _nativeMfaCode;
+        set
+        {
+            SetField(ref _nativeMfaCode, value);
+            Raise(nameof(CanVerifyNativeMfa));
+        }
+    }
+
+    public string NativeMfaReference
+    {
+        get => _nativeMfaReference;
+        private set => SetField(ref _nativeMfaReference, value);
+    }
+
+    public string NativeMfaMessage
+    {
+        get => _nativeMfaMessage;
+        private set => SetField(ref _nativeMfaMessage, value);
+    }
+
+    public bool ShowNativeMfaChallenge =>
+        ShowLoginPage && !string.IsNullOrWhiteSpace(_nativeMfaChallengeToken);
+
+    public bool CanVerifyNativeMfa =>
+        ShowNativeMfaChallenge &&
+        SessionStatus != "VERIFYING_MFA" &&
+        NativeMfaCode.Length is >= 6 and <= 32;
+
+    public string AccountMfaStatus
+    {
+        get => _accountMfaStatus;
+        private set
+        {
+            SetField(ref _accountMfaStatus, value);
+            RaiseAccountMfaCapabilities();
+        }
+    }
+
+    public string AccountMfaMessage
+    {
+        get => _accountMfaMessage;
+        private set => SetField(ref _accountMfaMessage, value);
+    }
+
+    public string AccountMfaSummary =>
+        AccountMfaStatus == "READY"
+            ? AccountMfaEnabled
+                ? $"Enabled · {AccountMfaRecoveryCodesRemaining} recovery code(s) remaining"
+                : AccountMfaEnrollmentPending
+                    ? "Enrollment pending"
+                    : "Not enabled"
+            : AccountMfaStatus;
+
+    public bool AccountMfaEnabled
+    {
+        get => _accountMfaEnabled;
+        private set
+        {
+            SetField(ref _accountMfaEnabled, value);
+            Raise(nameof(AccountMfaSummary));
+            RaiseAccountMfaCapabilities();
+        }
+    }
+
+    public bool AccountMfaEnrollmentPending
+    {
+        get => _accountMfaEnrollmentPending;
+        private set
+        {
+            SetField(ref _accountMfaEnrollmentPending, value);
+            Raise(nameof(AccountMfaSummary));
+        }
+    }
+
+    public int AccountMfaRecoveryCodesRemaining
+    {
+        get => _accountMfaRecoveryCodesRemaining;
+        private set
+        {
+            SetField(ref _accountMfaRecoveryCodesRemaining, value);
+            Raise(nameof(AccountMfaSummary));
+        }
+    }
+
+    public string AccountMfaCurrentPassword
+    {
+        get => _accountMfaCurrentPassword;
+        set
+        {
+            SetField(ref _accountMfaCurrentPassword, value);
+            RaiseAccountMfaCapabilities();
+        }
+    }
+
+    public string AccountMfaCode
+    {
+        get => _accountMfaCode;
+        set
+        {
+            SetField(ref _accountMfaCode, value);
+            RaiseAccountMfaCapabilities();
+        }
+    }
+
+    public string AccountMfaReference
+    {
+        get => _accountMfaReference;
+        private set => SetField(ref _accountMfaReference, value);
+    }
+
+    public string AccountMfaRecoveryCodes
+    {
+        get => _accountMfaRecoveryCodes;
+        private set
+        {
+            SetField(ref _accountMfaRecoveryCodes, value);
+            Raise(nameof(HasMfaRecoveryCodes));
+        }
+    }
+
+    public bool HasMfaRecoveryCodes =>
+        !string.IsNullOrWhiteSpace(AccountMfaRecoveryCodes);
+
+    public bool HasAccountMfaChallenge =>
+        IsAuthenticated &&
+        !string.IsNullOrWhiteSpace(_accountMfaChallengeToken);
+
+    public bool ShowMfaEnrollmentChallenge =>
+        HasAccountMfaChallenge &&
+        _accountMfaChallengePurpose == "ENROLL";
+
+    public bool ShowMfaProofChallenge =>
+        HasAccountMfaChallenge &&
+        _accountMfaChallengePurpose == "PROOF";
+
+    public bool ShowMfaEnableActions =>
+        IsAuthenticated &&
+        AccountMfaStatus == "READY" &&
+        !AccountMfaEnabled;
+
+    public bool ShowMfaProtectedActions =>
+        IsAuthenticated &&
+        AccountMfaStatus == "READY" &&
+        AccountMfaEnabled;
+
+    public bool CanStartMfaEnrollment =>
+        ShowMfaEnableActions &&
+        !string.IsNullOrEmpty(AccountMfaCurrentPassword);
+
+    public bool CanStartMfaProof =>
+        ShowMfaProtectedActions &&
+        !string.IsNullOrEmpty(AccountMfaCurrentPassword);
+
+    public bool CanCompleteMfaEnrollment =>
+        ShowMfaEnrollmentChallenge &&
+        AccountMfaCode.Length is >= 6 and <= 32 &&
+        !string.IsNullOrEmpty(AccountMfaCurrentPassword);
+
+    public bool CanSubmitMfaProof =>
+        ShowMfaProofChallenge &&
+        AccountMfaCode.Length is >= 6 and <= 32 &&
+        !string.IsNullOrEmpty(AccountMfaCurrentPassword);
+
     public NativeBkeAccountChoice? SelectedAccount
     {
         get => _selectedAccount;
@@ -226,6 +410,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowAuthenticatedShell => IsAuthenticated;
     public bool CanRequestPasswordReset =>
         ShowLoginPage &&
+        !ShowNativeMfaChallenge &&
         PasswordResetStatus != "REQUESTING" &&
         !string.IsNullOrWhiteSpace(Email);
 
@@ -253,6 +438,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(CanRequestPasswordReset));
             Raise(nameof(CanRedeemClaimCode));
             Raise(nameof(CanChangePassword));
+            Raise(nameof(ShowNativeMfaChallenge));
+            Raise(nameof(CanVerifyNativeMfa));
+            RaiseAccountMfaCapabilities();
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
             Raise(nameof(CanRetryOriginalCheckout));
@@ -631,12 +819,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        ClearNativeMfaState();
+
         try
         {
             SessionStatus = "SIGNING_IN";
-            ClearNotifications(
-                "AUTH_REQUIRED",
-                "Sign in to view BKE notifications.");
+            ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
             Message = "Authenticating directly with BKE Digital Solutions…";
 
             var result = await _nativeSignIn.SignInAsync(
@@ -644,6 +832,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 Password,
                 SelectedAccount?.AccountId,
                 cancellationToken);
+
+            if (result.Status == "MFA_CHALLENGE_REQUIRED")
+            {
+                Password = string.Empty;
+                _nativeMfaChallengeToken = result.ChallengeToken;
+                NativeMfaReference = result.MfaReference is null
+                    ? string.Empty
+                    : $"Reference: {result.MfaReference}";
+                NativeMfaMessage = result.EmailSent
+                    ? "Enter the verification code sent to your account email."
+                    : "Enter your BKE multi-factor verification code.";
+                SessionStatus = "MFA_CHALLENGE_REQUIRED";
+                Message = "Multi-factor verification is required before this machine can receive an Agent handoff.";
+                Raise(nameof(ShowNativeMfaChallenge));
+                Raise(nameof(CanVerifyNativeMfa));
+                return;
+            }
 
             if (result.Status == "ACCOUNT_SELECTION_REQUIRED")
             {
@@ -661,31 +866,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
-            Password = string.Empty;
-            ResetPasswordResetState();
-            ClaimCode = string.Empty;
-            ClaimStatus = "AUTH_REQUIRED";
-            ClaimMessage = "Sign in to redeem a Claim Code.";
-            ResetPasswordChangeState();
-            AvailableAccounts.Clear();
-            SelectedAccount = null;
-            Raise(nameof(HasAccountChoices));
-
-            SessionStatus = result.Status;
-            if (result.Status == "AUTHENTICATED" && result.Account is not null)
-            {
-                AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
-                Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
-                ResetPasswordResetState();
-                ResetShellSurface();
-                return;
-            }
-
-            AccountDisplay = "Not signed in";
-            Message = result.ErrorMessage ?? "BKE account sign-in failed.";
-            ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
-            ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
-            ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
+            ApplyNativeSignInResult(result);
         }
         catch (Exception error) when (
             error is HttpRequestException or
@@ -693,7 +874,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             InvalidDataException)
         {
             Password = string.Empty;
+            ClearNativeMfaState();
             ResetPasswordChangeState();
+            ResetAccountMfaState(clearRecoveryCodes: true);
             SessionStatus = "SIGN_IN_UNAVAILABLE";
             AccountDisplay = "Not signed in";
             Message = "BKE native sign-in is unavailable or returned an invalid response.";
@@ -701,6 +884,102 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
             ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
         }
+    }
+
+    public async Task VerifyNativeMfaAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_nativeMfaChallengeToken) ||
+            NativeMfaCode.Length is < 6 or > 32)
+        {
+            NativeMfaMessage = "Enter the verification code before continuing.";
+            return;
+        }
+
+        var challengeToken = _nativeMfaChallengeToken;
+        var code = NativeMfaCode;
+        NativeMfaCode = string.Empty;
+
+        try
+        {
+            SessionStatus = "VERIFYING_MFA";
+            var result = await _nativeSignIn.VerifyMfaAsync(
+                challengeToken,
+                code,
+                SelectedAccount?.AccountId,
+                cancellationToken);
+
+            if (result.Status == "ACCOUNT_SELECTION_REQUIRED")
+            {
+                AvailableAccounts.Clear();
+                foreach (var account in result.Accounts)
+                {
+                    AvailableAccounts.Add(account);
+                }
+                SelectedAccount = AvailableAccounts.FirstOrDefault();
+                Raise(nameof(HasAccountChoices));
+                ClearNativeMfaState();
+                SessionStatus = "ACCOUNT_SELECTION_REQUIRED";
+                Message = AvailableAccounts.Count == 0
+                    ? "No active BKE account is available for this identity."
+                    : "Verification succeeded. Choose the account, re-enter your password, and sign in again to issue a fresh verification challenge.";
+                return;
+            }
+
+            if (result.Status == "FAILED")
+            {
+                SessionStatus = "MFA_CHALLENGE_REQUIRED";
+                NativeMfaMessage = result.ErrorMessage ?? "Verification failed.";
+                if (result.ErrorCode == "INVALID_MFA_CHALLENGE")
+                {
+                    ClearNativeMfaState();
+                    SessionStatus = "SIGNED_OUT";
+                    Message = "The verification challenge expired or was invalid. Sign in again.";
+                }
+                return;
+            }
+
+            ClearNativeMfaState();
+            ApplyNativeSignInResult(result);
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ClearNativeMfaState();
+            SessionStatus = "SIGNED_OUT";
+            Message = "BKE multi-factor verification is unavailable. Sign in again before retrying.";
+        }
+    }
+
+    private void ApplyNativeSignInResult(LauncherNativeSignInResult result)
+    {
+        Password = string.Empty;
+        ResetPasswordResetState();
+        ClaimCode = string.Empty;
+        ClaimStatus = "AUTH_REQUIRED";
+        ClaimMessage = "Sign in to redeem a Claim Code.";
+        ResetPasswordChangeState();
+        ResetAccountMfaState(clearRecoveryCodes: true);
+        AvailableAccounts.Clear();
+        SelectedAccount = null;
+        Raise(nameof(HasAccountChoices));
+
+        SessionStatus = result.Status;
+        if (result.Status == "AUTHENTICATED" && result.Account is not null)
+        {
+            AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
+            Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
+            ResetPasswordResetState();
+            ResetShellSurface();
+            return;
+        }
+
+        AccountDisplay = "Not signed in";
+        Message = result.ErrorMessage ?? "BKE account sign-in failed.";
+        ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+        ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
+        ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
     }
 
     public async Task StartSignInAsync(CancellationToken cancellationToken)
@@ -745,6 +1024,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             if (response.Status != "AUTHENTICATED")
             {
+                ClearNativeMfaState();
+                ResetAccountMfaState(clearRecoveryCodes: true);
                 ResetPasswordChangeState();
                 ResetShellSurface();
                 ClearCatalog(
@@ -2139,6 +2420,233 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task RefreshAccountMfaAsync(CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            AccountMfaStatus = "AUTH_REQUIRED";
+            AccountMfaMessage = "Sign in with BKE before opening MFA settings.";
+            return;
+        }
+
+        try
+        {
+            AccountMfaStatus = "UPDATING";
+            AccountMfaMessage = "Loading MFA status through the BKE Licensing Agent…";
+            var response = await _accountMfa.StatusAsync(cancellationToken);
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountMfaReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.",
+                    clearRecoveryCodes: true);
+                return;
+            }
+
+            AccountMfaStatus = response.Status;
+            AccountMfaEnabled = response.Enabled;
+            AccountMfaEnrollmentPending = response.EnrollmentPending;
+            AccountMfaRecoveryCodesRemaining = response.RecoveryCodesRemaining;
+            AccountMfaMessage = response.Error?.Message ?? response.Status switch
+            {
+                "READY" when response.Enabled => "MFA is enabled for this BKE account.",
+                "READY" => "MFA is not enabled for this BKE account.",
+                _ => "BKE MFA status is temporarily unavailable.",
+            };
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            AccountMfaStatus = "FAILED";
+            AccountMfaMessage = "BKE MFA status is temporarily unavailable.";
+        }
+    }
+
+    public async Task StartMfaEnrollmentAsync(CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated || string.IsNullOrEmpty(AccountMfaCurrentPassword))
+        {
+            AccountMfaStatus = "INVALID_INPUT";
+            AccountMfaMessage = "Enter your current password before enabling MFA.";
+            return;
+        }
+
+        try
+        {
+            AccountMfaStatus = "UPDATING";
+            var response = await _accountMfa.EnrollStartAsync(
+                AccountMfaCurrentPassword,
+                cancellationToken);
+            ApplyAccountMfaChallenge(response, "ENROLL");
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            AccountMfaStatus = "FAILED";
+            AccountMfaMessage = "MFA enrollment could not be started.";
+        }
+    }
+
+    public async Task CompleteMfaEnrollmentAsync(CancellationToken cancellationToken)
+    {
+        if (!CanCompleteMfaEnrollment ||
+            string.IsNullOrWhiteSpace(_accountMfaChallengeToken))
+        {
+            AccountMfaStatus = "INVALID_INPUT";
+            AccountMfaMessage = "Enter the enrollment verification code.";
+            return;
+        }
+
+        await RunAccountMfaMutationAsync(
+            (password, challenge, code, ct) =>
+                _accountMfa.EnrollCompleteAsync(password, challenge, code, ct),
+            "MFA enrollment",
+            cancellationToken);
+    }
+
+    public async Task StartMfaProofAsync(CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated || string.IsNullOrEmpty(AccountMfaCurrentPassword))
+        {
+            AccountMfaStatus = "INVALID_INPUT";
+            AccountMfaMessage = "Enter your current password before changing MFA.";
+            return;
+        }
+
+        try
+        {
+            AccountMfaStatus = "UPDATING";
+            var response = await _accountMfa.ChallengeAsync(
+                AccountMfaCurrentPassword,
+                cancellationToken);
+            ApplyAccountMfaChallenge(response, "PROOF");
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            AccountMfaStatus = "FAILED";
+            AccountMfaMessage = "MFA verification could not be started.";
+        }
+    }
+
+    public Task DisableMfaAsync(CancellationToken cancellationToken) =>
+        RunAccountMfaMutationAsync(
+            (password, challenge, code, ct) =>
+                _accountMfa.DisableAsync(password, challenge, code, ct),
+            "MFA disable",
+            cancellationToken);
+
+    public Task RegenerateMfaRecoveryAsync(CancellationToken cancellationToken) =>
+        RunAccountMfaMutationAsync(
+            (password, challenge, code, ct) =>
+                _accountMfa.RegenerateRecoveryAsync(password, challenge, code, ct),
+            "Recovery-code regeneration",
+            cancellationToken);
+
+    public void DismissMfaRecoveryCodes()
+    {
+        AccountMfaRecoveryCodes = string.Empty;
+    }
+
+    private void ApplyAccountMfaChallenge(
+        AccountMfaChallengeResponse response,
+        string purpose)
+    {
+        AccountMfaStatus = response.Status;
+        if (response.Status == "CHALLENGE_ISSUED" &&
+            !string.IsNullOrWhiteSpace(response.ChallengeToken))
+        {
+            _accountMfaChallengeToken = response.ChallengeToken;
+            _accountMfaChallengePurpose = purpose;
+            AccountMfaReference = string.IsNullOrWhiteSpace(response.MfaReference)
+                ? string.Empty
+                : $"Reference: {response.MfaReference}";
+            AccountMfaCode = string.Empty;
+            AccountMfaMessage = response.EmailSent
+                ? "Enter the verification code sent to your account email."
+                : "Enter your BKE MFA verification code.";
+            RaiseAccountMfaCapabilities();
+            return;
+        }
+
+        AccountMfaMessage =
+            response.Error?.Message ?? "MFA verification could not be started.";
+        RaiseAccountMfaCapabilities();
+    }
+
+    private async Task RunAccountMfaMutationAsync(
+        Func<string, string, string, CancellationToken, Task<AccountMfaMutationResponse>> operation,
+        string operationName,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated ||
+            string.IsNullOrWhiteSpace(_accountMfaChallengeToken) ||
+            string.IsNullOrEmpty(AccountMfaCurrentPassword) ||
+            AccountMfaCode.Length is < 6 or > 32)
+        {
+            AccountMfaStatus = "INVALID_INPUT";
+            AccountMfaMessage =
+                $"Complete MFA verification before {operationName.ToLowerInvariant()}.";
+            return;
+        }
+
+        var password = AccountMfaCurrentPassword;
+        var challenge = _accountMfaChallengeToken;
+        var code = AccountMfaCode;
+
+        try
+        {
+            AccountMfaStatus = "UPDATING";
+            var response = await operation(password, challenge, code, cancellationToken);
+            AccountMfaCode = string.Empty;
+
+            if (response.ReauthenticationRequired)
+            {
+                var recoveryCodes = response.RecoveryCodes;
+                var message = response.Error?.Message ?? response.Status switch
+                {
+                    "MFA_ENABLED" =>
+                        "MFA enabled. Save the recovery codes, then sign in again.",
+                    "MFA_DISABLED" =>
+                        "MFA disabled. Sign in again.",
+                    "RECOVERY_CODES_REGENERATED" =>
+                        "Recovery codes regenerated. Save them, then sign in again.",
+                    _ =>
+                        "The account-security result requires signing in again before retrying.",
+                };
+
+                EnterAccountMfaReauthentication(message, clearRecoveryCodes: true);
+                if (recoveryCodes is { Count: > 0 })
+                {
+                    AccountMfaRecoveryCodes =
+                        string.Join(Environment.NewLine, recoveryCodes);
+                }
+                return;
+            }
+
+            AccountMfaStatus = response.Status;
+            AccountMfaMessage =
+                response.Error?.Message ?? $"{operationName} was not completed.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException or
+            ArgumentException)
+        {
+            EnterAccountMfaReauthentication(
+                $"The {operationName.ToLowerInvariant()} result could not be confirmed. Sign in again before retrying.",
+                clearRecoveryCodes: true);
+        }
+    }
+
     public async Task ChangePasswordAsync(CancellationToken cancellationToken)
     {
         if (!IsAuthenticated)
@@ -2221,6 +2729,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var response = await _accountSession.LogoutAsync(cancellationToken);
+            ClearNativeMfaState();
+            ResetAccountMfaState(clearRecoveryCodes: true);
             ResetShellSurface();
             SessionStatus = response.Status;
             AccountDisplay = "Not signed in";
@@ -2265,6 +2775,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string message)
     {
         ClearPasswordChangeFields();
+        ClearNativeMfaState();
+        ResetAccountMfaState(clearRecoveryCodes: true);
         PasswordChangeStatus = status;
         PasswordChangeMessage = message;
         ResetShellSurface();
@@ -2291,6 +2803,80 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CurrentPassword = string.Empty;
         NewPassword = string.Empty;
         ConfirmNewPassword = string.Empty;
+    }
+
+    private void ClearNativeMfaState()
+    {
+        _nativeMfaChallengeToken = null;
+        NativeMfaCode = string.Empty;
+        NativeMfaReference = string.Empty;
+        NativeMfaMessage = string.Empty;
+        Raise(nameof(ShowNativeMfaChallenge));
+        Raise(nameof(CanVerifyNativeMfa));
+    }
+
+    private void ClearAccountMfaChallenge()
+    {
+        _accountMfaChallengeToken = null;
+        _accountMfaChallengePurpose = string.Empty;
+        AccountMfaCode = string.Empty;
+        AccountMfaReference = string.Empty;
+        RaiseAccountMfaCapabilities();
+    }
+
+    private void ResetAccountMfaState(bool clearRecoveryCodes)
+    {
+        AccountMfaCurrentPassword = string.Empty;
+        ClearAccountMfaChallenge();
+        AccountMfaStatus = "UNKNOWN";
+        AccountMfaMessage = "Refresh MFA status to manage account security.";
+        AccountMfaEnabled = false;
+        AccountMfaEnrollmentPending = false;
+        AccountMfaRecoveryCodesRemaining = 0;
+        if (clearRecoveryCodes)
+        {
+            AccountMfaRecoveryCodes = string.Empty;
+        }
+    }
+
+    private void EnterAccountMfaReauthentication(
+        string message,
+        bool clearRecoveryCodes)
+    {
+        ClearNativeMfaState();
+        ResetAccountMfaState(clearRecoveryCodes);
+        ResetPasswordChangeState();
+        ResetShellSurface();
+        SessionStatus = "SIGNED_OUT";
+        AccountDisplay = "Not signed in";
+        UserCode = string.Empty;
+        VerificationUri = string.Empty;
+        Password = string.Empty;
+        ClaimCode = string.Empty;
+        ClaimStatus = "AUTH_REQUIRED";
+        ClaimMessage = "Sign in to redeem a Claim Code.";
+        AvailableAccounts.Clear();
+        SelectedAccount = null;
+        Raise(nameof(HasAccountChoices));
+        GiftClaimCode = string.Empty;
+        Message = message;
+        ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
+        ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
+        ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
+    }
+
+    private void RaiseAccountMfaCapabilities()
+    {
+        Raise(nameof(AccountMfaSummary));
+        Raise(nameof(HasAccountMfaChallenge));
+        Raise(nameof(ShowMfaEnrollmentChallenge));
+        Raise(nameof(ShowMfaProofChallenge));
+        Raise(nameof(ShowMfaEnableActions));
+        Raise(nameof(ShowMfaProtectedActions));
+        Raise(nameof(CanStartMfaEnrollment));
+        Raise(nameof(CanStartMfaProof));
+        Raise(nameof(CanCompleteMfaEnrollment));
+        Raise(nameof(CanSubmitMfaProof));
     }
 
     private void ResetPasswordResetState()

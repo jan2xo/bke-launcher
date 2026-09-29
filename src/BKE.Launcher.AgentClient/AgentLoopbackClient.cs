@@ -10,6 +10,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
 {
     internal static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(5);
     internal static readonly TimeSpan AccountPasswordChangeRequestTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan AccountMfaRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RepairRequestTimeout = TimeSpan.FromMinutes(10);
@@ -105,6 +106,60 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AgentLocalContract.AccountPasswordChangePath,
             request,
             AccountPasswordChangeRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountMfaStatusResponse> GetAccountMfaStatusAsync(
+        AccountMfaStatusRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountMfaStatusRequest, AccountMfaStatusResponse>(
+            AgentLocalContract.AccountMfaStatusPath,
+            request,
+            AccountMfaRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountMfaChallengeResponse> StartAccountMfaEnrollmentAsync(
+        AccountMfaEnrollStartRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountMfaEnrollStartRequest, AccountMfaChallengeResponse>(
+            AgentLocalContract.AccountMfaEnrollStartPath,
+            request,
+            AccountMfaRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountMfaMutationResponse> CompleteAccountMfaEnrollmentAsync(
+        AccountMfaEnrollCompleteRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountMfaEnrollCompleteRequest, AccountMfaMutationResponse>(
+            AgentLocalContract.AccountMfaEnrollCompletePath,
+            request,
+            AccountMfaRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountMfaChallengeResponse> StartAccountMfaProofAsync(
+        AccountMfaProofChallengeRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountMfaProofChallengeRequest, AccountMfaChallengeResponse>(
+            AgentLocalContract.AccountMfaChallengePath,
+            request,
+            AccountMfaRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountMfaMutationResponse> DisableAccountMfaAsync(
+        AccountMfaMutationRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountMfaMutationRequest, AccountMfaMutationResponse>(
+            AgentLocalContract.AccountMfaDisablePath,
+            request,
+            AccountMfaRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountMfaMutationResponse> RegenerateAccountMfaRecoveryAsync(
+        AccountMfaMutationRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountMfaMutationRequest, AccountMfaMutationResponse>(
+            AgentLocalContract.AccountMfaRecoveryRegeneratePath,
+            request,
+            AccountMfaRequestTimeout,
             cancellationToken);
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
