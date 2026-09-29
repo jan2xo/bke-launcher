@@ -31,6 +31,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountPasswordChangeController _accountPasswordChange;
     private readonly LauncherAccountMfaController _accountMfa;
     private readonly LauncherAccountPrivacyController _accountPrivacy;
+    private readonly LauncherAccountOrganizationController _accountOrganization;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
@@ -82,6 +83,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Refresh privacy requests to load the authoritative request types and history.";
     private string _accountPrivacySummary = string.Empty;
     private string? _selectedAccountPrivacyRequestType;
+    private string _accountOrganizationStatus = "UNKNOWN";
+    private string _accountOrganizationMessage =
+        "Refresh organization details to load the Agent-authoritative selected-account overview.";
+    private AccountOrganizationAccount? _organizationAccount;
+    private AccountOrganizationPermissions? _organizationPermissions;
+    private AccountOrganizationProfile? _organizationProfile;
+    private AccountOrganizationCounts? _organizationCounts;
+    private string? _organizationBillingEmail;
+    private string? _organizationTaxId;
     private string _storeStatus = "AUTH_REQUIRED";
     private string _storeMessage = "Sign in to browse the BKE Store.";
     private string _notificationStatus = "AUTH_REQUIRED";
@@ -131,7 +141,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherClaimCodeRedemptionController claimCodeRedemption,
         LauncherAccountPasswordChangeController accountPasswordChange,
         LauncherAccountMfaController accountMfa,
-        LauncherAccountPrivacyController accountPrivacy)
+        LauncherAccountPrivacyController accountPrivacy,
+        LauncherAccountOrganizationController accountOrganization)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -155,6 +166,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountPasswordChange = accountPasswordChange;
         _accountMfa = accountMfa;
         _accountPrivacy = accountPrivacy;
+        _accountOrganization = accountOrganization;
         RestoreCheckoutRecoveryState();
     }
 
@@ -165,6 +177,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
+    public ObservableCollection<AccountOrganizationMember> OrganizationMembers { get; } = [];
+    public ObservableCollection<AccountOrganizationInvitation> OrganizationInvitations { get; } = [];
     public ObservableCollection<PurchaseLegalDocumentViewModel> PurchaseLegalDocuments { get; } = [];
     public ObservableCollection<RegistrationLegalDocumentViewModel> RegistrationLegalDocuments { get; } = [];
     public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
@@ -556,6 +570,110 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         AccountPrivacyStatus == "READY" &&
         AccountPrivacyRequests.Count == 0;
 
+    public string AccountOrganizationStatus
+    {
+        get => _accountOrganizationStatus;
+        private set
+        {
+            SetField(ref _accountOrganizationStatus, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string AccountOrganizationMessage
+    {
+        get => _accountOrganizationMessage;
+        private set => SetField(ref _accountOrganizationMessage, value);
+    }
+
+    public bool ShowOrganizationSection =>
+        IsAuthenticated &&
+        _authenticatedAccountType == "ORGANIZATION" &&
+        AccountOrganizationStatus != "NOT_ORGANIZATION";
+
+    public bool CanRefreshAccountOrganization =>
+        ShowOrganizationSection &&
+        AccountOrganizationStatus != "LOADING";
+
+    public bool OrganizationReady =>
+        AccountOrganizationStatus == "READY" &&
+        _organizationAccount is not null &&
+        _organizationProfile is not null &&
+        _organizationCounts is not null;
+
+    public string OrganizationDisplayName =>
+        _organizationAccount?.DisplayName ?? string.Empty;
+
+    public string OrganizationRole =>
+        _organizationAccount?.Role ?? string.Empty;
+
+    public string OrganizationLifecycle =>
+        _organizationAccount?.LifecycleState ?? string.Empty;
+
+    public string OrganizationLegalName =>
+        _organizationProfile?.LegalName ?? string.Empty;
+
+    public string OrganizationRegistrationNumber =>
+        _organizationProfile?.RegistrationNumber ?? string.Empty;
+
+    public bool HasOrganizationRegistrationNumber =>
+        !string.IsNullOrWhiteSpace(
+            _organizationProfile?.RegistrationNumber);
+
+    public string OrganizationBillingEmail =>
+        _organizationBillingEmail ?? string.Empty;
+
+    public bool HasOrganizationBillingEmail =>
+        !string.IsNullOrWhiteSpace(_organizationBillingEmail);
+
+    public string OrganizationTaxId =>
+        _organizationTaxId ?? string.Empty;
+
+    public bool HasOrganizationTaxId =>
+        !string.IsNullOrWhiteSpace(_organizationTaxId);
+
+    public bool ShowOrganizationBilling =>
+        HasOrganizationBillingEmail ||
+        HasOrganizationTaxId;
+
+    public bool HasOrganizationLicenseCount =>
+        _organizationCounts?.Licenses is not null;
+
+    public bool HasOrganizationSubscriptionCount =>
+        _organizationCounts?.Subscriptions is not null;
+
+    public bool HasOrganizationOrderCount =>
+        _organizationCounts?.Orders is not null;
+
+    public string OrganizationLicenseCount =>
+        _organizationCounts?.Licenses?.ToString(
+            CultureInfo.InvariantCulture) ?? string.Empty;
+
+    public string OrganizationSubscriptionCount =>
+        _organizationCounts?.Subscriptions?.ToString(
+            CultureInfo.InvariantCulture) ?? string.Empty;
+
+    public string OrganizationOrderCount =>
+        _organizationCounts?.Orders?.ToString(
+            CultureInfo.InvariantCulture) ?? string.Empty;
+
+    public bool ShowOrganizationUsage =>
+        HasOrganizationLicenseCount ||
+        HasOrganizationSubscriptionCount ||
+        HasOrganizationOrderCount;
+
+    public bool ShowOrganizationMembers =>
+        OrganizationReady &&
+        _organizationPermissions?.ManageMembers == true;
+
+    public bool ShowEmptyOrganizationMembers =>
+        ShowOrganizationMembers &&
+        OrganizationMembers.Count == 0;
+
+    public bool ShowEmptyOrganizationInvitations =>
+        ShowOrganizationMembers &&
+        OrganizationInvitations.Count == 0;
+
     public NativeBkeAccountChoice? SelectedAccount
     {
         get => _selectedAccount;
@@ -604,6 +722,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(CanVerifyNativeMfa));
             RaiseAccountMfaCapabilities();
             RaiseAccountPrivacyCapabilities();
+            RaiseAccountOrganizationCapabilities();
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
             Raise(nameof(CanRetryOriginalCheckout));
@@ -894,6 +1013,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _authenticatedAccountEmail = string.Empty;
             _authenticatedAccountType = string.Empty;
             Raise(nameof(AccountTypeLabel));
+            RaiseAccountOrganizationCapabilities();
             Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
             ClearCatalog("AGENT_UNAVAILABLE", "Software catalog is unavailable while the Agent cannot be reached.");
             ClearStore("AGENT_UNAVAILABLE", "BKE Store is unavailable while the Agent cannot be reached.");
@@ -1271,11 +1391,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ResetPasswordChangeState();
             ResetAccountMfaState(clearRecoveryCodes: true);
             ResetAccountPrivacyState();
+        ResetAccountOrganizationState();
             SessionStatus = "SIGN_IN_UNAVAILABLE";
             AccountDisplay = "Not signed in";
             _authenticatedAccountEmail = string.Empty;
             _authenticatedAccountType = string.Empty;
             Raise(nameof(AccountTypeLabel));
+            RaiseAccountOrganizationCapabilities();
             Message = "BKE native sign-in is unavailable or returned an invalid response.";
             ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
             ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
@@ -1360,6 +1482,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetPasswordChangeState();
         ResetAccountMfaState(clearRecoveryCodes: true);
         ResetAccountPrivacyState();
+        ResetAccountOrganizationState();
         AvailableAccounts.Clear();
         SelectedAccount = null;
         Raise(nameof(HasAccountChoices));
@@ -1371,6 +1494,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _authenticatedAccountEmail = result.Account.Email;
             _authenticatedAccountType = result.Account.AccountType;
             Raise(nameof(AccountTypeLabel));
+            RaiseAccountOrganizationCapabilities();
             Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
             ResetPasswordResetState();
             ResetShellSurface();
@@ -1432,6 +1556,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 ClearNativeMfaState();
                 ResetAccountMfaState(clearRecoveryCodes: true);
             ResetAccountPrivacyState();
+        ResetAccountOrganizationState();
                 ResetPasswordChangeState();
                 ResetShellSurface();
                 ClearCatalog(
@@ -2962,6 +3087,98 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
 
+    public async Task RefreshAccountOrganizationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ClearAccountOrganization(
+                "AUTH_REQUIRED",
+                "Sign in with BKE before opening organization details.");
+            return;
+        }
+
+        if (_authenticatedAccountType != "ORGANIZATION")
+        {
+            ClearAccountOrganization(
+                "NOT_ORGANIZATION",
+                "The selected BKE account is a Personal account.");
+            return;
+        }
+
+        AccountOrganizationStatus = "LOADING";
+        AccountOrganizationMessage =
+            "Loading organization details through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.GetAsync(
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                ResetAccountOrganizationState();
+                EnterAccountOrganizationReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "NOT_ORGANIZATION")
+            {
+                ClearAccountOrganization(
+                    "NOT_ORGANIZATION",
+                    "The selected BKE account is not an Organization account.");
+                return;
+            }
+
+            if (response.Status != "READY" ||
+                response.Account is null ||
+                response.Permissions is null ||
+                response.Organization is null ||
+                response.Counts is null)
+            {
+                ClearAccountOrganization(
+                    response.Status,
+                    response.Error?.Message ??
+                    "BKE organization details are temporarily unavailable.");
+                return;
+            }
+
+            _organizationAccount = response.Account;
+            _organizationPermissions = response.Permissions;
+            _organizationProfile = response.Organization;
+            _organizationCounts = response.Counts;
+            _organizationBillingEmail = response.BillingEmail;
+            _organizationTaxId = response.TaxId;
+
+            OrganizationMembers.Clear();
+            foreach (var member in response.Members)
+            {
+                OrganizationMembers.Add(member);
+            }
+
+            OrganizationInvitations.Clear();
+            foreach (var invitation in response.Invitations)
+            {
+                OrganizationInvitations.Add(invitation);
+            }
+
+            AccountOrganizationStatus = "READY";
+            AccountOrganizationMessage =
+                "Organization details loaded from BKE Digital Solutions through the Licensing Agent.";
+            RaiseAccountOrganizationCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ClearAccountOrganization(
+                "AGENT_UNAVAILABLE",
+                "Organization details are unavailable or the Licensing Agent returned an invalid response.");
+        }
+    }
+
     public async Task RefreshAccountPrivacyAsync(
         CancellationToken cancellationToken)
     {
@@ -3346,12 +3563,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearNativeMfaState();
             ResetAccountMfaState(clearRecoveryCodes: true);
             ResetAccountPrivacyState();
+        ResetAccountOrganizationState();
             ResetShellSurface();
             SessionStatus = response.Status;
             AccountDisplay = "Not signed in";
             _authenticatedAccountEmail = string.Empty;
             _authenticatedAccountType = string.Empty;
             Raise(nameof(AccountTypeLabel));
+            RaiseAccountOrganizationCapabilities();
             UserCode = string.Empty;
             VerificationUri = string.Empty;
             Password = string.Empty;
@@ -3396,6 +3615,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearNativeMfaState();
         ResetAccountMfaState(clearRecoveryCodes: true);
         ResetAccountPrivacyState();
+        ResetAccountOrganizationState();
         PasswordChangeStatus = status;
         PasswordChangeMessage = message;
         ResetShellSurface();
@@ -3468,6 +3688,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearNativeMfaState();
         ResetAccountMfaState(clearRecoveryCodes);
         ResetAccountPrivacyState();
+        ResetAccountOrganizationState();
         ResetPasswordChangeState();
         ResetShellSurface();
         SessionStatus = "SIGNED_OUT";
@@ -3491,6 +3712,75 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
     }
 
+
+    private void ResetAccountOrganizationState()
+    {
+        _organizationAccount = null;
+        _organizationPermissions = null;
+        _organizationProfile = null;
+        _organizationCounts = null;
+        _organizationBillingEmail = null;
+        _organizationTaxId = null;
+        OrganizationMembers.Clear();
+        OrganizationInvitations.Clear();
+        AccountOrganizationStatus = "UNKNOWN";
+        AccountOrganizationMessage =
+            "Refresh organization details to load the Agent-authoritative selected-account overview.";
+        RaiseAccountOrganizationCapabilities();
+    }
+
+    private void ClearAccountOrganization(
+        string status,
+        string message)
+    {
+        _organizationAccount = null;
+        _organizationPermissions = null;
+        _organizationProfile = null;
+        _organizationCounts = null;
+        _organizationBillingEmail = null;
+        _organizationTaxId = null;
+        OrganizationMembers.Clear();
+        OrganizationInvitations.Clear();
+        AccountOrganizationStatus = status;
+        AccountOrganizationMessage = message;
+        RaiseAccountOrganizationCapabilities();
+    }
+
+    private void EnterAccountOrganizationReauthentication(
+        string message)
+    {
+        EnterAccountMfaReauthentication(
+            message,
+            clearRecoveryCodes: true);
+    }
+
+    private void RaiseAccountOrganizationCapabilities()
+    {
+        Raise(nameof(ShowOrganizationSection));
+        Raise(nameof(CanRefreshAccountOrganization));
+        Raise(nameof(OrganizationReady));
+        Raise(nameof(OrganizationDisplayName));
+        Raise(nameof(OrganizationRole));
+        Raise(nameof(OrganizationLifecycle));
+        Raise(nameof(OrganizationLegalName));
+        Raise(nameof(OrganizationRegistrationNumber));
+        Raise(nameof(HasOrganizationRegistrationNumber));
+        Raise(nameof(OrganizationBillingEmail));
+        Raise(nameof(HasOrganizationBillingEmail));
+        Raise(nameof(OrganizationTaxId));
+        Raise(nameof(HasOrganizationTaxId));
+        Raise(nameof(ShowOrganizationBilling));
+        Raise(nameof(HasOrganizationLicenseCount));
+        Raise(nameof(HasOrganizationSubscriptionCount));
+        Raise(nameof(HasOrganizationOrderCount));
+        Raise(nameof(OrganizationLicenseCount));
+        Raise(nameof(OrganizationSubscriptionCount));
+        Raise(nameof(OrganizationOrderCount));
+        Raise(nameof(ShowOrganizationUsage));
+        Raise(nameof(ShowOrganizationMembers));
+        Raise(nameof(ShowEmptyOrganizationMembers));
+        Raise(nameof(ShowEmptyOrganizationInvitations));
+    }
 
     private void ResetAccountPrivacyState()
     {
@@ -3618,6 +3908,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _authenticatedAccountEmail = response.Account.Email;
             _authenticatedAccountType = response.Account.AccountType;
             Raise(nameof(AccountTypeLabel));
+            RaiseAccountOrganizationCapabilities();
         }
         else if (response.Status is "SIGNED_OUT" or "DENIED" or "EXPIRED" or "FAILED")
         {
@@ -3625,6 +3916,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _authenticatedAccountEmail = string.Empty;
             _authenticatedAccountType = string.Empty;
             Raise(nameof(AccountTypeLabel));
+            RaiseAccountOrganizationCapabilities();
         }
 
         Message = response.Error?.Message ?? response.Status switch
