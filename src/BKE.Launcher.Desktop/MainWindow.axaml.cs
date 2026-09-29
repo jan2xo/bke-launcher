@@ -399,6 +399,11 @@ public sealed partial class MainWindow : Window
         return await dialog.ShowDialog<bool>(this);
     }
 
+    private async void SwitchAccount(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.SwitchAccountAsync(CancellationToken.None);
+    }
+
     private async void Logout(object? sender, RoutedEventArgs args)
     {
         await ViewModel.LogoutAsync(CancellationToken.None);

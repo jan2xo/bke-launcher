@@ -47,6 +47,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Create your BKE account without leaving the Launcher.";
     private NativeBkeAccountChoice? _selectedAccount;
     private string _accountDisplay = "Not signed in";
+    private string _authenticatedAccountEmail = string.Empty;
+    private string _authenticatedAccountType = string.Empty;
     private string _userCode = string.Empty;
     private string _verificationUri = string.Empty;
     private string _message = "Connect this Launcher to the BKE Licensing Agent.";
@@ -605,6 +607,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
             Raise(nameof(CanRetryOriginalCheckout));
+            Raise(nameof(CanSwitchAccount));
+            Raise(nameof(SwitchAccountHint));
         }
     }
 
@@ -613,6 +617,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _accountDisplay;
         private set => SetField(ref _accountDisplay, value);
     }
+
+    public string AccountTypeLabel =>
+        _authenticatedAccountType switch
+        {
+            "INDIVIDUAL" => "Personal account",
+            "ORGANIZATION" => "Organization account",
+            _ => string.Empty,
+        };
+
+    public bool CanSwitchAccount =>
+        IsAuthenticated &&
+        !_purchaseAttemptLocked;
+
+    public string SwitchAccountHint =>
+        _purchaseAttemptLocked
+            ? "Account switching is locked until the existing checkout attempt is resolved for this exact BKE identity and account."
+            : "Switching signs this machine out first, then requires fresh password/MFA and authoritative account selection.";
 
     public string UserCode
     {
@@ -870,6 +891,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ResetShellSurface();
             SessionStatus = "AGENT_UNAVAILABLE";
             AccountDisplay = "Not available";
+            _authenticatedAccountEmail = string.Empty;
+            _authenticatedAccountType = string.Empty;
+            Raise(nameof(AccountTypeLabel));
             Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
             ClearCatalog("AGENT_UNAVAILABLE", "Software catalog is unavailable while the Agent cannot be reached.");
             ClearStore("AGENT_UNAVAILABLE", "BKE Store is unavailable while the Agent cannot be reached.");
@@ -1249,6 +1273,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ResetAccountPrivacyState();
             SessionStatus = "SIGN_IN_UNAVAILABLE";
             AccountDisplay = "Not signed in";
+            _authenticatedAccountEmail = string.Empty;
+            _authenticatedAccountType = string.Empty;
+            Raise(nameof(AccountTypeLabel));
             Message = "BKE native sign-in is unavailable or returned an invalid response.";
             ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
             ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
@@ -1341,6 +1368,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         if (result.Status == "AUTHENTICATED" && result.Account is not null)
         {
             AccountDisplay = $"{result.Account.DisplayName} · {result.Account.Email}";
+            _authenticatedAccountEmail = result.Account.Email;
+            _authenticatedAccountType = result.Account.AccountType;
+            Raise(nameof(AccountTypeLabel));
             Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
             ResetPasswordResetState();
             ResetShellSurface();
@@ -1348,6 +1378,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         AccountDisplay = "Not signed in";
+        _authenticatedAccountEmail = string.Empty;
+        _authenticatedAccountType = string.Empty;
+        Raise(nameof(AccountTypeLabel));
         Message = result.ErrorMessage ?? "BKE account sign-in failed.";
         ClearCatalog("AUTH_REQUIRED", "Sign in to load your BKE software.");
         ClearStore("AUTH_REQUIRED", "Sign in to browse the BKE Store.");
@@ -3262,6 +3295,45 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task SwitchAccountAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            return;
+        }
+
+        if (_purchaseAttemptLocked)
+        {
+            Message =
+                "Resolve the existing checkout attempt before switching accounts. Its retained correlation is bound to the current BKE identity and account.";
+            return;
+        }
+
+        var preservedEmail = _authenticatedAccountEmail;
+        await LogoutAsync(cancellationToken);
+
+        if (SessionStatus != "SIGNED_OUT")
+        {
+            return;
+        }
+
+        Email = preservedEmail;
+        Password = string.Empty;
+        ClearNativeMfaState();
+        AvailableAccounts.Clear();
+        SelectedAccount = null;
+        Raise(nameof(HasAccountChoices));
+
+        var revokeWarning = Message.Contains(
+            "remote revocation",
+            StringComparison.OrdinalIgnoreCase);
+
+        Message = revokeWarning
+            ? Message + " Re-enter your password to choose another eligible BKE account."
+            : "Current BKE account signed out. Re-enter your password to choose another eligible BKE account. Password and MFA must be completed again.";
+    }
+
     public async Task LogoutAsync(CancellationToken cancellationToken)
     {
         var preserveCheckoutRecovery =
@@ -3277,6 +3349,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ResetShellSurface();
             SessionStatus = response.Status;
             AccountDisplay = "Not signed in";
+            _authenticatedAccountEmail = string.Empty;
+            _authenticatedAccountType = string.Empty;
+            Raise(nameof(AccountTypeLabel));
             UserCode = string.Empty;
             VerificationUri = string.Empty;
             Password = string.Empty;
@@ -3326,6 +3401,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetShellSurface();
         SessionStatus = "SIGNED_OUT";
         AccountDisplay = "Not signed in";
+        _authenticatedAccountEmail = string.Empty;
+        _authenticatedAccountType = string.Empty;
+        Raise(nameof(AccountTypeLabel));
         UserCode = string.Empty;
         VerificationUri = string.Empty;
         Password = string.Empty;
@@ -3394,6 +3472,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetShellSurface();
         SessionStatus = "SIGNED_OUT";
         AccountDisplay = "Not signed in";
+        _authenticatedAccountEmail = string.Empty;
+        _authenticatedAccountType = string.Empty;
+        Raise(nameof(AccountTypeLabel));
         UserCode = string.Empty;
         VerificationUri = string.Empty;
         Password = string.Empty;
@@ -3534,10 +3615,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         if (response.Account is not null)
         {
             AccountDisplay = $"{response.Account.DisplayName} · {response.Account.Email}";
+            _authenticatedAccountEmail = response.Account.Email;
+            _authenticatedAccountType = response.Account.AccountType;
+            Raise(nameof(AccountTypeLabel));
         }
         else if (response.Status is "SIGNED_OUT" or "DENIED" or "EXPIRED" or "FAILED")
         {
             AccountDisplay = "Not signed in";
+            _authenticatedAccountEmail = string.Empty;
+            _authenticatedAccountType = string.Empty;
+            Raise(nameof(AccountTypeLabel));
         }
 
         Message = response.Error?.Message ?? response.Status switch
@@ -3706,6 +3793,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanOpenExistingCheckout));
         Raise(nameof(CanCompleteGiftDelivery));
         Raise(nameof(ShowPurchaseCheckoutState));
+        Raise(nameof(CanSwitchAccount));
+        Raise(nameof(SwitchAccountHint));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
