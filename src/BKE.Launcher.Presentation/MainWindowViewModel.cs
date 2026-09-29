@@ -4261,6 +4261,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _organizationCounts = null;
         _organizationBillingEmail = null;
         _organizationTaxId = null;
+        ResetOrganizationProfileEditor();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
         AccountOrganizationStatus = status;
