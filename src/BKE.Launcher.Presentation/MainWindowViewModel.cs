@@ -655,6 +655,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             if (response.Status != "AUTHENTICATED")
             {
+                ResetPasswordChangeState();
                 ResetShellSurface();
                 ClearCatalog(
                     "AUTH_REQUIRED",
