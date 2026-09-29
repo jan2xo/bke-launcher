@@ -28,6 +28,8 @@ public static class AgentLocalContract
     public const int AccountMfaContractVersion = 1;
     public const string AccountPrivacyCapabilityId = "bke.account-privacy";
     public const int AccountPrivacyContractVersion = 1;
+    public const string AccountOrganizationCapabilityId = "bke.account-organization";
+    public const int AccountOrganizationContractVersion = 1;
     public const string StoreCatalogCapabilityId = "bke.store-catalog";
     public const int StoreCatalogContractVersion = 1;
     public const string StoreCheckoutReviewCapabilityId = "bke.store-checkout-review";
@@ -56,6 +58,7 @@ public static class AgentLocalContract
     public const string AccountMfaRecoveryRegeneratePath = "/v1/account/mfa/recovery/regenerate";
     public const string AccountPrivacyListPath = "/v1/account/privacy/requests/list";
     public const string AccountPrivacyCreatePath = "/v1/account/privacy/requests/create";
+    public const string AccountOrganizationOverviewPath = "/v1/account/organization";
     public const string SoftwareCatalogPath = "/v1/software/catalog";
     public const string SoftwareInstallPath = "/v1/software/install";
     public const string SoftwareUpdatePath = "/v1/software/update";
