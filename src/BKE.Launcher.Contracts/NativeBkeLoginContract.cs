@@ -6,6 +6,7 @@ public static class BkePlatformContract
 {
     public const string AccountSessionProtocolVersion = "bke.account-session.v1";
     public const string NativeLoginPath = "/api/agent-sessions/native/login";
+    public const string NativePasswordResetRequestPath = "/api/agent-sessions/native/password-reset/request";
 }
 
 public sealed record NativeBkeLoginRequest(

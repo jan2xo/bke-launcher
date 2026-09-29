@@ -57,6 +57,15 @@
                 Classes="primary"
                 HorizontalAlignment="Stretch"
                 Click="NativeSignIn" />
+
+        <Button Content="Forgot password?"
+                HorizontalAlignment="Stretch"
+                IsEnabled="{Binding CanRequestPasswordReset}"
+                Click="RequestPasswordReset" />
+        <TextBlock Text="{Binding PasswordResetMessage}"
+                   Classes="muted"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center" />
       </StackPanel>
     </Border>
 

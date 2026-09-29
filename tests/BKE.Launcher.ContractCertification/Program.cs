@@ -434,10 +434,31 @@ var nativeLoginResponseProperties = typeof(NativeBkeLoginResponse)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 Require(!nativeLoginResponseProperties.Contains("AccessToken"), "Launcher platform response exposes access token.");
 Require(!nativeLoginResponseProperties.Contains("RefreshToken"), "Launcher platform response exposes refresh token.");
+var nativePasswordResetResponseProperties = typeof(NativeBkePasswordResetResponse)
+    .GetProperties()
+    .Select(property => property.Name)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(nativePasswordResetResponseProperties.SetEquals(["Status", "Error"]),
+    "Launcher native password-reset response widened beyond generic status/error.");
+Require(!nativePasswordResetResponseProperties.Any(name =>
+        name.Contains("Token", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Delivery", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Recipient", StringComparison.OrdinalIgnoreCase)),
+    "Launcher native password-reset response exposes reset material or delivery identity.");
+
+var identityMethods = typeof(ILauncherIdentityClient)
+    .GetMethods()
+    .Select(method => method.Name)
+    .ToHashSet(StringComparer.Ordinal);
+Require(identityMethods.SetEquals([
+    "LoginAsync",
+    "RequestPasswordResetAsync"
+]), "Launcher identity client port drifted.");
 Require(!typeof(BkePlatformContract).GetFields(BindingFlags.Public | BindingFlags.Static)
         .Any(field => field.Name.Contains("DefaultBaseAddress", StringComparison.Ordinal)),
     "Launcher platform contract regained an independent default authority.");
 Require(BkePlatformContract.NativeLoginPath == "/api/agent-sessions/native/login", "native login path drifted.");
+Require(BkePlatformContract.NativePasswordResetRequestPath == "/api/agent-sessions/native/password-reset/request", "native password-reset request path drifted.");
 Require(BkePlatformContract.AccountSessionProtocolVersion == "bke.account-session.v1", "account-session protocol version drifted.");
 
 var platformIdentitySource = File.ReadAllText(
@@ -461,6 +482,17 @@ Require(platformIdentitySource.Contains(
         "value.AbsolutePath != \"/\"",
         StringComparison.Ordinal),
     "Launcher platform identity client no longer requires an HTTPS origin.");
+Require(platformIdentitySource.Contains(
+        "RequestPasswordResetAsync(",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "BkePlatformContract.NativePasswordResetRequestPath",
+        StringComparison.Ordinal),
+    "Launcher platform identity client lacks native password-reset request support.");
+Require(platformIdentitySource.Contains(
+        "EnsureNativeProtocol(response);",
+        StringComparison.Ordinal),
+    "Launcher native password-reset request does not verify the DS protocol response.");
 
 var platformAuthorityResolverSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherPlatformAuthorityResolver.cs"));
@@ -501,6 +533,21 @@ Require(nativeSignInControllerSource.Contains(
         StringComparison.Ordinal),
     "Native Launcher sign-in does not bind credential validation to the Agent authority.");
 
+var passwordResetControllerSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherPasswordResetRequestController.cs"));
+Require(passwordResetControllerSource.Contains(
+        "await _platformAuthority.ResolveAsync(cancellationToken)",
+        StringComparison.Ordinal),
+    "Launcher password reset does not inherit Digital Solutions authority from the Agent.");
+Require(passwordResetControllerSource.Contains(
+        "await _identity.RequestPasswordResetAsync(",
+        StringComparison.Ordinal),
+    "Launcher password reset does not delegate issuance to Digital Solutions.");
+Require(!passwordResetControllerSource.Contains(
+        "AgentLoopbackClient",
+        StringComparison.Ordinal),
+    "Launcher password reset incorrectly moved unauthenticated recovery into Agent session custody.");
+
 var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
 var mainWindowMarkup = File.ReadAllText(
@@ -529,6 +576,12 @@ Require(mainWindowSource.Contains("ViewModel.OpenAccountSurface();", StringCompa
 Require(!mainWindowSource.Contains("Process.Start", StringComparison.Ordinal), "Native sign-in still launches a browser.");
 Require(!mainWindowMarkup.Contains("Device code", StringComparison.Ordinal), "Device-code UX remains visible in Launcher.");
 Require(mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Native sign-in action is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Forgot password?\"", StringComparison.Ordinal),
+    "Native Forgot Password action is missing.");
+Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRequestPasswordReset}\"", StringComparison.Ordinal),
+    "Native Forgot Password action is not recovery-state-bound.");
+Require(mainWindowSource.Contains("RequestPasswordReset", StringComparison.Ordinal),
+    "Native Forgot Password click handler is missing.");
 Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Native password field is not masked.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode, Mode=OneWay}\"", StringComparison.Ordinal),
     "Launcher Store does not render the recovered gift Claim Code.");
@@ -692,6 +745,22 @@ Require(!normalizedViewModelSource.Contains(
     "/api/agent-sessions/account/password-change",
     StringComparison.OrdinalIgnoreCase),
     "Launcher Account Security UX bypasses the Agent loopback boundary.");
+
+Require(normalizedViewModelSource.Contains(
+    "await _passwordResetRequest.RequestAsync(",
+    StringComparison.Ordinal),
+    "Launcher login recovery does not delegate reset issuance to its recovery controller.");
+Require(normalizedViewModelSource.Contains(
+    "If a BKE account exists for this email",
+    StringComparison.Ordinal),
+    "Launcher recovery UX lost its enumeration-safe generic confirmation.");
+Require(!normalizedViewModelSource.Contains(
+    "ResetToken",
+    StringComparison.Ordinal) &&
+    !normalizedViewModelSource.Contains(
+        "reset_token",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher presentation absorbed password-reset token material.");
 
 Require(normalizedViewModelSource.Contains(
     "ClearNotifications(",
@@ -1230,11 +1299,13 @@ Require(removeTimeout == TimeSpan.FromMinutes(10),
 Require(removeTimeout > defaultTimeout,
     "Launcher remove operation does not have a dedicated long-running timeout.");
 
+await CertifyNativePasswordResetRequestAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
+Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
@@ -1256,6 +1327,53 @@ Console.WriteLine("Bounded long-running remove transport certified");
 Console.WriteLine("Owner-controlled LAUNCHER_PLUGIN/STANDALONE types certified");
 return;
 
+
+static async Task CertifyNativePasswordResetRequestAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+    };
+    var identity = new CustomerJourneyIdentityClient();
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator(),
+        identity);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    Require(viewModel.ShowLoginPage && !viewModel.IsAuthenticated,
+        "Password-reset certification did not begin on the signed-out native login surface.");
+
+    viewModel.Email = "customer@example.test";
+    viewModel.Password = "stale-password-cert";
+
+    await viewModel.RequestPasswordResetAsync(CancellationToken.None);
+
+    Require(agent.PlatformAuthorityCount == 1,
+        "Launcher password reset did not inherit Digital Solutions authority from the Agent.");
+    Require(identity.ResetRequestCount == 1 &&
+            identity.LastResetEmail == "customer@example.test" &&
+            identity.LastResetAuthority == new Uri("https://digital-solutions.example.test/"),
+        "Launcher password reset did not delegate exactly one generic reset request to Digital Solutions.");
+    Require(viewModel.PasswordResetStatus == "ACCEPTED" &&
+            viewModel.PasswordResetMessage.Contains(
+                "If a BKE account exists for this email",
+                StringComparison.Ordinal),
+        "Launcher password reset did not preserve enumeration-safe accepted UX.");
+    Require(string.IsNullOrEmpty(viewModel.Password),
+        "Launcher password reset retained the stale sign-in password field.");
+    Require(viewModel.ShowLoginPage && !viewModel.IsAuthenticated,
+        "Password reset request incorrectly created or mutated an authenticated Agent session.");
+
+    viewModel.Email = string.Empty;
+    await viewModel.RequestPasswordResetAsync(CancellationToken.None);
+    Require(identity.ResetRequestCount == 1 &&
+            viewModel.PasswordResetStatus == "INVALID_INPUT",
+        "Launcher submitted password reset without an email.");
+}
 
 static async Task CertifyAccountPasswordChangeSettingsAsync()
 {
@@ -1479,15 +1597,20 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
     CustomerJourneyAgentClient agent,
     CustomerJourneyCatalogSource catalog,
     CustomerJourneyRecoveryStore recovery,
-    CustomerJourneyNavigator navigator)
+    CustomerJourneyNavigator navigator,
+    CustomerJourneyIdentityClient? identity = null)
 {
     var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
+    identity ??= new CustomerJourneyIdentityClient();
     return new MainWindowViewModel(
         new LauncherAccountSessionController(agent),
         new LauncherNativeSignInController(
             agent,
             platformAuthority,
-            new CustomerJourneyIdentityClient()),
+            identity),
+        new LauncherPasswordResetRequestController(
+            platformAuthority,
+            identity),
         new LauncherCatalogService(catalog),
         new LauncherStoreService(agent),
         new LauncherStoreCheckoutReviewService(agent),
@@ -1575,12 +1698,29 @@ sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
 
 sealed class CustomerJourneyIdentityClient : ILauncherIdentityClient
 {
+    public int ResetRequestCount { get; private set; }
+    public string? LastResetEmail { get; private set; }
+    public Uri? LastResetAuthority { get; private set; }
+
     public Task<NativeBkeLoginResponse> LoginAsync(
         Uri platformBaseAddress,
         NativeBkeLoginRequest request,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException(
-            "Native credential login is outside this already-authenticated customer journey certification.");
+            "Native credential login is outside this customer journey certification.");
+
+    public Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
+        Uri platformBaseAddress,
+        NativeBkePasswordResetRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ResetRequestCount++;
+        LastResetEmail = request.Email;
+        LastResetAuthority = platformBaseAddress;
+        return Task.FromResult(
+            new NativeBkePasswordResetResponse("accepted", null));
+    }
 }
 
 sealed class CustomerJourneyAgentClient : ILauncherAgentClient
@@ -1601,6 +1741,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int CheckoutStartCount { get; private set; }
     public int RedeemCount { get; private set; }
     public int PasswordChangeCount { get; private set; }
+    public int PlatformAuthorityCount { get; private set; }
+    public bool Authenticated { get; set; } = true;
     public string PasswordChangeOutcome { get; set; } = "CHANGED";
     public AccountPasswordChangeRequest? LastPasswordChangeRequest { get; private set; }
 
@@ -1609,17 +1751,24 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(new AccountSessionStatusResponse(
-            AgentLocalContract.CapabilityId,
-            AgentLocalContract.ContractVersion,
-            "AUTHENTICATED",
-            new AccountSessionAccount(
-                "user-cert",
-                "customer@example.test",
-                AccountId,
-                "INDIVIDUAL",
-                "Certification Customer"),
-            null));
+        return Task.FromResult(Authenticated
+            ? new AccountSessionStatusResponse(
+                AgentLocalContract.CapabilityId,
+                AgentLocalContract.ContractVersion,
+                "AUTHENTICATED",
+                new AccountSessionAccount(
+                    "user-cert",
+                    "customer@example.test",
+                    AccountId,
+                    "INDIVIDUAL",
+                    "Certification Customer"),
+                null)
+            : new AccountSessionStatusResponse(
+                AgentLocalContract.CapabilityId,
+                AgentLocalContract.ContractVersion,
+                "SIGNED_OUT",
+                null,
+                null));
     }
 
     public Task<StoreCatalogResponse> GetStoreCatalogAsync(
@@ -1828,8 +1977,18 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public Task<PlatformAuthorityResponse> GetPlatformAuthorityAsync(
         PlatformAuthorityRequest request,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PlatformAuthorityCount++;
+        return Task.FromResult(new PlatformAuthorityResponse(
+            AgentLocalContract.PlatformAuthorityCapabilityId,
+            AgentLocalContract.PlatformAuthorityContractVersion,
+            "READY",
+            "certification",
+            "https://digital-solutions.example.test/",
+            null));
+    }
 
     public Task<AccountSessionDeviceContextResponse> GetAccountSessionDeviceContextAsync(
         AccountSessionDeviceContextRequest request,
