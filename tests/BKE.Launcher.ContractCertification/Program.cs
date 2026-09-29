@@ -1597,15 +1597,20 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
     CustomerJourneyAgentClient agent,
     CustomerJourneyCatalogSource catalog,
     CustomerJourneyRecoveryStore recovery,
-    CustomerJourneyNavigator navigator)
+    CustomerJourneyNavigator navigator,
+    CustomerJourneyIdentityClient? identity = null)
 {
     var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
+    identity ??= new CustomerJourneyIdentityClient();
     return new MainWindowViewModel(
         new LauncherAccountSessionController(agent),
         new LauncherNativeSignInController(
             agent,
             platformAuthority,
-            new CustomerJourneyIdentityClient()),
+            identity),
+        new LauncherPasswordResetRequestController(
+            platformAuthority,
+            identity),
         new LauncherCatalogService(catalog),
         new LauncherStoreService(agent),
         new LauncherStoreCheckoutReviewService(agent),
@@ -1693,12 +1698,29 @@ sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
 
 sealed class CustomerJourneyIdentityClient : ILauncherIdentityClient
 {
+    public int ResetRequestCount { get; private set; }
+    public string? LastResetEmail { get; private set; }
+    public Uri? LastResetAuthority { get; private set; }
+
     public Task<NativeBkeLoginResponse> LoginAsync(
         Uri platformBaseAddress,
         NativeBkeLoginRequest request,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException(
-            "Native credential login is outside this already-authenticated customer journey certification.");
+            "Native credential login is outside this customer journey certification.");
+
+    public Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
+        Uri platformBaseAddress,
+        NativeBkePasswordResetRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ResetRequestCount++;
+        LastResetEmail = request.Email;
+        LastResetAuthority = platformBaseAddress;
+        return Task.FromResult(
+            new NativeBkePasswordResetResponse("accepted", null));
+    }
 }
 
 sealed class CustomerJourneyAgentClient : ILauncherAgentClient
@@ -1719,6 +1741,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int CheckoutStartCount { get; private set; }
     public int RedeemCount { get; private set; }
     public int PasswordChangeCount { get; private set; }
+    public int PlatformAuthorityCount { get; private set; }
+    public bool Authenticated { get; set; } = true;
     public string PasswordChangeOutcome { get; set; } = "CHANGED";
     public AccountPasswordChangeRequest? LastPasswordChangeRequest { get; private set; }
 
@@ -1727,17 +1751,24 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(new AccountSessionStatusResponse(
-            AgentLocalContract.CapabilityId,
-            AgentLocalContract.ContractVersion,
-            "AUTHENTICATED",
-            new AccountSessionAccount(
-                "user-cert",
-                "customer@example.test",
-                AccountId,
-                "INDIVIDUAL",
-                "Certification Customer"),
-            null));
+        return Task.FromResult(Authenticated
+            ? new AccountSessionStatusResponse(
+                AgentLocalContract.CapabilityId,
+                AgentLocalContract.ContractVersion,
+                "AUTHENTICATED",
+                new AccountSessionAccount(
+                    "user-cert",
+                    "customer@example.test",
+                    AccountId,
+                    "INDIVIDUAL",
+                    "Certification Customer"),
+                null)
+            : new AccountSessionStatusResponse(
+                AgentLocalContract.CapabilityId,
+                AgentLocalContract.ContractVersion,
+                "SIGNED_OUT",
+                null,
+                null));
     }
 
     public Task<StoreCatalogResponse> GetStoreCatalogAsync(
@@ -1946,8 +1977,18 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public Task<PlatformAuthorityResponse> GetPlatformAuthorityAsync(
         PlatformAuthorityRequest request,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PlatformAuthorityCount++;
+        return Task.FromResult(new PlatformAuthorityResponse(
+            AgentLocalContract.PlatformAuthorityCapabilityId,
+            AgentLocalContract.PlatformAuthorityContractVersion,
+            "READY",
+            "certification",
+            "https://digital-solutions.example.test/",
+            null));
+    }
 
     public Task<AccountSessionDeviceContextResponse> GetAccountSessionDeviceContextAsync(
         AccountSessionDeviceContextRequest request,
