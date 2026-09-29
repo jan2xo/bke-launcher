@@ -139,7 +139,7 @@
                                  TextWrapping="Wrap"
                                  MinHeight="120"
                                  MaxHeight="190"
-                                 VerticalScrollBarVisibility="Auto" />
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
                         <CheckBox IsChecked="{Binding IsAccepted, Mode=TwoWay}"
                                   Content="I have reviewed and accept this exact published version." />
                       </StackPanel>
