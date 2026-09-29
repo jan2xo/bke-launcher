@@ -1752,13 +1752,13 @@ Require(
     "Launcher account switching absorbed cloud/session mutation authority.");
 Require(
     mainWindowMarkup.Contains(
-        "Content="Switch BKE account"",
+        "Content=\"Switch BKE account\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "IsEnabled="{Binding CanSwitchAccount}"",
+        "IsEnabled=\"{Binding CanSwitchAccount}\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Click="SwitchAccount"",
+        "Click=\"SwitchAccount\"",
         StringComparison.Ordinal),
     "Launcher safe account-switch desktop action is missing.");
 Require(
