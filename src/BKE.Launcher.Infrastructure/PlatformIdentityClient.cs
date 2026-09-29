@@ -7,7 +7,10 @@ using BKE.Launcher.Contracts;
 
 namespace BKE.Launcher.Infrastructure;
 
-public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposable
+public sealed class PlatformIdentityClient :
+    ILauncherIdentityClient,
+    ILauncherRegistrationClient,
+    IDisposable
 {
     internal static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(20);
 
@@ -125,6 +128,157 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         return result;
     }
 
+    public async Task<NativeBkeRegistrationPreflightResponse> GetRegistrationPreflightAsync(
+        Uri platformBaseAddress,
+        CancellationToken cancellationToken)
+    {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        using var response = await SendGetAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativeRegistrationPreflightPath),
+            cancellationToken);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedRegistrationPreflight("PLATFORM_REDIRECT_REJECTED");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return FailedRegistrationPreflight(
+                await ReadErrorAsync(response, cancellationToken));
+        }
+
+        EnsureNativeProtocol(response);
+        var result = await response.Content.ReadFromJsonAsync<NativeBkeRegistrationPreflightResponse>(
+            JsonOptions,
+            cancellationToken);
+        if (result is null ||
+            result.Status != "ready" ||
+            result.Error is not null ||
+            result.LegalDocuments.Count != 2 ||
+            result.LegalDocuments.Select(document => document.DocumentType)
+                .ToHashSet(StringComparer.Ordinal)
+                .SetEquals(["TERMS_OF_SERVICE", "PRIVACY_POLICY"]) is false ||
+            result.LegalDocuments.Any(document =>
+                string.IsNullOrWhiteSpace(document.Title) ||
+                string.IsNullOrWhiteSpace(document.Slug) ||
+                string.IsNullOrWhiteSpace(document.VersionId) ||
+                document.VersionNumber < 1 ||
+                string.IsNullOrWhiteSpace(document.ContentMarkdown)))
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native registration preflight response.");
+        }
+
+        return result;
+    }
+
+    public async Task<NativeBkeRegistrationResponse> RegisterAsync(
+        Uri platformBaseAddress,
+        NativeBkeRegistrationRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        using var response = await SendAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativeRegistrationPath),
+            request,
+            cancellationToken);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedRegistration("PLATFORM_REDIRECT_REJECTED");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return FailedRegistration(await ReadErrorAsync(response, cancellationToken));
+        }
+
+        EnsureNativeProtocol(response);
+        var result = await response.Content.ReadFromJsonAsync<NativeBkeRegistrationResponse>(
+            JsonOptions,
+            cancellationToken);
+        if (result is null ||
+            result.Status != "verification_required" ||
+            result.Error is not null)
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native registration response.");
+        }
+
+        return result;
+    }
+
+    public async Task<NativeBkeEmailVerificationResponse> VerifyEmailAsync(
+        Uri platformBaseAddress,
+        NativeBkeEmailVerificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        using var response = await SendAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativeEmailVerifyPath),
+            request,
+            cancellationToken);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedEmailVerification("PLATFORM_REDIRECT_REJECTED");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return FailedEmailVerification(
+                await ReadErrorAsync(response, cancellationToken));
+        }
+
+        EnsureNativeProtocol(response);
+        var result = await response.Content.ReadFromJsonAsync<NativeBkeEmailVerificationResponse>(
+            JsonOptions,
+            cancellationToken);
+        if (result is null ||
+            result.Status != "verified" ||
+            result.Error is not null)
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native email-verification response.");
+        }
+
+        return result;
+    }
+
+    public async Task<NativeBkeVerificationResendResponse> ResendVerificationAsync(
+        Uri platformBaseAddress,
+        NativeBkeVerificationResendRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        using var response = await SendAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativeVerificationResendPath),
+            request,
+            cancellationToken);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedVerificationResend("PLATFORM_REDIRECT_REJECTED");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return FailedVerificationResend(
+                await ReadErrorAsync(response, cancellationToken));
+        }
+
+        EnsureNativeProtocol(response);
+        var result = await response.Content.ReadFromJsonAsync<NativeBkeVerificationResendResponse>(
+            JsonOptions,
+            cancellationToken);
+        if (result is null ||
+            result.Status != "accepted" ||
+            result.Error is not null)
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native verification-resend response.");
+        }
+
+        return result;
+    }
+
     public async Task<NativeBkePasswordResetResponse> RequestPasswordResetAsync(
         Uri platformBaseAddress,
         NativeBkePasswordResetRequest request,
@@ -161,6 +315,23 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         return result;
     }
 
+    private async Task<HttpResponseMessage> SendGetAsync(
+        Uri endpoint,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutSource =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(DefaultRequestTimeout);
+
+        using var message = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        AddNativeHeaders(message);
+
+        return await _http.SendAsync(
+            message,
+            HttpCompletionOption.ResponseHeadersRead,
+            timeoutSource.Token);
+    }
+
     private async Task<HttpResponseMessage> SendAsync<TRequest>(
         Uri endpoint,
         TRequest request,
@@ -171,6 +342,17 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         timeoutSource.CancelAfter(DefaultRequestTimeout);
 
         using var message = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        AddNativeHeaders(message);
+        message.Content = JsonContent.Create(request, options: JsonOptions);
+
+        return await _http.SendAsync(
+            message,
+            HttpCompletionOption.ResponseHeadersRead,
+            timeoutSource.Token);
+    }
+
+    private static void AddNativeHeaders(HttpRequestMessage message)
+    {
         message.Headers.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/json"));
         message.Headers.UserAgent.ParseAdd("bke-launcher");
@@ -180,12 +362,6 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         message.Headers.TryAddWithoutValidation(
             "x-request-id",
             Guid.NewGuid().ToString("N"));
-        message.Content = JsonContent.Create(request, options: JsonOptions);
-
-        return await _http.SendAsync(
-            message,
-            HttpCompletionOption.ResponseHeadersRead,
-            timeoutSource.Token);
     }
 
     private static void ValidateHandoff(string? handoffCode)
@@ -224,6 +400,22 @@ public sealed class PlatformIdentityClient : ILauncherIdentityClient, IDisposabl
         new("failed", Error: error);
 
     private static NativeBkePasswordResetResponse FailedReset(string error) =>
+        new("failed", error);
+
+
+    private static NativeBkeRegistrationPreflightResponse FailedRegistrationPreflight(
+        string error) =>
+        new("failed", Array.Empty<NativeBkeRegistrationLegalDocument>(), error);
+
+    private static NativeBkeRegistrationResponse FailedRegistration(string error) =>
+        new("failed", error);
+
+    private static NativeBkeEmailVerificationResponse FailedEmailVerification(
+        string error) =>
+        new("failed", error);
+
+    private static NativeBkeVerificationResendResponse FailedVerificationResend(
+        string error) =>
         new("failed", error);
 
     private static async Task<string> ReadErrorAsync(
