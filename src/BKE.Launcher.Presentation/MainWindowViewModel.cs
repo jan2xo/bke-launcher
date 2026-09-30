@@ -1908,6 +1908,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(AccountTypeLabel));
             RaiseAccountOrganizationCapabilities();
             Message = "Signed in. Durable account-session secrets are stored by the BKE Licensing Agent.";
+            ClaimStatus = "READY";
+            ClaimMessage =
+                "Enter a one-time Claim Code to redeem it into the signed-in BKE account.";
             ResetPasswordResetState();
             ResetShellSurface();
             return;
@@ -5288,6 +5291,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _authenticatedAccountType = response.Account.AccountType;
             Raise(nameof(AccountTypeLabel));
             RaiseAccountOrganizationCapabilities();
+
+            if (response.Status == "AUTHENTICATED" &&
+                ClaimStatus == "AUTH_REQUIRED")
+            {
+                ClaimStatus = "READY";
+                ClaimMessage =
+                    "Enter a one-time Claim Code to redeem it into the signed-in BKE account.";
+            }
         }
         else if (response.Status is "SIGNED_OUT" or "DENIED" or "EXPIRED" or "FAILED")
         {
