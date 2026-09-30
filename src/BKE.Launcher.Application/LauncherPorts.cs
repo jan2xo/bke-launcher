@@ -76,6 +76,10 @@ public interface ILauncherAgentClient
         AccountOrganizationProfileUpdateRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountOrganizationInvitationCreateResponse> CreateAccountOrganizationInvitationAsync(
+        AccountOrganizationInvitationCreateRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,
         CancellationToken cancellationToken);
