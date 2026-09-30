@@ -54,6 +54,7 @@ public sealed partial class App : Avalonia.Application
             var accountPasswordChange = new LauncherAccountPasswordChangeController(agentClient);
             var accountMfa = new LauncherAccountMfaController(agentClient);
             var accountPrivacy = new LauncherAccountPrivacyController(agentClient);
+            var accountPurchases = new LauncherAccountPurchasesController(agentClient);
             var accountOrganization = new LauncherAccountOrganizationController(agentClient);
             var viewModel = new MainWindowViewModel(
                 accountSession,
@@ -78,6 +79,7 @@ public sealed partial class App : Avalonia.Application
                 accountPasswordChange,
                 accountMfa,
                 accountPrivacy,
+                accountPurchases,
                 accountOrganization);
 
             desktop.MainWindow = new MainWindow
