@@ -524,6 +524,20 @@
                                 <TextBlock Text="{Binding Role}"
                                            FontSize="11"
                                            Opacity="0.72" />
+                                <WrapPanel Margin="0,4,0,0"
+                                           ItemSpacing="6"
+                                           LineSpacing="6">
+                                  <Button Content="Member"
+                                          Click="SetOrganizationMemberRoleMember" />
+                                  <Button Content="License manager"
+                                          Click="SetOrganizationMemberRoleLicenseManager" />
+                                  <Button Content="Billing"
+                                          Click="SetOrganizationMemberRoleBilling" />
+                                  <Button Content="Owner"
+                                          Click="SetOrganizationMemberRoleOwner" />
+                                  <Button Content="Remove"
+                                          Click="RemoveOrganizationMember" />
+                                </WrapPanel>
                               </StackPanel>
                             </Border>
                           </DataTemplate>
@@ -532,6 +546,13 @@
                       <TextBlock Text="No organization members were returned."
                                  IsVisible="{Binding ShowEmptyOrganizationMembers}"
                                  Opacity="0.68"
+                                 TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding OrganizationMemberManagementStatus}"
+                                 FontSize="11"
+                                 FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding OrganizationMemberManagementMessage}"
+                                 FontSize="11"
+                                 Opacity="0.72"
                                  TextWrapping="Wrap" />
 
                       <TextBlock Text="Pending invitations"
