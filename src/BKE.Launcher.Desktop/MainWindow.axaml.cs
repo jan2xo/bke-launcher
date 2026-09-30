@@ -182,6 +182,84 @@ public sealed partial class MainWindow : Window
         ViewModel.CompleteOrganizationInvitationDelivery();
     }
 
+    private async void LeaveAccountOrganization(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (!ViewModel.CanLeaveOrganization)
+        {
+            await ViewModel.LeaveAccountOrganizationAsync(
+                CancellationToken.None);
+            return;
+        }
+
+        if (!await ConfirmOrganizationLeaveAsync())
+        {
+            return;
+        }
+
+        await ViewModel.LeaveAccountOrganizationAsync(
+            CancellationToken.None);
+    }
+
+    private async Task<bool> ConfirmOrganizationLeaveAsync()
+    {
+        var organizationName = ViewModel.OrganizationDisplayName;
+        var dialog = new Window
+        {
+            Title = "Leave organization",
+            Width = 460,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var leave = new Button
+        {
+            Content = "Leave organization",
+        };
+        var cancel = new Button
+        {
+            Content = "Cancel",
+        };
+
+        leave.Click += (_, _) => dialog.Close(true);
+        cancel.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(24),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"Leave {organizationName}?",
+                    FontSize = 20,
+                    FontWeight = Avalonia.Media.FontWeight.SemiBold,
+                },
+                new TextBlock
+                {
+                    Text = "Your Organization membership will be removed by BKE Digital Solutions. BKE will then require fresh sign-in/account selection on this machine. This action does not delete the Organization.",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 10,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children =
+                    {
+                        cancel,
+                        leave,
+                    },
+                },
+            },
+        };
+
+        return await dialog.ShowDialog<bool>(this);
+    }
+
     private async void SetOrganizationMemberRoleMember(
         object? sender,
         RoutedEventArgs args) =>

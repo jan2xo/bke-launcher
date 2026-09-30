@@ -240,6 +240,18 @@ public sealed class LauncherAccountOrganizationController
         return response;
     }
 
+    public async Task<AccountOrganizationLeaveResponse> LeaveAsync(
+        CancellationToken cancellationToken)
+    {
+        var response = await _agent.LeaveAccountOrganizationAsync(
+            new AccountOrganizationLeaveRequest(
+                Guid.NewGuid().ToString("N")),
+            cancellationToken);
+
+        ValidateLeaveContract(response);
+        return response;
+    }
+
     private static void ValidateContract(
         AccountOrganizationOverviewResponse response)
     {
@@ -386,6 +398,59 @@ public sealed class LauncherAccountOrganizationController
         {
             throw new InvalidDataException(
                 "BKE Licensing Agent organization-member failure is missing error state.");
+        }
+    }
+
+    private static void ValidateLeaveContract(
+        AccountOrganizationLeaveResponse response)
+    {
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountOrganizationCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountOrganizationContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-leave contract drifted.");
+        }
+
+        if (response.Status is not (
+            "LEFT" or
+            "INVALID_INPUT" or
+            "NOT_ORGANIZATION" or
+            "OWNER_CANNOT_LEAVE" or
+            "MEMBER_NOT_FOUND" or
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN" or
+            "FAILED"))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-leave status drifted.");
+        }
+
+        if (response.Status == "LEFT")
+        {
+            if (!response.ReauthenticationRequired ||
+                response.Error is not null)
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization-leave success drifted.");
+            }
+            return;
+        }
+
+        var requiresReauthentication = response.Status is
+            "AUTH_REQUIRED" or
+            "MEMBER_NOT_FOUND" or
+            "OUTCOME_UNKNOWN";
+
+        if (response.ReauthenticationRequired !=
+                requiresReauthentication ||
+            response.Error is null ||
+            string.IsNullOrWhiteSpace(response.Error.Code) ||
+            string.IsNullOrWhiteSpace(response.Error.Message))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-leave failure state drifted.");
         }
     }
 

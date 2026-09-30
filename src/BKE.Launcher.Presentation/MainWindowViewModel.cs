@@ -112,6 +112,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _organizationMemberManagementStatus = "IDLE";
     private string _organizationMemberManagementMessage =
         "Manage members after loading the Agent-authoritative Organization overview.";
+    private string _organizationLeaveStatus = "IDLE";
+    private string _organizationLeaveMessage =
+        "Leave is available only when Digital Solutions authorizes the selected Organization membership.";
     private AccountOrganizationAccount? _organizationAccount;
     private AccountOrganizationPermissions? _organizationPermissions;
     private AccountOrganizationProfile? _organizationProfile;
@@ -1010,6 +1013,31 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyOrganizationInvitations =>
         ShowOrganizationMembers &&
         OrganizationInvitations.Count == 0;
+
+    public string OrganizationLeaveStatus
+    {
+        get => _organizationLeaveStatus;
+        private set
+        {
+            SetField(ref _organizationLeaveStatus, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationLeaveMessage
+    {
+        get => _organizationLeaveMessage;
+        private set => SetField(ref _organizationLeaveMessage, value);
+    }
+
+    public bool ShowOrganizationLeaveSection =>
+        OrganizationReady &&
+        _organizationPermissions?.LeaveOrganization == true;
+
+    public bool CanLeaveOrganization =>
+        ShowOrganizationLeaveSection &&
+        OrganizationLeaveStatus != "LEAVING" &&
+        !_purchaseAttemptLocked;
 
     public NativeBkeAccountChoice? SelectedAccount
     {
@@ -4125,6 +4153,97 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task LeaveAccountOrganizationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!ShowOrganizationLeaveSection)
+        {
+            OrganizationLeaveStatus = "INVALID_INPUT";
+            OrganizationLeaveMessage =
+                "Refresh the selected Organization. Leave is available only when Digital Solutions authorizes this membership.";
+            return;
+        }
+
+        if (_purchaseAttemptLocked)
+        {
+            OrganizationLeaveStatus = "BLOCKED";
+            OrganizationLeaveMessage =
+                "Resolve the existing checkout attempt before leaving this Organization. Checkout recovery is bound to the current BKE identity and account.";
+            return;
+        }
+
+        var organizationDisplayName = OrganizationDisplayName;
+        OrganizationLeaveStatus = "LEAVING";
+        OrganizationLeaveMessage =
+            "Leaving the selected Organization through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.LeaveAsync(
+                cancellationToken);
+
+            if (response.Status == "LEFT" &&
+                response.ReauthenticationRequired)
+            {
+                EnterAccountOrganizationReauthentication(
+                    $"You left {organizationDisplayName}. Sign in again to choose an available BKE account.");
+                return;
+            }
+
+            if (response.Status is
+                "AUTH_REQUIRED" or
+                "MEMBER_NOT_FOUND" or
+                "OUTCOME_UNKNOWN")
+            {
+                if (!response.ReauthenticationRequired)
+                {
+                    throw new InvalidDataException(
+                        "Organization leave reauthentication boundary drifted.");
+                }
+
+                var message = response.Status switch
+                {
+                    "MEMBER_NOT_FOUND" =>
+                        response.Error?.Message ??
+                        "The selected Organization membership is no longer available. Sign in again.",
+                    "OUTCOME_UNKNOWN" =>
+                        "The Organization leave result could not be confirmed. BKE will not replay the request. Sign in again and check the available accounts before deciding whether to try again.",
+                    _ =>
+                        response.Error?.Message ??
+                        "Your BKE account session is no longer valid. Sign in again.",
+                };
+                EnterAccountOrganizationReauthentication(message);
+                return;
+            }
+
+            if (response.Status == "NOT_ORGANIZATION")
+            {
+                ClearAccountOrganization(
+                    "NOT_ORGANIZATION",
+                    "The selected BKE account is not an Organization account.");
+                return;
+            }
+
+            OrganizationLeaveStatus = response.Status;
+            OrganizationLeaveMessage =
+                response.Error?.Message ??
+                (response.Status == "OWNER_CANNOT_LEAVE"
+                    ? "Transfer Organization ownership before leaving."
+                    : "The Organization membership was not changed.");
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            // The local Agent may have received and committed the destructive
+            // request even when Launcher did not receive a valid response.
+            // Never replay it and never retain selected-account presentation.
+            EnterAccountOrganizationReauthentication(
+                "The Organization leave result could not be confirmed. BKE will not replay the request. Sign in again and check the available accounts before deciding whether to try again.");
+        }
+    }
+
     public async Task RefreshAccountPrivacyAsync(
         CancellationToken cancellationToken)
     {
@@ -4669,6 +4788,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetOrganizationProfileEditor();
         ResetOrganizationInvitationState();
         ResetOrganizationMemberManagementState();
+        ResetOrganizationLeaveState();
         _organizationAccount = null;
         _organizationPermissions = null;
         _organizationProfile = null;
@@ -4697,6 +4817,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationMemberManagementStatus = "IDLE";
         OrganizationMemberManagementMessage =
             "Manage members after loading the Agent-authoritative Organization overview.";
+    }
+
+    private void ResetOrganizationLeaveState()
+    {
+        OrganizationLeaveStatus = "IDLE";
+        OrganizationLeaveMessage =
+            "Leave is available only when Digital Solutions authorizes the selected Organization membership.";
     }
 
     private void ResetOrganizationInvitationState()
@@ -4788,6 +4915,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetOrganizationProfileEditor();
         ResetOrganizationInvitationState();
         ResetOrganizationMemberManagementState();
+        ResetOrganizationLeaveState();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
         AccountOrganizationStatus = status;
@@ -4850,6 +4978,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationInvitations));
+        Raise(nameof(OrganizationLeaveStatus));
+        Raise(nameof(OrganizationLeaveMessage));
+        Raise(nameof(ShowOrganizationLeaveSection));
+        Raise(nameof(CanLeaveOrganization));
     }
 
     private void ResetAccountPrivacyState()
@@ -5157,6 +5289,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowPurchaseCheckoutState));
         Raise(nameof(CanSwitchAccount));
         Raise(nameof(SwitchAccountHint));
+        Raise(nameof(CanLeaveOrganization));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
