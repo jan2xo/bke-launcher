@@ -143,6 +143,14 @@ public sealed partial class MainWindow : Window
         await ViewModel.RegenerateMfaRecoveryAsync(CancellationToken.None);
     }
 
+    private async void AcceptAccountOrganizationInvitation(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.AcceptAccountOrganizationInvitationAsync(
+            CancellationToken.None);
+    }
+
     private async void CreateAccountOrganization(
         object? sender,
         RoutedEventArgs args)

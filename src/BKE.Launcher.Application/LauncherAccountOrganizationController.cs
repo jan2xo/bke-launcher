@@ -171,6 +171,24 @@ public sealed class LauncherAccountOrganizationController
         return response;
     }
 
+    public async Task<AccountOrganizationInvitationAcceptResponse> AcceptInvitationAsync(
+        string invitationCode,
+        CancellationToken cancellationToken)
+    {
+        var normalizedCode =
+            RequireInvitationAcceptanceCode(invitationCode);
+
+        var response =
+            await _agent.AcceptAccountOrganizationInvitationAsync(
+                new AccountOrganizationInvitationAcceptRequest(
+                    Guid.NewGuid().ToString("N"),
+                    normalizedCode),
+                cancellationToken);
+
+        ValidateInvitationAcceptContract(response);
+        return response;
+    }
+
     public async Task<AccountOrganizationInvitationManageResponse> ManageInvitationAsync(
         string action,
         string managementHandle,
@@ -525,6 +543,68 @@ public sealed class LauncherAccountOrganizationController
         }
     }
 
+    private static void ValidateInvitationAcceptContract(
+        AccountOrganizationInvitationAcceptResponse response)
+    {
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountOrganizationCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountOrganizationContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-invitation acceptance contract drifted.");
+        }
+
+        if (response.Status is not (
+            "ACCEPTED" or
+            "INVALID_INPUT" or
+            "INVITATION_NOT_FOUND" or
+            "INVITATION_EMAIL_MISMATCH" or
+            "INVITATION_EXPIRED" or
+            "INVITATION_NOT_PENDING" or
+            "SUSPENDED_ACCOUNT" or
+            "CLOSED_ACCOUNT" or
+            "CONFLICT" or
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN" or
+            "FAILED"))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-invitation acceptance status drifted.");
+        }
+
+        if (response.Status == "ACCEPTED")
+        {
+            if (response.Role is null ||
+                !response.SwitchRequired ||
+                response.Error is not null)
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization-invitation acceptance success drifted.");
+            }
+
+            RequireRole(response.Role);
+            return;
+        }
+
+        if (response.Role is not null ||
+            response.SwitchRequired ||
+            response.Error is null ||
+            string.IsNullOrWhiteSpace(response.Error.Code) ||
+            string.IsNullOrWhiteSpace(response.Error.Message))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-invitation acceptance failure state drifted.");
+        }
+
+        if (response.Status == "OUTCOME_UNKNOWN" &&
+            response.Error.Retryable)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent ambiguous organization-invitation acceptance became retryable.");
+        }
+    }
+
     private static void ValidateInvitationManageContract(
         AccountOrganizationInvitationManageResponse response)
     {
@@ -607,6 +687,26 @@ public sealed class LauncherAccountOrganizationController
         RequireToken(invitation.Status, 32, "invitation status");
         RequireTimestamp(invitation.ExpiresAt, "invitation expiry");
         RequireTimestamp(invitation.CreatedAt, "invitation creation");
+    }
+
+    private static string RequireInvitationAcceptanceCode(
+        string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException(
+                "Enter a valid Organization invitation code.");
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length is < 8 or > 1024 ||
+            normalized.Any(character => character < 32))
+        {
+            throw new ArgumentException(
+                "Enter a valid Organization invitation code.");
+        }
+
+        return normalized;
     }
 
     private static void RequireInvitationCode(string value)

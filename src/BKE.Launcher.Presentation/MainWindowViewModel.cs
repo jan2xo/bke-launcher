@@ -103,6 +103,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _organizationEditRegistrationNumber = string.Empty;
     private string _organizationEditBillingEmail = string.Empty;
     private string _organizationEditTaxId = string.Empty;
+    private string _organizationInvitationAcceptanceStatus = "IDLE";
+    private string _organizationInvitationAcceptanceMessage =
+        "Enter an Organization invitation code to join it with the signed-in BKE identity.";
+    private string _organizationInvitationAcceptanceCode = string.Empty;
+    private string _organizationInvitationAcceptedRole = string.Empty;
     private string _organizationInvitationStatus = "IDLE";
     private string _organizationInvitationMessage =
         "Invite members after loading the Agent-authoritative Organization overview.";
@@ -918,6 +923,64 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             (ValidOrganizationCreateEmail(
                 OrganizationEditBillingEmail) &&
              OrganizationEditTaxId.Trim().Length <= 80));
+
+    public string OrganizationInvitationAcceptanceCode
+    {
+        get => _organizationInvitationAcceptanceCode;
+        set
+        {
+            SetField(
+                ref _organizationInvitationAcceptanceCode,
+                value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationInvitationAcceptanceStatus
+    {
+        get => _organizationInvitationAcceptanceStatus;
+        private set
+        {
+            SetField(
+                ref _organizationInvitationAcceptanceStatus,
+                value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationInvitationAcceptanceMessage
+    {
+        get => _organizationInvitationAcceptanceMessage;
+        private set =>
+            SetField(
+                ref _organizationInvitationAcceptanceMessage,
+                value);
+    }
+
+    public string OrganizationInvitationAcceptedRole
+    {
+        get => _organizationInvitationAcceptedRole;
+        private set =>
+            SetField(
+                ref _organizationInvitationAcceptedRole,
+                value);
+    }
+
+    public bool ShowOrganizationInvitationAcceptanceSection =>
+        IsAuthenticated;
+
+    public bool CanAcceptOrganizationInvitation =>
+        IsAuthenticated &&
+        OrganizationInvitationAcceptanceStatus != "ACCEPTING" &&
+        ValidOrganizationInvitationAcceptanceCode(
+            OrganizationInvitationAcceptanceCode);
+
+    public bool OrganizationInvitationAccepted =>
+        OrganizationInvitationAcceptanceStatus == "ACCEPTED";
+
+    public bool ShowOrganizationInvitationAcceptanceSwitch =>
+        OrganizationInvitationAcceptanceStatus is
+            "ACCEPTED" or "OUTCOME_UNKNOWN";
 
     public string OrganizationInvitationStatus
     {
@@ -3828,6 +3891,94 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task AcceptAccountOrganizationInvitationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            OrganizationInvitationAcceptanceStatus =
+                "AUTH_REQUIRED";
+            OrganizationInvitationAcceptanceMessage =
+                "Sign in with BKE before accepting an Organization invitation.";
+            return;
+        }
+
+        if (!CanAcceptOrganizationInvitation)
+        {
+            OrganizationInvitationAcceptanceStatus =
+                "INVALID_INPUT";
+            OrganizationInvitationAcceptanceMessage =
+                "Enter a valid Organization invitation code before accepting it.";
+            return;
+        }
+
+        var invitationCode =
+            OrganizationInvitationAcceptanceCode.Trim();
+
+        OrganizationInvitationAcceptanceCode = string.Empty;
+        OrganizationInvitationAcceptedRole = string.Empty;
+        OrganizationInvitationAcceptanceStatus = "ACCEPTING";
+        OrganizationInvitationAcceptanceMessage =
+            "Accepting the Organization invitation through the BKE Licensing Agent…";
+
+        try
+        {
+            var response =
+                await _accountOrganization.AcceptInvitationAsync(
+                    invitationCode,
+                    cancellationToken);
+            invitationCode = string.Empty;
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                ResetAccountOrganizationState();
+                EnterAccountOrganizationReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "ACCEPTED")
+            {
+                OrganizationInvitationAcceptedRole =
+                    response.Role ?? string.Empty;
+                OrganizationInvitationAcceptanceStatus =
+                    "ACCEPTED";
+                OrganizationInvitationAcceptanceMessage =
+                    "Invitation accepted. The Organization is now available to your BKE account. Use Switch BKE account to refresh eligible accounts and explicitly select it; BKE did not switch accounts automatically.";
+                return;
+            }
+
+            OrganizationInvitationAcceptanceStatus =
+                response.Status;
+            OrganizationInvitationAcceptanceMessage =
+                response.Status == "OUTCOME_UNKNOWN"
+                    ? "The invitation acceptance result could not be confirmed. BKE cleared the code from this screen and will not retry it automatically. Use Switch BKE account to refresh eligible accounts and check whether the Organization already appears before entering the code again."
+                    : response.Error?.Message ??
+                      "The Organization invitation was not accepted.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            invitationCode = string.Empty;
+            OrganizationInvitationAcceptedRole = string.Empty;
+            OrganizationInvitationAcceptanceStatus =
+                "OUTCOME_UNKNOWN";
+            OrganizationInvitationAcceptanceMessage =
+                "The invitation acceptance result could not be confirmed. BKE cleared the code from this screen and will not retry it automatically. Use Switch BKE account to refresh eligible accounts and check whether the Organization already appears before entering the code again.";
+        }
+        catch (ArgumentException error)
+        {
+            invitationCode = string.Empty;
+            OrganizationInvitationAcceptedRole = string.Empty;
+            OrganizationInvitationAcceptanceStatus =
+                "INVALID_INPUT";
+            OrganizationInvitationAcceptanceMessage =
+                error.Message;
+        }
+    }
+
     public async Task CreateAccountOrganizationInvitationAsync(
         CancellationToken cancellationToken)
     {
@@ -4953,6 +5104,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationCreateMessage =
             "Create a BKE Organization, then switch accounts to select it.";
         ResetOrganizationProfileEditor();
+        ResetOrganizationInvitationAcceptanceState();
         ResetOrganizationInvitationState();
         ResetOrganizationMemberManagementState();
         ResetOrganizationOwnershipTransferState();
@@ -5001,6 +5153,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Leave is available only when Digital Solutions authorizes the selected Organization membership.";
     }
 
+    private void ResetOrganizationInvitationAcceptanceState()
+    {
+        OrganizationInvitationAcceptanceCode = string.Empty;
+        OrganizationInvitationAcceptedRole = string.Empty;
+        OrganizationInvitationAcceptanceStatus = "IDLE";
+        OrganizationInvitationAcceptanceMessage =
+            "Enter an Organization invitation code to join it with the signed-in BKE identity.";
+    }
+
     private void ResetOrganizationInvitationState()
     {
         ClearOrganizationInvitationForm();
@@ -5018,6 +5179,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private static bool ValidOrganizationMemberRole(string? role) =>
         role is "OWNER" or "BILLING" or "LICENSE_MANAGER" or "MEMBER";
+
+    private static bool ValidOrganizationInvitationAcceptanceCode(
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var normalized = value.Trim();
+        return normalized.Length is >= 8 and <= 1024 &&
+               normalized.All(character => character >= 32);
+    }
 
     private void ResetOrganizationProfileEditor()
     {
@@ -5141,6 +5315,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(OrganizationIdentityProfileDirty));
         Raise(nameof(OrganizationBillingProfileDirty));
         Raise(nameof(CanSaveOrganizationProfile));
+        Raise(nameof(OrganizationInvitationAcceptanceStatus));
+        Raise(nameof(OrganizationInvitationAcceptanceMessage));
+        Raise(nameof(OrganizationInvitationAcceptedRole));
+        Raise(nameof(ShowOrganizationInvitationAcceptanceSection));
+        Raise(nameof(CanAcceptOrganizationInvitation));
+        Raise(nameof(OrganizationInvitationAccepted));
+        Raise(nameof(ShowOrganizationInvitationAcceptanceSwitch));
         Raise(nameof(OrganizationInvitationStatus));
         Raise(nameof(OrganizationInvitationMessage));
         Raise(nameof(HasOrganizationInvitationCode));
