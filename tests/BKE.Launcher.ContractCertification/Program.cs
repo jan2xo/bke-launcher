@@ -698,30 +698,6 @@ Require(
         StringComparison.Ordinal),
     "Launcher bypassed the local Agent organization authority.");
 
-Require(
-    accountSwitchViewModelSource.Contains(
-        "_organizationPermissions?.LeaveOrganization == true",
-        StringComparison.Ordinal) &&
-    accountSwitchViewModelSource.Contains(
-        "Resolve the existing checkout attempt before leaving this Organization.",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowOrganizationLeaveSection}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanLeaveOrganization}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"LeaveAccountOrganization\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "ConfirmOrganizationLeaveAsync",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "This action does not delete the Organization.",
-        StringComparison.Ordinal),
-    "Launcher organization self-leave permission/checkout/confirmation boundary drifted.");
-
 var nativeMfaVerifyRequestProperties = typeof(NativeBkeMfaVerifyRequest)
     .GetProperties()
     .Select(property => property.Name)
@@ -2267,6 +2243,30 @@ Require(
         "customer_account_id",
         StringComparison.OrdinalIgnoreCase),
     "Launcher account switching absorbed cloud/session mutation authority.");
+
+Require(
+    accountSwitchViewModelSource.Contains(
+        "_organizationPermissions?.LeaveOrganization == true",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "Resolve the existing checkout attempt before leaving this Organization.",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationLeaveSection}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanLeaveOrganization}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"LeaveAccountOrganization\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ConfirmOrganizationLeaveAsync",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "This action does not delete the Organization.",
+        StringComparison.Ordinal),
+    "Launcher organization self-leave permission/checkout/confirmation boundary drifted.");
 Require(
     mainWindowMarkup.Contains(
         "Content=\"Switch BKE account\"",
