@@ -823,14 +823,17 @@
               <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
 
               <TextBlock Text="Redeem Claim Code" FontSize="18" FontWeight="SemiBold" />
-              <TextBlock Text="Codes redeem into the signed-in account shown above."
+              <TextBlock Text="The code redeems into the signed-in account shown above. BKE does not store the plaintext code locally; the field is cleared before the Agent mutation starts. Finish any unresolved checkout first."
                          TextWrapping="Wrap"
                          Opacity="0.72" />
               <TextBox Text="{Binding ClaimCode, Mode=TwoWay}"
                        Watermark="BKE-CLM-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" />
-              <Button Content="Redeem Claim Code"
+              <Button Content="Redeem to this account"
                       IsEnabled="{Binding CanRedeemClaimCode}"
                       Click="RedeemClaimCode" />
+              <TextBlock Text="{Binding ClaimStatus}"
+                         FontSize="11"
+                         FontWeight="SemiBold" />
               <TextBlock Text="{Binding ClaimMessage}"
                          TextWrapping="Wrap"
                          Opacity="0.72" />
