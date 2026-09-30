@@ -64,6 +64,10 @@ public interface ILauncherAgentClient
         AccountPrivacyCreateRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountPurchasesResponse> GetAccountPurchasesAsync(
+        AccountPurchasesRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountOrganizationOverviewResponse> GetAccountOrganizationAsync(
         AccountOrganizationOverviewRequest request,
         CancellationToken cancellationToken);
