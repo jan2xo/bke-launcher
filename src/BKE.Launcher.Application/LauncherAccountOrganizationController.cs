@@ -288,7 +288,7 @@ public sealed class LauncherAccountOrganizationController
             RequireToken(invitation.Status, 32, "invitation status");
             RequireTimestamp(invitation.ExpiresAt, "invitation expiry");
             RequireTimestamp(invitation.CreatedAt, "invitation creation");
-            RequireInvitationManagementHandle(
+            RequireContractInvitationManagementHandle(
                 invitation.ManagementHandle);
         }
     }
@@ -574,6 +574,20 @@ public sealed class LauncherAccountOrganizationController
         {
             throw new ArgumentException(
                 $"Organization {label} is invalid.");
+        }
+    }
+
+    private static void RequireContractInvitationManagementHandle(
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            !System.Text.RegularExpressions.Regex.IsMatch(
+                value,
+                "^bke-org-invite-v1_[0-9a-f]{64}$",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization invitation management handle drifted.");
         }
     }
 
