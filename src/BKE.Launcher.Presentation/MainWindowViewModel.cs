@@ -334,7 +334,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string ClaimCode
     {
         get => _claimCode;
-        set => SetField(ref _claimCode, value);
+        set
+        {
+            SetField(ref _claimCode, value);
+            Raise(nameof(CanRedeemClaimCode));
+        }
     }
 
     public string CurrentPassword
@@ -1181,7 +1185,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string ClaimStatus
     {
         get => _claimStatus;
-        private set => SetField(ref _claimStatus, value);
+        private set
+        {
+            SetField(ref _claimStatus, value);
+            Raise(nameof(CanRedeemClaimCode));
+        }
     }
 
     public string ClaimMessage
@@ -1360,7 +1368,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);
 
     public bool CanRedeemClaimCode =>
-        string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
+        string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal) &&
+        ClaimStatus != "REDEEMING" &&
+        !_purchaseAttemptLocked &&
+        LooksLikeClaimCode(ClaimCode);
 
     public bool CanChangePassword =>
         IsAuthenticated &&
@@ -2102,21 +2113,33 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task RedeemClaimCodeAsync(CancellationToken cancellationToken)
     {
-        if (!CanRedeemClaimCode)
+        if (!IsAuthenticated)
         {
             ClaimStatus = "AUTH_REQUIRED";
             ClaimMessage = "Sign in with BKE before redeeming a Claim Code.";
             return;
         }
 
-        var code = ClaimCode.Trim();
-        if (string.IsNullOrWhiteSpace(code))
+        if (_purchaseAttemptLocked)
         {
-            ClaimStatus = "INVALID_REQUEST";
-            ClaimMessage = "Enter a Claim Code.";
+            ClaimStatus = "BLOCKED";
+            ClaimMessage =
+                "Resolve the existing checkout attempt before redeeming a Claim Code. The pending purchase and redemption both change software ownership for this exact account.";
             return;
         }
 
+        var code = ClaimCode.Trim();
+        if (!LooksLikeClaimCode(code))
+        {
+            ClaimStatus = "INVALID_REQUEST";
+            ClaimMessage =
+                "Enter a valid BKE Claim Code in the BKE-CLM-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX format.";
+            return;
+        }
+
+        // The Claim Code is a one-time acquisition credential. Keep only the
+        // local call copy and clear the bound UI field before network mutation.
+        ClaimCode = string.Empty;
         ClaimStatus = "REDEEMING";
         ClaimMessage = $"Redeeming this Claim Code to {AccountDisplay}…";
 
@@ -2129,19 +2152,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             switch (response.Status)
             {
                 case "CLAIMED":
-                    ClaimCode = string.Empty;
                     ClaimStatus = "CLAIMED";
                     ClaimMessage =
-                        "Claim Code redeemed. Your BKE software is being refreshed.";
+                        "Claim Code redeemed. Your BKE software and Store eligibility are being refreshed.";
                     await RefreshCatalogAsync(cancellationToken);
-                await RefreshStoreAsync(cancellationToken);
+                    await RefreshStoreAsync(cancellationToken);
                     return;
 
                 case "AUTH_REQUIRED":
-                    ClaimStatus = "AUTH_REQUIRED";
-                    ClaimMessage =
+                    EnterAccountMfaReauthentication(
                         response.Error?.Message ??
-                        "Sign in with BKE before redeeming a Claim Code.";
+                            "Your BKE account session is no longer valid. Sign in again before redeeming a Claim Code.",
+                        clearRecoveryCodes: true);
                     return;
 
                 case "NOT_FOUND":
@@ -2158,20 +2180,36 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                 default:
                     ClaimStatus = "FAILED";
+                    if (response.Error?.Retryable == true)
+                    {
+                        await RefreshCatalogAsync(cancellationToken);
+                        await RefreshStoreAsync(cancellationToken);
+                        ClaimMessage =
+                            "Claim Code redemption could not be confirmed. BKE refreshed the authoritative software and Store state; inspect it before entering the code again. BKE will not retry redemption automatically.";
+                        return;
+                    }
+
                     ClaimMessage =
                         response.Error?.Message ??
                         "Claim Code redemption failed.";
                     return;
             }
         }
+        catch (ArgumentException error)
+        {
+            ClaimStatus = "INVALID_REQUEST";
+            ClaimMessage = error.Message;
+        }
         catch (Exception error) when (
             error is HttpRequestException or
             TaskCanceledException or
             InvalidDataException)
         {
-            ClaimStatus = "AGENT_UNAVAILABLE";
+            await RefreshCatalogAsync(cancellationToken);
+            await RefreshStoreAsync(cancellationToken);
+            ClaimStatus = "RESULT_UNKNOWN";
             ClaimMessage =
-                "The BKE Licensing Agent Claim Code capability is unavailable or invalid.";
+                "Claim Code redemption could not be confirmed. BKE refreshed the authoritative software and Store state; inspect it before entering the code again. BKE will not replay the redemption automatically.";
         }
     }
 
@@ -5430,6 +5468,33 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(SwitchAccountHint));
         Raise(nameof(CanLeaveOrganization));
         Raise(nameof(CanTransferOrganizationOwnership));
+        Raise(nameof(CanRedeemClaimCode));
+    }
+
+    private static bool LooksLikeClaimCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return false;
+        }
+
+        var value = code.Trim();
+        if (!value.StartsWith(
+                "BKE-CLM-",
+                StringComparison.OrdinalIgnoreCase) ||
+            value.Length != 43)
+        {
+            return false;
+        }
+
+        var groups = value[8..].Split('-');
+        return groups.Length == 6 &&
+            groups.All(group =>
+                group.Length == 5 &&
+                group.All(character =>
+                    character is >= '0' and <= '9' ||
+                    character is >= 'A' and <= 'F' ||
+                    character is >= 'a' and <= 'f'));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
