@@ -170,6 +170,7 @@ Require(agentMethods.SetEquals([
     "CreateAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationMemberAsync",
+    "TransferAccountOrganizationOwnershipAsync",
     "LeaveAccountOrganizationAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
@@ -336,8 +337,8 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "095c47e40b9b180525294ef37e4a9a5e24a5c1bd",
-    "Launcher is not pinned to the merged Agent organization-self-leave authority.");
+        "3bfe82ba52dd33a27174c89f45dcc4d034c54817",
+    "Launcher is not pinned to the merged Agent organization ownership-transfer authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -352,6 +353,8 @@ Require(
         "/v1/account/organization/invitations/manage" &&
     AgentLocalContract.AccountOrganizationMemberManagePath ==
         "/v1/account/organization/members/manage" &&
+    AgentLocalContract.AccountOrganizationOwnershipTransferPath ==
+        "/v1/account/organization/ownership/transfer" &&
     AgentLocalContract.AccountOrganizationLeavePath ==
         "/v1/account/organization/leave" &&
     AgentLocalContract.AccountOrganizationCapabilityId ==
@@ -585,6 +588,41 @@ using (var organizationMemberRemoveDocument = JsonDocument.Parse(
 }
 
 Require(
+    typeof(AccountOrganizationOwnershipTransferRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "ManagementHandle"
+        ]),
+    "Launcher widened the Agent organization ownership-transfer request.");
+
+using (var organizationOwnershipTransferDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationOwnershipTransferRequest(
+            "organization-owner-transfer-cert",
+            "bke-org-member-v1_" + new string('d', 64)))))
+{
+    var root = organizationOwnershipTransferDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "management_handle"
+        ]) &&
+        root.GetProperty("management_handle").GetString() ==
+            "bke-org-member-v1_" + new string('d', 64) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("member_id", out _) &&
+        !root.TryGetProperty("membership_id", out _) &&
+        !root.TryGetProperty("owner_id", out _),
+        "Launcher ownership-transfer wire request widened beyond the opaque member handle.");
+}
+
+Require(
     typeof(AccountOrganizationLeaveRequest)
         .GetProperties()
         .Select(property => property.Name)
@@ -619,6 +657,7 @@ foreach (var type in new[]
     typeof(AccountOrganizationInvitationCreateResponse),
     typeof(AccountOrganizationInvitationManageResponse),
     typeof(AccountOrganizationMemberManageResponse),
+    typeof(AccountOrganizationOwnershipTransferResponse),
     typeof(AccountOrganizationLeaveResponse),
     typeof(AccountOrganizationInvitationIssued),
     typeof(AccountOrganizationAccount),
@@ -2268,6 +2307,33 @@ Require(
         StringComparison.Ordinal),
     "Launcher organization self-leave permission/checkout/confirmation boundary drifted.");
 Require(
+    accountSwitchViewModelSource.Contains(
+        "_organizationPermissions?.TransferOwnership == true",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "Resolve the existing checkout attempt before transferring Organization ownership.",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "BKE will not replay the request.",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationOwnershipTransferSection}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanTransferOrganizationOwnership}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"TransferOrganizationOwnership\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ConfirmOrganizationOwnershipTransferAsync",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "change the Organization owner immediately",
+        StringComparison.Ordinal),
+    "Launcher organization ownership-transfer permission/checkout/confirmation boundary drifted.");
+
+Require(
     mainWindowMarkup.Contains(
         "Content=\"Switch BKE account\"",
         StringComparison.Ordinal) &&
@@ -2298,7 +2364,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
-Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/self-leave presentation and reauthentication boundaries certified");
+Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/ownership-transfer/self-leave presentation and reauthentication boundaries certified");
 Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
