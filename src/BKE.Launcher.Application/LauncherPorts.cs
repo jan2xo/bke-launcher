@@ -88,6 +88,10 @@ public interface ILauncherAgentClient
         AccountOrganizationMemberManageRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountOrganizationOwnershipTransferResponse> TransferAccountOrganizationOwnershipAsync(
+        AccountOrganizationOwnershipTransferRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountOrganizationLeaveResponse> LeaveAccountOrganizationAsync(
         AccountOrganizationLeaveRequest request,
         CancellationToken cancellationToken);

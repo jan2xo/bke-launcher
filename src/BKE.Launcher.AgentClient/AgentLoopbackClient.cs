@@ -236,6 +236,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AccountOrganizationRequestTimeout,
             cancellationToken);
 
+    public Task<AccountOrganizationOwnershipTransferResponse> TransferAccountOrganizationOwnershipAsync(
+        AccountOrganizationOwnershipTransferRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountOrganizationOwnershipTransferRequest, AccountOrganizationOwnershipTransferResponse>(
+            AgentLocalContract.AccountOrganizationOwnershipTransferPath,
+            request,
+            AccountOrganizationRequestTimeout,
+            cancellationToken);
+
     public Task<AccountOrganizationLeaveResponse> LeaveAccountOrganizationAsync(
         AccountOrganizationLeaveRequest request,
         CancellationToken cancellationToken) =>

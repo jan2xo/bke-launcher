@@ -240,6 +240,23 @@ public sealed class LauncherAccountOrganizationController
         return response;
     }
 
+    public async Task<AccountOrganizationOwnershipTransferResponse> TransferOwnershipAsync(
+        string managementHandle,
+        CancellationToken cancellationToken)
+    {
+        RequireMemberManagementHandle(managementHandle);
+
+        var response =
+            await _agent.TransferAccountOrganizationOwnershipAsync(
+                new AccountOrganizationOwnershipTransferRequest(
+                    Guid.NewGuid().ToString("N"),
+                    managementHandle),
+                cancellationToken);
+
+        ValidateOwnershipTransferContract(response);
+        return response;
+    }
+
     public async Task<AccountOrganizationLeaveResponse> LeaveAsync(
         CancellationToken cancellationToken)
     {
@@ -398,6 +415,60 @@ public sealed class LauncherAccountOrganizationController
         {
             throw new InvalidDataException(
                 "BKE Licensing Agent organization-member failure is missing error state.");
+        }
+    }
+
+    private static void ValidateOwnershipTransferContract(
+        AccountOrganizationOwnershipTransferResponse response)
+    {
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountOrganizationCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountOrganizationContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization ownership-transfer contract drifted.");
+        }
+
+        if (response.Status is not (
+            "TRANSFERRED" or
+            "INVALID_INPUT" or
+            "NOT_ORGANIZATION" or
+            "ACCOUNT_FORBIDDEN" or
+            "MEMBER_NOT_FOUND" or
+            "CLOSED_ACCOUNT" or
+            "SUSPENDED_ACCOUNT" or
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN" or
+            "FAILED"))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization ownership-transfer status drifted.");
+        }
+
+        if (response.Status == "TRANSFERRED")
+        {
+            if (!response.ReauthenticationRequired ||
+                response.Error is not null)
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization ownership-transfer success drifted.");
+            }
+            return;
+        }
+
+        var requiresReauthentication = response.Status is
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN";
+
+        if (response.ReauthenticationRequired !=
+                requiresReauthentication ||
+            response.Error is null ||
+            string.IsNullOrWhiteSpace(response.Error.Code) ||
+            string.IsNullOrWhiteSpace(response.Error.Message))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization ownership-transfer failure state drifted.");
         }
     }
 

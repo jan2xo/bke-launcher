@@ -170,6 +170,7 @@ Require(agentMethods.SetEquals([
     "CreateAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationMemberAsync",
+    "TransferAccountOrganizationOwnershipAsync",
     "LeaveAccountOrganizationAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
@@ -336,8 +337,8 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "095c47e40b9b180525294ef37e4a9a5e24a5c1bd",
-    "Launcher is not pinned to the merged Agent organization-self-leave authority.");
+        "3bfe82ba52dd33a27174c89f45dcc4d034c54817",
+    "Launcher is not pinned to the merged Agent organization ownership-transfer authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -352,6 +353,8 @@ Require(
         "/v1/account/organization/invitations/manage" &&
     AgentLocalContract.AccountOrganizationMemberManagePath ==
         "/v1/account/organization/members/manage" &&
+    AgentLocalContract.AccountOrganizationOwnershipTransferPath ==
+        "/v1/account/organization/ownership/transfer" &&
     AgentLocalContract.AccountOrganizationLeavePath ==
         "/v1/account/organization/leave" &&
     AgentLocalContract.AccountOrganizationCapabilityId ==
@@ -585,6 +588,41 @@ using (var organizationMemberRemoveDocument = JsonDocument.Parse(
 }
 
 Require(
+    typeof(AccountOrganizationOwnershipTransferRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "ManagementHandle"
+        ]),
+    "Launcher widened the Agent organization ownership-transfer request.");
+
+using (var organizationOwnershipTransferDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationOwnershipTransferRequest(
+            "organization-owner-transfer-cert",
+            "bke-org-member-v1_" + new string('d', 64)))))
+{
+    var root = organizationOwnershipTransferDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "management_handle"
+        ]) &&
+        root.GetProperty("management_handle").GetString() ==
+            "bke-org-member-v1_" + new string('d', 64) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("member_id", out _) &&
+        !root.TryGetProperty("membership_id", out _) &&
+        !root.TryGetProperty("owner_id", out _),
+        "Launcher ownership-transfer wire request widened beyond the opaque member handle.");
+}
+
+Require(
     typeof(AccountOrganizationLeaveRequest)
         .GetProperties()
         .Select(property => property.Name)
@@ -619,6 +657,7 @@ foreach (var type in new[]
     typeof(AccountOrganizationInvitationCreateResponse),
     typeof(AccountOrganizationInvitationManageResponse),
     typeof(AccountOrganizationMemberManageResponse),
+    typeof(AccountOrganizationOwnershipTransferResponse),
     typeof(AccountOrganizationLeaveResponse),
     typeof(AccountOrganizationInvitationIssued),
     typeof(AccountOrganizationAccount),
@@ -2268,6 +2307,33 @@ Require(
         StringComparison.Ordinal),
     "Launcher organization self-leave permission/checkout/confirmation boundary drifted.");
 Require(
+    accountSwitchViewModelSource.Contains(
+        "_organizationPermissions?.TransferOwnership == true",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "Resolve the existing checkout attempt before transferring Organization ownership.",
+        StringComparison.Ordinal) &&
+    accountSwitchViewModelSource.Contains(
+        "BKE will not replay the request.",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationOwnershipTransferSection}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanTransferOrganizationOwnership}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"TransferOrganizationOwnership\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ConfirmOrganizationOwnershipTransferAsync",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "change the Organization owner immediately",
+        StringComparison.Ordinal),
+    "Launcher organization ownership-transfer permission/checkout/confirmation boundary drifted.");
+
+Require(
     mainWindowMarkup.Contains(
         "Content=\"Switch BKE account\"",
         StringComparison.Ordinal) &&
@@ -2298,7 +2364,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
-Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/self-leave presentation and reauthentication boundaries certified");
+Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/ownership-transfer/self-leave presentation and reauthentication boundaries certified");
 Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
@@ -2788,6 +2854,8 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         ownerViewModel.OrganizationInvitations[0].ManagementHandle ==
             CustomerJourneyAgentClient.OrganizationInvitationHandle &&
         ownerViewModel.ShowOrganizationMembers &&
+        ownerViewModel.ShowOrganizationOwnershipTransferSection &&
+        ownerViewModel.CanTransferOrganizationOwnership &&
         !ownerViewModel.ShowOrganizationLeaveSection &&
         !ownerViewModel.CanLeaveOrganization,
         "Launcher did not render the complete Agent-supplied OWNER organization overview or incorrectly enabled owner self-leave.");
@@ -3138,6 +3206,8 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         !billingViewModel.ShowOrganizationInviteSection &&
         !billingViewModel.CanInviteOrganizationMember &&
         !billingViewModel.CanManageOrganizationMemberActions &&
+        !billingViewModel.ShowOrganizationOwnershipTransferSection &&
+        !billingViewModel.CanTransferOrganizationOwnership &&
         billingViewModel.ShowOrganizationLeaveSection &&
         billingViewModel.CanLeaveOrganization,
         "BILLING role received MANAGE_MEMBERS UX or lost independent Agent-authoritative self-leave permission.");
@@ -3188,6 +3258,113 @@ static async Task CertifyAccountOrganizationSettingsAsync()
             "review",
             StringComparison.OrdinalIgnoreCase),
         "Ambiguous organization-profile update replayed or failed to force authoritative review.");
+
+    var transferCatalog = new CustomerJourneyCatalogSource();
+    var transferAgent = new CustomerJourneyAgentClient(transferCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "OWNER",
+        OrganizationDisplayName = "Transfer Certification Org",
+    };
+    var transferViewModel = BuildCustomerJourneyViewModel(
+        transferAgent,
+        transferCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await transferViewModel.InitializeAsync(CancellationToken.None);
+    await transferViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    var transferTarget = transferViewModel.OrganizationMembers.Single(
+        member => member.Email == "manager@example.test");
+    Require(
+        transferViewModel.ShowOrganizationOwnershipTransferSection &&
+        transferViewModel.CanTransferOrganizationOwnership,
+        "Launcher did not expose DS-authoritative ownership transfer to an authorized Organization owner.");
+
+    await transferViewModel.TransferAccountOrganizationOwnershipAsync(
+        transferTarget,
+        CancellationToken.None);
+    Require(
+        transferAgent.OrganizationOwnershipTransferCount == 1 &&
+        transferAgent.LastOrganizationOwnershipTransferRequest is
+            {
+                ManagementHandle:
+                    CustomerJourneyAgentClient.OrganizationManagedMemberHandle
+            } &&
+        !transferAgent.Authenticated &&
+        !transferViewModel.IsAuthenticated &&
+        transferViewModel.ShowLoginPage &&
+        !transferViewModel.OrganizationReady &&
+        !transferViewModel.ShowOrganizationOwnershipTransferSection &&
+        transferViewModel.OrganizationMembers.Count == 0 &&
+        transferViewModel.Message.Contains(
+            "transferred",
+            StringComparison.OrdinalIgnoreCase),
+        "Successful Organization ownership transfer did not clear stale owner presentation and require fresh authentication.");
+
+    var rejectedTransferCatalog = new CustomerJourneyCatalogSource();
+    var rejectedTransferAgent = new CustomerJourneyAgentClient(
+        rejectedTransferCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "OWNER",
+        OrganizationDisplayName = "Rejected Transfer Org",
+        OrganizationOwnershipTransferOutcome = "MEMBER_NOT_FOUND",
+    };
+    var rejectedTransferViewModel = BuildCustomerJourneyViewModel(
+        rejectedTransferAgent,
+        rejectedTransferCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await rejectedTransferViewModel.InitializeAsync(
+        CancellationToken.None);
+    await rejectedTransferViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    await rejectedTransferViewModel.TransferAccountOrganizationOwnershipAsync(
+        rejectedTransferViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test"),
+        CancellationToken.None);
+    Require(
+        rejectedTransferAgent.OrganizationOwnershipTransferCount == 1 &&
+        rejectedTransferAgent.Authenticated &&
+        rejectedTransferViewModel.IsAuthenticated &&
+        rejectedTransferViewModel.OrganizationReady &&
+        rejectedTransferViewModel.OrganizationOwnershipTransferStatus ==
+            "MEMBER_NOT_FOUND" &&
+        rejectedTransferViewModel.CanTransferOrganizationOwnership,
+        "Explicit ownership-transfer target rejection destroyed a valid selected-account session.");
+
+    var unknownTransferCatalog = new CustomerJourneyCatalogSource();
+    var unknownTransferAgent = new CustomerJourneyAgentClient(
+        unknownTransferCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "OWNER",
+        OrganizationDisplayName = "Ambiguous Transfer Org",
+        OrganizationOwnershipTransferOutcomeUnknown = true,
+    };
+    var unknownTransferViewModel = BuildCustomerJourneyViewModel(
+        unknownTransferAgent,
+        unknownTransferCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await unknownTransferViewModel.InitializeAsync(
+        CancellationToken.None);
+    await unknownTransferViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    await unknownTransferViewModel.TransferAccountOrganizationOwnershipAsync(
+        unknownTransferViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test"),
+        CancellationToken.None);
+    Require(
+        unknownTransferAgent.OrganizationOwnershipTransferCount == 1 &&
+        !unknownTransferAgent.Authenticated &&
+        !unknownTransferViewModel.IsAuthenticated &&
+        !unknownTransferViewModel.OrganizationReady &&
+        unknownTransferViewModel.Message.Contains(
+            "will not replay",
+            StringComparison.OrdinalIgnoreCase),
+        "Ambiguous Organization ownership transfer became replayable or retained stale owner presentation.");
 
     var ownerLeaveController =
         new LauncherAccountOrganizationController(ownerAgent);
@@ -3344,6 +3521,20 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         "Account-switch certification did not create member-management presentation state.");
     switchAgent.OrganizationMemberManageOutcome = "READY";
 
+    switchAgent.OrganizationOwnershipTransferOutcome =
+        "MEMBER_NOT_FOUND";
+    await switchViewModel.TransferAccountOrganizationOwnershipAsync(
+        switchViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test"),
+        CancellationToken.None);
+    Require(
+        switchAgent.OrganizationOwnershipTransferCount == 1 &&
+        switchViewModel.OrganizationOwnershipTransferStatus ==
+            "MEMBER_NOT_FOUND" &&
+        switchViewModel.IsAuthenticated,
+        "Account-switch certification did not create ownership-transfer presentation state.");
+    switchAgent.OrganizationOwnershipTransferOutcome = "TRANSFERRED";
+
     await switchViewModel.LeaveAccountOrganizationAsync(
         CancellationToken.None);
     Require(
@@ -3384,6 +3575,10 @@ static async Task CertifyAccountOrganizationSettingsAsync()
     Require(
         switchViewModel.OrganizationMemberManagementStatus == "IDLE",
         "Safe account switching retained Organization member-management state.");
+    Require(
+        switchViewModel.OrganizationOwnershipTransferStatus == "IDLE" &&
+        !switchViewModel.ShowOrganizationOwnershipTransferSection,
+        "Safe account switching retained Organization ownership-transfer presentation state.");
     Require(
         switchViewModel.OrganizationLeaveStatus == "IDLE" &&
         !switchViewModel.ShowOrganizationLeaveSection,
@@ -3510,6 +3705,61 @@ static async Task CertifySafeAccountSwitchingAsync()
             "Resolve the existing checkout attempt",
             StringComparison.Ordinal),
         "Launcher submitted Organization self-leave while checkout recovery remained account-bound.");
+
+    var lockedOwnerCatalog = new CustomerJourneyCatalogSource();
+    var lockedOwnerAgent = new CustomerJourneyAgentClient(
+        lockedOwnerCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "OWNER",
+        OrganizationDisplayName = "Checkout Locked Owner Org",
+    };
+    var lockedOwnerRecovery = new CustomerJourneyRecoveryStore();
+    var lockedOwnerViewModel = BuildCustomerJourneyViewModel(
+        lockedOwnerAgent,
+        lockedOwnerCatalog,
+        lockedOwnerRecovery,
+        new CustomerJourneyNavigator());
+    await lockedOwnerViewModel.InitializeAsync(CancellationToken.None);
+    await lockedOwnerViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        lockedOwnerViewModel.CanTransferOrganizationOwnership,
+        "Checkout-lock ownership certification did not begin with an authorized owner.");
+
+    await lockedOwnerViewModel.OpenModuleAsync(
+        2,
+        CancellationToken.None);
+    await lockedOwnerViewModel.ReviewPurchaseAsync(
+        CustomerJourneyAgentClient.PurchasePlanId,
+        CancellationToken.None);
+    foreach (var document in lockedOwnerViewModel.PurchaseLegalDocuments)
+    {
+        document.IsAccepted = true;
+    }
+    await lockedOwnerViewModel.StartPurchaseAsync(
+        "SELF",
+        CancellationToken.None);
+
+    Require(
+        lockedOwnerRecovery.State is not null &&
+        !lockedOwnerViewModel.CanTransferOrganizationOwnership,
+        "Checkout recovery did not lock Organization ownership transfer.");
+
+    await lockedOwnerViewModel.TransferAccountOrganizationOwnershipAsync(
+        lockedOwnerViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test"),
+        CancellationToken.None);
+    Require(
+        lockedOwnerAgent.OrganizationOwnershipTransferCount == 0 &&
+        lockedOwnerAgent.Authenticated &&
+        lockedOwnerViewModel.IsAuthenticated &&
+        lockedOwnerViewModel.OrganizationOwnershipTransferStatus ==
+            "BLOCKED" &&
+        lockedOwnerViewModel.OrganizationOwnershipTransferMessage.Contains(
+            "Resolve the existing checkout attempt",
+            StringComparison.Ordinal),
+        "Launcher submitted Organization ownership transfer while checkout recovery remained account-bound.");
 
     await lockedViewModel.SwitchAccountAsync(CancellationToken.None);
 
@@ -3918,6 +4168,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int OrganizationInvitationCreateCount { get; private set; }
     public int OrganizationInvitationManageCount { get; private set; }
     public int OrganizationMemberManageCount { get; private set; }
+    public int OrganizationOwnershipTransferCount { get; private set; }
     public int OrganizationLeaveCount { get; private set; }
     public int PlatformAuthorityCount { get; private set; }
     public bool Authenticated { get; set; } = true;
@@ -3956,6 +4207,11 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public string OrganizationManagedMemberRole { get; private set; } =
         "MEMBER";
     public AccountOrganizationMemberManageRequest? LastOrganizationMemberManageRequest
+        { get; private set; }
+    public string OrganizationOwnershipTransferOutcome { get; set; } =
+        "TRANSFERRED";
+    public bool OrganizationOwnershipTransferOutcomeUnknown { get; set; }
+    public AccountOrganizationOwnershipTransferRequest? LastOrganizationOwnershipTransferRequest
         { get; private set; }
     public string OrganizationLeaveOutcome { get; set; } = "LEFT";
     public bool OrganizationLeaveOutcomeUnknown { get; set; }
@@ -4461,6 +4717,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         var billing = OrganizationRole == "BILLING";
         var licenseManager = OrganizationRole == "LICENSE_MANAGER";
         var manageMembers = owner;
+        var transferOwnership = owner;
         var leaveOrganization = !owner;
         var viewBilling = owner || billing;
         var viewLicenses = owner || licenseManager;
@@ -4475,6 +4732,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 OrganizationRole),
             new AccountOrganizationPermissions(
                 manageMembers,
+                transferOwnership,
                 leaveOrganization,
                 viewBilling,
                 viewLicenses),
@@ -4947,6 +5205,87 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
         throw new InvalidOperationException(
             "Unexpected certification member management action.");
+    }
+
+    public Task<AccountOrganizationOwnershipTransferResponse> TransferAccountOrganizationOwnershipAsync(
+        AccountOrganizationOwnershipTransferRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OrganizationOwnershipTransferCount++;
+        LastOrganizationOwnershipTransferRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountOrganizationOwnershipTransferResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "AUTH_REQUIRED",
+                    true,
+                    new AccountOrganizationError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (OrganizationOwnershipTransferOutcomeUnknown)
+        {
+            OrganizationOwnershipTransferOutcomeUnknown = false;
+            Authenticated = false;
+            return Task.FromResult(
+                new AccountOrganizationOwnershipTransferResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    true,
+                    new AccountOrganizationError(
+                        "ORGANIZATION_OWNERSHIP_TRANSFER_OUTCOME_UNKNOWN",
+                        "The ownership-transfer result could not be confirmed.",
+                        false)));
+        }
+
+        if (OrganizationOwnershipTransferOutcome != "TRANSFERRED")
+        {
+            var message = OrganizationOwnershipTransferOutcome switch
+            {
+                "MEMBER_NOT_FOUND" =>
+                    "The selected member is no longer available.",
+                "ACCOUNT_FORBIDDEN" =>
+                    "The selected BKE account cannot transfer Organization ownership.",
+                "CLOSED_ACCOUNT" =>
+                    "The selected Organization is closed.",
+                "SUSPENDED_ACCOUNT" =>
+                    "The selected Organization is suspended.",
+                _ =>
+                    "Organization ownership was not changed.",
+            };
+            return Task.FromResult(
+                new AccountOrganizationOwnershipTransferResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    OrganizationOwnershipTransferOutcome,
+                    false,
+                    new AccountOrganizationError(
+                        OrganizationOwnershipTransferOutcome,
+                        message,
+                        false)));
+        }
+
+        if (request.ManagementHandle != OrganizationManagedMemberHandle)
+        {
+            throw new InvalidOperationException(
+                "Unexpected certification ownership-transfer member handle.");
+        }
+
+        Authenticated = false;
+        return Task.FromResult(
+            new AccountOrganizationOwnershipTransferResponse(
+                AgentLocalContract.AccountOrganizationCapabilityId,
+                AgentLocalContract.AccountOrganizationContractVersion,
+                "TRANSFERRED",
+                true,
+                null));
     }
 
     public Task<AccountOrganizationLeaveResponse> LeaveAccountOrganizationAsync(

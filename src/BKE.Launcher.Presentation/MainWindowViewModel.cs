@@ -112,6 +112,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _organizationMemberManagementStatus = "IDLE";
     private string _organizationMemberManagementMessage =
         "Manage members after loading the Agent-authoritative Organization overview.";
+    private string _organizationOwnershipTransferStatus = "IDLE";
+    private string _organizationOwnershipTransferMessage =
+        "Transfer ownership only when Digital Solutions authorizes the selected Organization.";
     private string _organizationLeaveStatus = "IDLE";
     private string _organizationLeaveMessage =
         "Leave is available only when Digital Solutions authorizes the selected Organization membership.";
@@ -1013,6 +1016,32 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyOrganizationInvitations =>
         ShowOrganizationMembers &&
         OrganizationInvitations.Count == 0;
+
+    public string OrganizationOwnershipTransferStatus
+    {
+        get => _organizationOwnershipTransferStatus;
+        private set
+        {
+            SetField(ref _organizationOwnershipTransferStatus, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationOwnershipTransferMessage
+    {
+        get => _organizationOwnershipTransferMessage;
+        private set =>
+            SetField(ref _organizationOwnershipTransferMessage, value);
+    }
+
+    public bool ShowOrganizationOwnershipTransferSection =>
+        OrganizationReady &&
+        _organizationPermissions?.TransferOwnership == true;
+
+    public bool CanTransferOrganizationOwnership =>
+        ShowOrganizationOwnershipTransferSection &&
+        OrganizationOwnershipTransferStatus != "TRANSFERRING" &&
+        !_purchaseAttemptLocked;
 
     public string OrganizationLeaveStatus
     {
@@ -3618,6 +3647,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _organizationTaxId = response.TaxId;
             LoadOrganizationProfileEditorFromAuthority();
             ResetOrganizationMemberManagementState();
+            ResetOrganizationOwnershipTransferState();
 
             OrganizationMembers.Clear();
             foreach (var member in response.Members)
@@ -4150,6 +4180,102 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             OrganizationMemberManagementStatus = "INVALID_INPUT";
             OrganizationMemberManagementMessage = error.Message;
+        }
+    }
+
+    public async Task TransferAccountOrganizationOwnershipAsync(
+        AccountOrganizationMember member,
+        CancellationToken cancellationToken)
+    {
+        if (!ShowOrganizationOwnershipTransferSection)
+        {
+            OrganizationOwnershipTransferStatus = "INVALID_INPUT";
+            OrganizationOwnershipTransferMessage =
+                "Refresh the selected Organization. Ownership transfer is available only when Digital Solutions authorizes it.";
+            return;
+        }
+
+        if (_purchaseAttemptLocked)
+        {
+            OrganizationOwnershipTransferStatus = "BLOCKED";
+            OrganizationOwnershipTransferMessage =
+                "Resolve the existing checkout attempt before transferring Organization ownership. Checkout recovery is bound to the current BKE identity and account.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(member.ManagementHandle))
+        {
+            OrganizationOwnershipTransferStatus = "INVALID_INPUT";
+            OrganizationOwnershipTransferMessage =
+                "The selected member cannot receive ownership safely. Refresh Organization details.";
+            return;
+        }
+
+        var organizationDisplayName = OrganizationDisplayName;
+        OrganizationOwnershipTransferStatus = "TRANSFERRING";
+        OrganizationOwnershipTransferMessage =
+            $"Transferring {organizationDisplayName} ownership to {member.Email} through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.TransferOwnershipAsync(
+                member.ManagementHandle,
+                cancellationToken);
+
+            if (response.Status == "TRANSFERRED" &&
+                response.ReauthenticationRequired)
+            {
+                EnterAccountOrganizationReauthentication(
+                    $"{organizationDisplayName} ownership was transferred to {member.Email}. Sign in again to refresh your authoritative BKE account access.");
+                return;
+            }
+
+            if (response.Status is
+                "AUTH_REQUIRED" or
+                "OUTCOME_UNKNOWN")
+            {
+                if (!response.ReauthenticationRequired)
+                {
+                    throw new InvalidDataException(
+                        "Organization ownership-transfer reauthentication boundary drifted.");
+                }
+
+                EnterAccountOrganizationReauthentication(
+                    response.Status == "OUTCOME_UNKNOWN"
+                        ? "The Organization ownership-transfer result could not be confirmed. BKE will not replay the request. Sign in again and inspect the authoritative Organization state before deciding whether to try again."
+                        : response.Error?.Message ??
+                          "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "NOT_ORGANIZATION")
+            {
+                ClearAccountOrganization(
+                    "NOT_ORGANIZATION",
+                    "The selected BKE account is not an Organization account.");
+                return;
+            }
+
+            OrganizationOwnershipTransferStatus = response.Status;
+            OrganizationOwnershipTransferMessage =
+                response.Error?.Message ??
+                "Organization ownership was not changed.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            // The Agent may already have submitted a destructive transfer to
+            // Digital Solutions. Never replay an ambiguous transfer and never
+            // retain stale selected-account authorization assumptions.
+            EnterAccountOrganizationReauthentication(
+                "The Organization ownership-transfer result could not be confirmed. BKE will not replay the request. Sign in again and inspect the authoritative Organization state before deciding whether to try again.");
+        }
+        catch (ArgumentException error)
+        {
+            OrganizationOwnershipTransferStatus = "INVALID_INPUT";
+            OrganizationOwnershipTransferMessage = error.Message;
         }
     }
 
@@ -4788,6 +4914,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetOrganizationProfileEditor();
         ResetOrganizationInvitationState();
         ResetOrganizationMemberManagementState();
+        ResetOrganizationOwnershipTransferState();
         ResetOrganizationLeaveState();
         _organizationAccount = null;
         _organizationPermissions = null;
@@ -4817,6 +4944,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationMemberManagementStatus = "IDLE";
         OrganizationMemberManagementMessage =
             "Manage members after loading the Agent-authoritative Organization overview.";
+    }
+
+    private void ResetOrganizationOwnershipTransferState()
+    {
+        OrganizationOwnershipTransferStatus = "IDLE";
+        OrganizationOwnershipTransferMessage =
+            "Transfer ownership only when Digital Solutions authorizes the selected Organization.";
     }
 
     private void ResetOrganizationLeaveState()
@@ -4915,6 +5049,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetOrganizationProfileEditor();
         ResetOrganizationInvitationState();
         ResetOrganizationMemberManagementState();
+        ResetOrganizationOwnershipTransferState();
         ResetOrganizationLeaveState();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
@@ -4978,6 +5113,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationInvitations));
+        Raise(nameof(OrganizationOwnershipTransferStatus));
+        Raise(nameof(OrganizationOwnershipTransferMessage));
+        Raise(nameof(ShowOrganizationOwnershipTransferSection));
+        Raise(nameof(CanTransferOrganizationOwnership));
         Raise(nameof(OrganizationLeaveStatus));
         Raise(nameof(OrganizationLeaveMessage));
         Raise(nameof(ShowOrganizationLeaveSection));
@@ -5290,6 +5429,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanSwitchAccount));
         Raise(nameof(SwitchAccountHint));
         Raise(nameof(CanLeaveOrganization));
+        Raise(nameof(CanTransferOrganizationOwnership));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

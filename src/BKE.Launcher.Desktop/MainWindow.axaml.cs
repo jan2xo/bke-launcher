@@ -260,6 +260,100 @@ public sealed partial class MainWindow : Window
         return await dialog.ShowDialog<bool>(this);
     }
 
+    private async void TransferOrganizationOwnership(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is not Button
+            {
+                DataContext:
+                    BKE.Launcher.Contracts.AccountOrganizationMember member,
+            })
+        {
+            return;
+        }
+
+        if (!ViewModel.CanTransferOrganizationOwnership)
+        {
+            await ViewModel.TransferAccountOrganizationOwnershipAsync(
+                member,
+                CancellationToken.None);
+            return;
+        }
+
+        if (!await ConfirmOrganizationOwnershipTransferAsync(member))
+        {
+            return;
+        }
+
+        await ViewModel.TransferAccountOrganizationOwnershipAsync(
+            member,
+            CancellationToken.None);
+    }
+
+    private async Task<bool> ConfirmOrganizationOwnershipTransferAsync(
+        BKE.Launcher.Contracts.AccountOrganizationMember member)
+    {
+        var organizationName = ViewModel.OrganizationDisplayName;
+        var targetLabel = string.IsNullOrWhiteSpace(member.Name)
+            ? member.Email
+            : $"{member.Name} ({member.Email})";
+        var dialog = new Window
+        {
+            Title = "Transfer organization ownership",
+            Width = 500,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var transfer = new Button
+        {
+            Content = "Transfer ownership",
+        };
+        var cancel = new Button
+        {
+            Content = "Cancel",
+        };
+
+        transfer.Click += (_, _) => dialog.Close(true);
+        cancel.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(24),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"Transfer {organizationName} to {targetLabel}?",
+                    FontSize = 20,
+                    FontWeight = Avalonia.Media.FontWeight.SemiBold,
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new TextBlock
+                {
+                    Text = "BKE Digital Solutions will change the Organization owner immediately. Your current owner authorization may change, so BKE will require fresh sign-in and authoritative account selection on this machine after a successful transfer. This action does not delete the Organization.",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 10,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children =
+                    {
+                        cancel,
+                        transfer,
+                    },
+                },
+            },
+        };
+
+        return await dialog.ShowDialog<bool>(this);
+    }
+
     private async void SetOrganizationMemberRoleMember(
         object? sender,
         RoutedEventArgs args) =>
