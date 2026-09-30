@@ -713,8 +713,14 @@ Require(
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Click=\"LeaveAccountOrganization\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ConfirmOrganizationLeaveAsync",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "This action does not delete the Organization.",
         StringComparison.Ordinal),
-    "Launcher organization self-leave permission/checkout/UI boundary drifted.");
+    "Launcher organization self-leave permission/checkout/confirmation boundary drifted.");
 
 var nativeMfaVerifyRequestProperties = typeof(NativeBkeMfaVerifyRequest)
     .GetProperties()
