@@ -4236,22 +4236,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             TaskCanceledException or
             InvalidDataException)
         {
-            try
-            {
-                await RefreshAccountOrganizationAsync(
-                    cancellationToken);
-            }
-            catch
-            {
-                // RefreshAccountOrganizationAsync reports its own state.
-            }
-
-            if (IsAuthenticated)
-            {
-                OrganizationLeaveStatus = "OUTCOME_UNKNOWN";
-                OrganizationLeaveMessage =
-                    "The Organization leave result could not be confirmed. BKE will not replay this request. Review the authoritative Organization state after the Licensing Agent is available; if the selected-account session was cleared, sign in again.";
-            }
+            // The local Agent may have received and committed the destructive
+            // request even when Launcher did not receive a valid response.
+            // Never replay it and never retain selected-account presentation.
+            EnterAccountOrganizationReauthentication(
+                "The Organization leave result could not be confirmed. BKE will not replay the request. Sign in again and check the available accounts before deciding whether to try again.");
         }
     }
 
