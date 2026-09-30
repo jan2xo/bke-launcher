@@ -54,6 +54,9 @@ public sealed class LauncherAccountPurchasesController
         {
             if (response.Account is not null ||
                 response.Permissions is not null ||
+                response.Licenses is null ||
+                response.Subscriptions is null ||
+                response.Orders is null ||
                 response.Licenses.Count != 0 ||
                 response.Subscriptions.Count != 0 ||
                 response.Orders.Count != 0 ||
@@ -70,6 +73,9 @@ public sealed class LauncherAccountPurchasesController
 
         if (response.Account is null ||
             response.Permissions is null ||
+            response.Licenses is null ||
+            response.Subscriptions is null ||
+            response.Orders is null ||
             response.Error is not null ||
             response.Licenses.Count > MaximumItems ||
             response.Subscriptions.Count > MaximumItems ||
@@ -83,10 +89,12 @@ public sealed class LauncherAccountPurchasesController
 
         foreach (var license in response.Licenses)
         {
-            if (!ValidText(license.ProductName, 1, 200) ||
+            if (license is null ||
+                !ValidText(license.ProductName, 1, 200) ||
                 !ValidOptionalText(license.EditionName, 120) ||
                 !ValidPlanType(license.PlanType) ||
                 !ValidStatus(license.Status) ||
+                string.IsNullOrEmpty(license.KeyLastFour) ||
                 license.KeyLastFour.Length != 4 ||
                 license.KeyLastFour.Any(character => character < 32) ||
                 !ValidOptionalTimestamp(license.ExpiresAt) ||
@@ -101,7 +109,8 @@ public sealed class LauncherAccountPurchasesController
 
         foreach (var subscription in response.Subscriptions)
         {
-            if (!ValidText(subscription.ProductName, 1, 200) ||
+            if (subscription is null ||
+                !ValidText(subscription.ProductName, 1, 200) ||
                 !ValidOptionalText(subscription.EditionName, 120) ||
                 !ValidPlanType(subscription.PlanType) ||
                 !ValidStatus(subscription.Status) ||
@@ -117,15 +126,19 @@ public sealed class LauncherAccountPurchasesController
 
         foreach (var order in response.Orders)
         {
-            if (!ValidText(order.Number, 1, 120) ||
+            if (order is null ||
+                !ValidText(order.Number, 1, 120) ||
                 !ValidStatus(order.Status) ||
                 order.TotalMinor < 0 ||
+                string.IsNullOrEmpty(order.Currency) ||
                 order.Currency.Length != 3 ||
                 order.Currency.Any(character =>
                     character is not (>= 'A' and <= 'Z')) ||
                 !DateTimeOffset.TryParse(order.CreatedAt, out _) ||
+                order.Items is null ||
                 order.Items.Count > MaximumOrderItems ||
                 order.Items.Any(item =>
+                    item is null ||
                     !ValidText(item.ProductName, 1, 200) ||
                     !ValidOptionalText(item.EditionName, 120) ||
                     !ValidOptionalText(item.PlanName, 120)))
@@ -156,7 +169,7 @@ public sealed class LauncherAccountPurchasesController
     private static bool ValidPlanType(string? value) =>
         value is null or "PERPETUAL" or "MONTHLY" or "ANNUAL";
 
-    private static bool ValidStatus(string value) =>
+    private static bool ValidStatus(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
         value.Length <= 64 &&
         value.All(character =>
@@ -174,9 +187,10 @@ public sealed class LauncherAccountPurchasesController
         ValidText(value, 0, maximum);
 
     private static bool ValidText(
-        string value,
+        string? value,
         int minimum,
         int maximum) =>
+        value is not null &&
         value.Length >= minimum &&
         value.Length <= maximum &&
         value.All(character => character >= 32);
