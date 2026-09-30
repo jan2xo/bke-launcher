@@ -337,8 +337,8 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "3bfe82ba52dd33a27174c89f45dcc4d034c54817",
-    "Launcher is not pinned to the merged Agent organization ownership-transfer authority.");
+        "d19ddd7b72dd4162c8eb08002a42ab1f85683524",
+    "Launcher is not pinned to the merged Agent organization invitation-acceptance authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -349,6 +349,8 @@ Require(
         "/v1/account/organization/profile" &&
     AgentLocalContract.AccountOrganizationInvitationCreatePath ==
         "/v1/account/organization/invitations/create" &&
+    AgentLocalContract.AccountOrganizationInvitationAcceptPath ==
+        "/v1/account/organization/invitations/accept" &&
     AgentLocalContract.AccountOrganizationInvitationManagePath ==
         "/v1/account/organization/invitations/manage" &&
     AgentLocalContract.AccountOrganizationMemberManagePath ==
@@ -489,6 +491,42 @@ using (var organizationInvitationDocument = JsonDocument.Parse(
         !root.TryGetProperty("owner_id", out _) &&
         !root.TryGetProperty("invitation_id", out _),
         "Launcher organization-invitation wire request widened.");
+}
+
+Require(
+    typeof(AccountOrganizationInvitationAcceptRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "InvitationCode"
+        ]),
+    "Launcher widened the Agent organization-invitation acceptance request.");
+
+using (var organizationInvitationAcceptDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationInvitationAcceptRequest(
+            "organization-invitation-accept-cert",
+            "organization-invitation-code-recipient-cert"))))
+{
+    var root = organizationInvitationAcceptDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "invitation_code"
+        ]) &&
+        root.GetProperty("invitation_code").GetString() ==
+            "organization-invitation-code-recipient-cert" &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("email", out _) &&
+        !root.TryGetProperty("membership_id", out _) &&
+        !root.TryGetProperty("owner_id", out _) &&
+        !root.TryGetProperty("role", out _),
+        "Launcher organization-invitation acceptance wire request widened beyond transient code intent.");
 }
 
 Require(
@@ -655,6 +693,7 @@ foreach (var type in new[]
     typeof(AccountOrganizationCreateResponse),
     typeof(AccountOrganizationProfileUpdateResponse),
     typeof(AccountOrganizationInvitationCreateResponse),
+    typeof(AccountOrganizationInvitationAcceptResponse),
     typeof(AccountOrganizationInvitationManageResponse),
     typeof(AccountOrganizationMemberManageResponse),
     typeof(AccountOrganizationOwnershipTransferResponse),
@@ -697,6 +736,15 @@ foreach (var type in new[]
         $"Launcher organization contract {type.Name} exposes authority/mutation identifiers.");
 }
 
+Require(
+    typeof(AccountOrganizationInvitationAcceptResponse)
+        .GetProperties()
+        .All(property =>
+            !property.Name.Contains(
+                "InvitationCode",
+                StringComparison.OrdinalIgnoreCase)),
+    "Launcher organization-invitation acceptance response reflects the transient invitation code.");
+
 var organizationControllerSource = File.ReadAllText(
     Path.Combine(
         "src",
@@ -725,6 +773,9 @@ Require(
         StringComparison.Ordinal) &&
     organizationClientSource.Contains(
         "AgentLocalContract.AccountOrganizationInvitationCreatePath",
+        StringComparison.Ordinal) &&
+    organizationClientSource.Contains(
+        "AgentLocalContract.AccountOrganizationInvitationAcceptPath",
         StringComparison.Ordinal) &&
     organizationClientSource.Contains(
         "AgentLocalContract.AccountOrganizationInvitationManagePath",
@@ -2752,6 +2803,68 @@ static async Task CertifyAccountOrganizationSettingsAsync()
             "customer@example.test",
         "Organization creation certification did not begin from the authenticated Personal account.");
 
+    Require(
+        createViewModel.ShowOrganizationInvitationAcceptanceSection &&
+        !createViewModel.CanAcceptOrganizationInvitation,
+        "Authenticated Personal account did not expose safe Organization invitation acceptance.");
+
+    createViewModel.OrganizationInvitationAcceptanceCode =
+        "organization-invitation-code-recipient-cert";
+    Require(
+        createViewModel.CanAcceptOrganizationInvitation,
+        "Valid Organization invitation code did not become acceptable.");
+
+    await createViewModel.AcceptAccountOrganizationInvitationAsync(
+        CancellationToken.None);
+
+    Require(
+        createAgent.OrganizationInvitationAcceptCount == 1 &&
+        createAgent.LastOrganizationInvitationAcceptRequest is
+            {
+                InvitationCode:
+                    "organization-invitation-code-recipient-cert"
+            } &&
+        string.IsNullOrEmpty(
+            createViewModel.OrganizationInvitationAcceptanceCode) &&
+        createViewModel.OrganizationInvitationAcceptanceStatus ==
+            "ACCEPTED" &&
+        createViewModel.OrganizationInvitationAccepted &&
+        createViewModel.OrganizationInvitationAcceptedRole ==
+            "MEMBER" &&
+        createViewModel.ShowOrganizationInvitationAcceptanceSwitch &&
+        createViewModel.IsAuthenticated &&
+        createViewModel.AccountTypeLabel == "Personal account" &&
+        createViewModel.OrganizationInvitationAcceptanceMessage.Contains(
+            "Switch BKE account",
+            StringComparison.Ordinal),
+        "Launcher invitation acceptance leaked the code, silently switched authority, or lost the accepted role.");
+
+    createAgent.OrganizationInvitationAcceptOutcomeUnknown = true;
+    createViewModel.OrganizationInvitationAcceptanceCode =
+        "organization-invitation-code-ambiguous-cert";
+
+    await createViewModel.AcceptAccountOrganizationInvitationAsync(
+        CancellationToken.None);
+
+    Require(
+        createAgent.OrganizationInvitationAcceptCount == 2 &&
+        string.IsNullOrEmpty(
+            createViewModel.OrganizationInvitationAcceptanceCode) &&
+        createViewModel.OrganizationInvitationAcceptanceStatus ==
+            "OUTCOME_UNKNOWN" &&
+        createViewModel.ShowOrganizationInvitationAcceptanceSwitch &&
+        !createViewModel.CanAcceptOrganizationInvitation &&
+        createViewModel.OrganizationInvitationAcceptanceMessage.Contains(
+            "will not retry",
+            StringComparison.OrdinalIgnoreCase),
+        "Launcher ambiguous invitation acceptance remained replayable or retained the transient code.");
+
+    await createViewModel.AcceptAccountOrganizationInvitationAsync(
+        CancellationToken.None);
+    Require(
+        createAgent.OrganizationInvitationAcceptCount == 2,
+        "Launcher blindly replayed an ambiguous Organization invitation acceptance.");
+
     createViewModel.OrganizationCreateDisplayName =
         "Created Certification Org";
     createViewModel.OrganizationCreateLegalName =
@@ -4323,6 +4436,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int OrganizationCreateCount { get; private set; }
     public int OrganizationProfileUpdateCount { get; private set; }
     public int OrganizationInvitationCreateCount { get; private set; }
+    public int OrganizationInvitationAcceptCount { get; private set; }
     public int OrganizationInvitationManageCount { get; private set; }
     public int OrganizationMemberManageCount { get; private set; }
     public int OrganizationOwnershipTransferCount { get; private set; }
@@ -4350,10 +4464,15 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         "CREATED";
     public bool OrganizationInvitationOutcomeUnknown { get; set; }
     public bool OrganizationInvitationIssued { get; private set; }
+    public string OrganizationInvitationAcceptOutcome { get; set; } =
+        "ACCEPTED";
+    public bool OrganizationInvitationAcceptOutcomeUnknown { get; set; }
     public bool OrganizationInvitationManageOutcomeUnknown { get; set; }
     public string OrganizationInvitationManageOutcome { get; set; } =
         "READY";
     public AccountOrganizationInvitationCreateRequest? LastOrganizationInvitationRequest
+        { get; private set; }
+    public AccountOrganizationInvitationAcceptRequest? LastOrganizationInvitationAcceptRequest
         { get; private set; }
     public AccountOrganizationInvitationManageRequest? LastOrganizationInvitationManageRequest
         { get; private set; }
@@ -5208,6 +5327,70 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                     "2026-10-07T00:00:00.000Z",
                     "2026-09-30T00:00:00.000Z"),
                 "organization-invitation-code-cert",
+                null));
+    }
+
+    public Task<AccountOrganizationInvitationAcceptResponse> AcceptAccountOrganizationInvitationAsync(
+        AccountOrganizationInvitationAcceptRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OrganizationInvitationAcceptCount++;
+        LastOrganizationInvitationAcceptRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountOrganizationInvitationAcceptResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    false,
+                    new AccountOrganizationError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (OrganizationInvitationAcceptOutcomeUnknown)
+        {
+            OrganizationInvitationAcceptOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountOrganizationInvitationAcceptResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    null,
+                    false,
+                    new AccountOrganizationError(
+                        "ORGANIZATION_INVITATION_ACCEPTANCE_OUTCOME_UNKNOWN",
+                        "The invitation acceptance result could not be confirmed.",
+                        false)));
+        }
+
+        if (OrganizationInvitationAcceptOutcome != "ACCEPTED")
+        {
+            return Task.FromResult(
+                new AccountOrganizationInvitationAcceptResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    OrganizationInvitationAcceptOutcome,
+                    null,
+                    false,
+                    new AccountOrganizationError(
+                        OrganizationInvitationAcceptOutcome,
+                        "The Organization invitation was not accepted.",
+                        false)));
+        }
+
+        return Task.FromResult(
+            new AccountOrganizationInvitationAcceptResponse(
+                AgentLocalContract.AccountOrganizationCapabilityId,
+                AgentLocalContract.AccountOrganizationContractVersion,
+                "ACCEPTED",
+                "MEMBER",
+                true,
                 null));
     }
 
