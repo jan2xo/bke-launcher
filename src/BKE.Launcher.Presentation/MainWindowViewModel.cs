@@ -103,6 +103,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _organizationEditRegistrationNumber = string.Empty;
     private string _organizationEditBillingEmail = string.Empty;
     private string _organizationEditTaxId = string.Empty;
+    private string _organizationInvitationStatus = "IDLE";
+    private string _organizationInvitationMessage =
+        "Invite members after loading the Agent-authoritative Organization overview.";
+    private string _organizationInvitationEmail = string.Empty;
+    private string _organizationInvitationRole = "MEMBER";
+    private string _organizationInvitationCode = string.Empty;
     private AccountOrganizationAccount? _organizationAccount;
     private AccountOrganizationPermissions? _organizationPermissions;
     private AccountOrganizationProfile? _organizationProfile;
@@ -196,6 +202,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
     public ObservableCollection<AccountOrganizationMember> OrganizationMembers { get; } = [];
     public ObservableCollection<AccountOrganizationInvitation> OrganizationInvitations { get; } = [];
+    public IReadOnlyList<string> OrganizationInvitationRoles { get; } =
+        ["MEMBER", "LICENSE_MANAGER", "BILLING", "OWNER"];
     public ObservableCollection<PurchaseLegalDocumentViewModel> PurchaseLegalDocuments { get; } = [];
     public ObservableCollection<RegistrationLegalDocumentViewModel> RegistrationLegalDocuments { get; } = [];
     public ObservableCollection<NativeBkeAccountChoice> AvailableAccounts { get; } = [];
@@ -897,6 +905,71 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             (ValidOrganizationCreateEmail(
                 OrganizationEditBillingEmail) &&
              OrganizationEditTaxId.Trim().Length <= 80));
+
+    public string OrganizationInvitationStatus
+    {
+        get => _organizationInvitationStatus;
+        private set
+        {
+            SetField(ref _organizationInvitationStatus, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationInvitationMessage
+    {
+        get => _organizationInvitationMessage;
+        private set =>
+            SetField(ref _organizationInvitationMessage, value);
+    }
+
+    public string OrganizationInvitationEmail
+    {
+        get => _organizationInvitationEmail;
+        set
+        {
+            SetField(ref _organizationInvitationEmail, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationInvitationRole
+    {
+        get => _organizationInvitationRole;
+        set
+        {
+            SetField(ref _organizationInvitationRole, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationInvitationCode
+    {
+        get => _organizationInvitationCode;
+        private set
+        {
+            SetField(ref _organizationInvitationCode, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public bool HasOrganizationInvitationCode =>
+        !string.IsNullOrWhiteSpace(OrganizationInvitationCode);
+
+    public bool CanManageOrganizationInvitations =>
+        OrganizationReady &&
+        _organizationPermissions?.ManageMembers == true;
+
+    public bool ShowOrganizationInviteSection =>
+        CanManageOrganizationInvitations ||
+        (IsAuthenticated && HasOrganizationInvitationCode);
+
+    public bool CanInviteOrganizationMember =>
+        CanManageOrganizationInvitations &&
+        OrganizationInvitationStatus != "ISSUING" &&
+        !HasOrganizationInvitationCode &&
+        ValidOrganizationCreateEmail(OrganizationInvitationEmail) &&
+        ValidOrganizationMemberRole(OrganizationInvitationRole);
 
     public bool ShowOrganizationMembers =>
         OrganizationReady &&
@@ -3627,6 +3700,133 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task CreateAccountOrganizationInvitationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanInviteOrganizationMember)
+        {
+            OrganizationInvitationStatus = "INVALID_INPUT";
+            OrganizationInvitationMessage =
+                "Refresh the selected Organization, enter a valid email, choose an allowed role, and finish delivery of any previous invitation code before issuing another invite.";
+            return;
+        }
+
+        var invitedEmail = OrganizationInvitationEmail;
+        var invitedRole = OrganizationInvitationRole;
+
+        OrganizationInvitationStatus = "ISSUING";
+        OrganizationInvitationMessage =
+            "Issuing the Organization invitation through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.CreateInvitationAsync(
+                invitedEmail,
+                invitedRole,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                ResetAccountOrganizationState();
+                EnterAccountOrganizationReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "NOT_ORGANIZATION")
+            {
+                ClearAccountOrganization(
+                    "NOT_ORGANIZATION",
+                    "The selected BKE account is not an Organization account.");
+                return;
+            }
+
+            if (response.Status == "CREATED" &&
+                response.Invitation is not null &&
+                !string.IsNullOrWhiteSpace(response.InvitationCode))
+            {
+                var invitation = response.Invitation;
+                var invitationCode = response.InvitationCode;
+                ClearOrganizationInvitationForm();
+
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+
+                if (IsAuthenticated)
+                {
+                    OrganizationInvitationCode = invitationCode;
+                    OrganizationInvitationStatus = "CREATED";
+                    OrganizationInvitationMessage =
+                        $"Invitation for {invitation.Email} ({invitation.Role}) was issued. Save or send the one-time invitation code before dismissing it; BKE does not persist a local copy.";
+                }
+                return;
+            }
+
+            if (response.Status == "OUTCOME_UNKNOWN")
+            {
+                ClearOrganizationInvitationForm();
+                OrganizationInvitationCode = string.Empty;
+
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+
+                if (IsAuthenticated)
+                {
+                    OrganizationInvitationStatus =
+                        "OUTCOME_UNKNOWN";
+                    OrganizationInvitationMessage =
+                        "The invitation result could not be confirmed. Pending invitations were refreshed when possible; review the current Organization state before issuing another invitation.";
+                }
+                return;
+            }
+
+            OrganizationInvitationStatus = response.Status;
+            OrganizationInvitationMessage =
+                response.Error?.Message ??
+                "The Organization invitation was not issued.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ClearOrganizationInvitationForm();
+            OrganizationInvitationCode = string.Empty;
+            try
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+            }
+            catch
+            {
+                // RefreshAccountOrganizationAsync reports its own state.
+            }
+
+            if (IsAuthenticated)
+            {
+                OrganizationInvitationStatus =
+                    "OUTCOME_UNKNOWN";
+                OrganizationInvitationMessage =
+                    "The invitation result could not be confirmed. Pending invitations were refreshed when possible; review the current Organization state before issuing another invitation.";
+            }
+        }
+        catch (ArgumentException error)
+        {
+            OrganizationInvitationStatus = "INVALID_INPUT";
+            OrganizationInvitationMessage = error.Message;
+        }
+    }
+
+    public void CompleteOrganizationInvitationDelivery()
+    {
+        OrganizationInvitationCode = string.Empty;
+        OrganizationInvitationStatus = "IDLE";
+        OrganizationInvitationMessage =
+            CanManageOrganizationInvitations
+                ? "Invitation code dismissed. You may issue another Organization invitation."
+                : "Refresh organization details before issuing another invitation.";
+    }
+
     public async Task RefreshAccountPrivacyAsync(
         CancellationToken cancellationToken)
     {
@@ -4169,13 +4369,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationCreateMessage =
             "Create a BKE Organization, then switch accounts to select it.";
         ResetOrganizationProfileEditor();
+        ResetOrganizationInvitationState();
         _organizationAccount = null;
         _organizationPermissions = null;
         _organizationProfile = null;
         _organizationCounts = null;
         _organizationBillingEmail = null;
         _organizationTaxId = null;
-        ResetOrganizationProfileEditor();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
         AccountOrganizationStatus = "UNKNOWN";
@@ -4192,6 +4392,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationCreateRegistrationNumber = string.Empty;
         OrganizationCreateTaxId = string.Empty;
     }
+
+    private void ResetOrganizationInvitationState()
+    {
+        ClearOrganizationInvitationForm();
+        OrganizationInvitationCode = string.Empty;
+        OrganizationInvitationStatus = "IDLE";
+        OrganizationInvitationMessage =
+            "Invite members after loading the Agent-authoritative Organization overview.";
+    }
+
+    private void ClearOrganizationInvitationForm()
+    {
+        OrganizationInvitationEmail = string.Empty;
+        OrganizationInvitationRole = "MEMBER";
+    }
+
+    private static bool ValidOrganizationMemberRole(string? role) =>
+        role is "OWNER" or "BILLING" or "LICENSE_MANAGER" or "MEMBER";
 
     private void ResetOrganizationProfileEditor()
     {
@@ -4262,6 +4480,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _organizationBillingEmail = null;
         _organizationTaxId = null;
         ResetOrganizationProfileEditor();
+        ResetOrganizationInvitationState();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
         AccountOrganizationStatus = status;
@@ -4311,6 +4530,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(OrganizationIdentityProfileDirty));
         Raise(nameof(OrganizationBillingProfileDirty));
         Raise(nameof(CanSaveOrganizationProfile));
+        Raise(nameof(OrganizationInvitationStatus));
+        Raise(nameof(OrganizationInvitationMessage));
+        Raise(nameof(HasOrganizationInvitationCode));
+        Raise(nameof(CanManageOrganizationInvitations));
+        Raise(nameof(ShowOrganizationInviteSection));
+        Raise(nameof(CanInviteOrganizationMember));
         Raise(nameof(ShowOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationInvitations));
