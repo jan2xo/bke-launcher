@@ -182,6 +182,65 @@ public sealed partial class MainWindow : Window
         ViewModel.CompleteOrganizationInvitationDelivery();
     }
 
+    private async void SetOrganizationMemberRoleMember(
+        object? sender,
+        RoutedEventArgs args) =>
+        await ManageOrganizationMemberAsync(
+            sender,
+            "UPDATE_ROLE",
+            "MEMBER");
+
+    private async void SetOrganizationMemberRoleLicenseManager(
+        object? sender,
+        RoutedEventArgs args) =>
+        await ManageOrganizationMemberAsync(
+            sender,
+            "UPDATE_ROLE",
+            "LICENSE_MANAGER");
+
+    private async void SetOrganizationMemberRoleBilling(
+        object? sender,
+        RoutedEventArgs args) =>
+        await ManageOrganizationMemberAsync(
+            sender,
+            "UPDATE_ROLE",
+            "BILLING");
+
+    private async void SetOrganizationMemberRoleOwner(
+        object? sender,
+        RoutedEventArgs args) =>
+        await ManageOrganizationMemberAsync(
+            sender,
+            "UPDATE_ROLE",
+            "OWNER");
+
+    private async void RemoveOrganizationMember(
+        object? sender,
+        RoutedEventArgs args) =>
+        await ManageOrganizationMemberAsync(
+            sender,
+            "REMOVE",
+            null);
+
+    private async Task ManageOrganizationMemberAsync(
+        object? sender,
+        string action,
+        string? role)
+    {
+        if (sender is Button
+            {
+                DataContext:
+                    BKE.Launcher.Contracts.AccountOrganizationMember member,
+            })
+        {
+            await ViewModel.ManageAccountOrganizationMemberAsync(
+                member,
+                action,
+                role,
+                CancellationToken.None);
+        }
+    }
+
     private async void ResendOrganizationInvitation(
         object? sender,
         RoutedEventArgs args)
