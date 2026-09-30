@@ -524,9 +524,9 @@
                                 <TextBlock Text="{Binding Role}"
                                            FontSize="11"
                                            Opacity="0.72" />
-                                <WrapPanel Margin="0,4,0,0"
-                                           ItemSpacing="6"
-                                           LineSpacing="6">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="6"
+                                            Margin="0,4,0,0">
                                   <Button Content="Member"
                                           Click="SetOrganizationMemberRoleMember" />
                                   <Button Content="License manager"
@@ -537,7 +537,7 @@
                                           Click="SetOrganizationMemberRoleOwner" />
                                   <Button Content="Remove"
                                           Click="RemoveOrganizationMember" />
-                                </WrapPanel>
+                                </StackPanel>
                               </StackPanel>
                             </Border>
                           </DataTemplate>
