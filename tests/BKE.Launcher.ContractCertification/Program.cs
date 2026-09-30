@@ -169,6 +169,7 @@ Require(agentMethods.SetEquals([
     "UpdateAccountOrganizationProfileAsync",
     "CreateAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationInvitationAsync",
+    "ManageAccountOrganizationMemberAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -334,8 +335,8 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "7775f2fd8102714715a2e5ccbc3c3d37cdb51e0b",
-    "Launcher is not pinned to the merged Agent organization-invitation-management authority.");
+        "5e29c4efbba35a2ec28199913e5c2049285ecdd7",
+    "Launcher is not pinned to the merged Agent organization-member-management authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -348,6 +349,8 @@ Require(
         "/v1/account/organization/invitations/create" &&
     AgentLocalContract.AccountOrganizationInvitationManagePath ==
         "/v1/account/organization/invitations/manage" &&
+    AgentLocalContract.AccountOrganizationMemberManagePath ==
+        "/v1/account/organization/members/manage" &&
     AgentLocalContract.AccountOrganizationCapabilityId ==
         "bke.account-organization" &&
     AgentLocalContract.AccountOrganizationContractVersion == 1,
@@ -520,6 +523,64 @@ using (var organizationInvitationManageDocument = JsonDocument.Parse(
         "Launcher organization-invitation-management wire request widened.");
 }
 
+Require(
+    typeof(AccountOrganizationMemberManageRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "Action",
+            "ManagementHandle",
+            "Role"
+        ]),
+    "Launcher widened the Agent organization-member-management request.");
+
+using (var organizationMemberManageDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationMemberManageRequest(
+            "organization-member-manage-cert",
+            "UPDATE_ROLE",
+            "bke-org-member-v1_" + new string('c', 64),
+            "BILLING"))))
+{
+    var root = organizationMemberManageDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "action",
+            "management_handle",
+            "role"
+        ]) &&
+        root.GetProperty("action").GetString() == "UPDATE_ROLE" &&
+        root.GetProperty("management_handle").GetString() ==
+            "bke-org-member-v1_" + new string('c', 64) &&
+        root.GetProperty("role").GetString() == "BILLING" &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("member_id", out _) &&
+        !root.TryGetProperty("membership_id", out _) &&
+        !root.TryGetProperty("owner_id", out _),
+        "Launcher organization-member-management wire request widened.");
+}
+
+using (var organizationMemberRemoveDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationMemberManageRequest(
+            "organization-member-remove-cert",
+            "REMOVE",
+            "bke-org-member-v1_" + new string('c', 64),
+            null))))
+{
+    var root = organizationMemberRemoveDocument.RootElement;
+    Require(
+        root.GetProperty("action").GetString() == "REMOVE" &&
+        !root.TryGetProperty("role", out _),
+        "Launcher organization-member removal leaked a role payload.");
+}
+
 foreach (var type in new[]
 {
     typeof(AccountOrganizationOverviewResponse),
@@ -527,6 +588,7 @@ foreach (var type in new[]
     typeof(AccountOrganizationProfileUpdateResponse),
     typeof(AccountOrganizationInvitationCreateResponse),
     typeof(AccountOrganizationInvitationManageResponse),
+    typeof(AccountOrganizationMemberManageResponse),
     typeof(AccountOrganizationInvitationIssued),
     typeof(AccountOrganizationAccount),
     typeof(AccountOrganizationMember),
@@ -555,6 +617,12 @@ foreach (var type in new[]
                 StringComparison.OrdinalIgnoreCase) &&
             !property.Name.Equals(
                 "InvitationId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "MemberId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "MembershipId",
                 StringComparison.OrdinalIgnoreCase)),
         $"Launcher organization contract {type.Name} exposes authority/mutation identifiers.");
 }
@@ -590,6 +658,9 @@ Require(
         StringComparison.Ordinal) &&
     organizationClientSource.Contains(
         "AgentLocalContract.AccountOrganizationInvitationManagePath",
+        StringComparison.Ordinal) &&
+    organizationClientSource.Contains(
+        "AgentLocalContract.AccountOrganizationMemberManagePath",
         StringComparison.Ordinal),
     "Launcher bypassed the local Agent organization authority.");
 
@@ -1226,6 +1297,29 @@ Require(
         "RevokeOrganizationInvitation",
         StringComparison.Ordinal),
     "Launcher transient Organization invitation-code delivery and management UX is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "Content=\"License manager\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"SetOrganizationMemberRoleMember\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"SetOrganizationMemberRoleLicenseManager\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"SetOrganizationMemberRoleBilling\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"SetOrganizationMemberRoleOwner\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"RemoveOrganizationMember\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ManageAccountOrganizationMemberAsync",
+        StringComparison.Ordinal),
+    "Launcher Organization member-management UX is missing.");
 Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
     "Launcher does not resolve Agent-owned authentication state on startup.");
 Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
@@ -2627,7 +2721,11 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         ownerViewModel.HasOrganizationLicenseCount &&
         ownerViewModel.HasOrganizationSubscriptionCount &&
         ownerViewModel.HasOrganizationOrderCount &&
-        ownerViewModel.OrganizationMembers.Count == 1 &&
+        ownerViewModel.OrganizationMembers.Count == 2 &&
+        ownerViewModel.OrganizationMembers.Any(member =>
+            member.Email == "manager@example.test" &&
+            member.ManagementHandle ==
+                CustomerJourneyAgentClient.OrganizationManagedMemberHandle) &&
         ownerViewModel.OrganizationInvitations.Count == 1 &&
         ownerViewModel.OrganizationInvitations[0].ManagementHandle ==
             CustomerJourneyAgentClient.OrganizationInvitationHandle &&
@@ -2837,6 +2935,108 @@ static async Task CertifyAccountOrganizationSettingsAsync()
             StringComparison.OrdinalIgnoreCase),
         "Ambiguous Organization invitation replayed, leaked a code, or skipped authoritative refresh.");
 
+    var managedMember =
+        ownerViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test");
+    var readsBeforeMemberRole =
+        ownerAgent.OrganizationReadCount;
+    await ownerViewModel.ManageAccountOrganizationMemberAsync(
+        managedMember,
+        "UPDATE_ROLE",
+        "BILLING",
+        CancellationToken.None);
+
+    Require(
+        ownerAgent.OrganizationMemberManageCount == 1 &&
+        ownerAgent.LastOrganizationMemberManageRequest is
+            {
+                Action: "UPDATE_ROLE",
+                ManagementHandle:
+                    CustomerJourneyAgentClient.OrganizationManagedMemberHandle,
+                Role: "BILLING"
+            } &&
+        ownerAgent.OrganizationReadCount ==
+            readsBeforeMemberRole + 1 &&
+        ownerViewModel.OrganizationMemberManagementStatus ==
+            "UPDATED" &&
+        ownerViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test").Role ==
+            "BILLING",
+        "Launcher member role update widened identity authority or skipped authoritative refresh.");
+
+    ownerAgent.OrganizationMemberManageOutcome =
+        "LAST_OWNER_REQUIRED";
+    var ownerMember =
+        ownerViewModel.OrganizationMembers.Single(
+            member => member.Email == "owner@example.test");
+    await ownerViewModel.ManageAccountOrganizationMemberAsync(
+        ownerMember,
+        "UPDATE_ROLE",
+        "MEMBER",
+        CancellationToken.None);
+    Require(
+        ownerAgent.OrganizationMemberManageCount == 2 &&
+        ownerViewModel.OrganizationMemberManagementStatus ==
+            "LAST_OWNER_REQUIRED" &&
+        ownerViewModel.OrganizationMembers.Single(
+            member => member.Email == "owner@example.test").Role ==
+            "OWNER",
+        "Launcher weakened last-owner protection or optimistically changed the member list.");
+    ownerAgent.OrganizationMemberManageOutcome = "READY";
+
+    ownerAgent.OrganizationMemberManageOutcomeUnknown = true;
+    managedMember =
+        ownerViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test");
+    var readsBeforeMemberUnknown =
+        ownerAgent.OrganizationReadCount;
+    await ownerViewModel.ManageAccountOrganizationMemberAsync(
+        managedMember,
+        "UPDATE_ROLE",
+        "LICENSE_MANAGER",
+        CancellationToken.None);
+    Require(
+        ownerAgent.OrganizationMemberManageCount == 3 &&
+        ownerAgent.OrganizationReadCount ==
+            readsBeforeMemberUnknown + 1 &&
+        ownerViewModel.OrganizationMemberManagementStatus ==
+            "OUTCOME_UNKNOWN" &&
+        ownerViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test").Role ==
+            "BILLING" &&
+        ownerViewModel.OrganizationMemberManagementMessage.Contains(
+            "review",
+            StringComparison.OrdinalIgnoreCase),
+        "Ambiguous member management replayed or skipped authoritative refresh.");
+
+    managedMember =
+        ownerViewModel.OrganizationMembers.Single(
+            member => member.Email == "manager@example.test");
+    var readsBeforeMemberRemove =
+        ownerAgent.OrganizationReadCount;
+    await ownerViewModel.ManageAccountOrganizationMemberAsync(
+        managedMember,
+        "REMOVE",
+        null,
+        CancellationToken.None);
+    Require(
+        ownerAgent.OrganizationMemberManageCount == 4 &&
+        ownerAgent.LastOrganizationMemberManageRequest is
+            {
+                Action: "REMOVE",
+                ManagementHandle:
+                    CustomerJourneyAgentClient.OrganizationManagedMemberHandle,
+                Role: null
+            } &&
+        ownerAgent.OrganizationReadCount ==
+            readsBeforeMemberRemove + 1 &&
+        ownerViewModel.OrganizationMemberManagementStatus ==
+            "REMOVED" &&
+        ownerViewModel.OrganizationMembers.Count == 1 &&
+        ownerViewModel.OrganizationMembers[0].Email ==
+            "owner@example.test",
+        "Launcher member removal leaked role intent or skipped authoritative refresh.");
+
     var billingCatalog = new CustomerJourneyCatalogSource();
     var billingAgent = new CustomerJourneyAgentClient(billingCatalog)
     {
@@ -2876,8 +3076,9 @@ static async Task CertifyAccountOrganizationSettingsAsync()
     Require(
         !billingViewModel.CanManageOrganizationInvitations &&
         !billingViewModel.ShowOrganizationInviteSection &&
-        !billingViewModel.CanInviteOrganizationMember,
-        "BILLING role received MANAGE_MEMBERS invitation UX.");
+        !billingViewModel.CanInviteOrganizationMember &&
+        !billingViewModel.CanManageOrganizationMemberActions,
+        "BILLING role received MANAGE_MEMBERS member/invitation UX.");
 
     billingViewModel.OrganizationEditBillingEmail =
         "billing-new@example.test";
@@ -2956,8 +3157,22 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         CancellationToken.None);
     Require(
         switchViewModel.OrganizationDisplayName == "First Org" &&
-        switchViewModel.OrganizationMembers.Count == 1,
+        switchViewModel.OrganizationMembers.Count == 2,
         "Account-switch organization certification did not load initial organization state.");
+
+    switchAgent.OrganizationMemberManageOutcome =
+        "LAST_OWNER_REQUIRED";
+    await switchViewModel.ManageAccountOrganizationMemberAsync(
+        switchViewModel.OrganizationMembers.Single(
+            member => member.Email == "owner@example.test"),
+        "UPDATE_ROLE",
+        "MEMBER",
+        CancellationToken.None);
+    Require(
+        switchViewModel.OrganizationMemberManagementStatus ==
+            "LAST_OWNER_REQUIRED",
+        "Account-switch certification did not create member-management presentation state.");
+    switchAgent.OrganizationMemberManageOutcome = "READY";
 
     switchViewModel.OrganizationInvitationEmail =
         "switch-clear@example.test";
@@ -2989,6 +3204,9 @@ static async Task CertifyAccountOrganizationSettingsAsync()
             switchViewModel.OrganizationInvitationCode) &&
         switchViewModel.OrganizationInvitationStatus == "IDLE",
         "Safe account switching retained transient Organization invitation delivery state.");
+    Require(
+        switchViewModel.OrganizationMemberManagementStatus == "IDLE",
+        "Safe account switching retained Organization member-management state.");
 
     switchAgent.Authenticated = true;
     switchAgent.OrganizationDisplayName = "Second Org";
@@ -3470,6 +3688,10 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         "bke-org-invite-v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     public const string NewOrganizationInvitationHandle =
         "bke-org-invite-v1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    public const string OrganizationOwnerMemberHandle =
+        "bke-org-member-v1_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    public const string OrganizationManagedMemberHandle =
+        "bke-org-member-v1_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 
     private const string AccountId = "acct-cert-recipient";
     private readonly CustomerJourneyCatalogSource _catalog;
@@ -3491,6 +3713,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int OrganizationProfileUpdateCount { get; private set; }
     public int OrganizationInvitationCreateCount { get; private set; }
     public int OrganizationInvitationManageCount { get; private set; }
+    public int OrganizationMemberManageCount { get; private set; }
     public int PlatformAuthorityCount { get; private set; }
     public bool Authenticated { get; set; } = true;
     public string AccountType { get; set; } = "INDIVIDUAL";
@@ -3520,6 +3743,14 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public AccountOrganizationInvitationCreateRequest? LastOrganizationInvitationRequest
         { get; private set; }
     public AccountOrganizationInvitationManageRequest? LastOrganizationInvitationManageRequest
+        { get; private set; }
+    public string OrganizationMemberManageOutcome { get; set; } =
+        "READY";
+    public bool OrganizationMemberManageOutcomeUnknown { get; set; }
+    public bool OrganizationManagedMemberExists { get; private set; } = true;
+    public string OrganizationManagedMemberRole { get; private set; } =
+        "MEMBER";
+    public AccountOrganizationMemberManageRequest? LastOrganizationMemberManageRequest
         { get; private set; }
     public string OrganizationCreateOutcome { get; set; } =
         "CREATED";
@@ -4046,13 +4277,28 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 viewBilling || viewLicenses ? 4 : null,
                 viewBilling ? 3 : null),
             manageMembers
-                ? new[]
-                {
-                    new AccountOrganizationMember(
-                        "owner@example.test",
-                        "Owner",
-                        "OWNER"),
-                }
+                ? OrganizationManagedMemberExists
+                    ? new[]
+                    {
+                        new AccountOrganizationMember(
+                            "owner@example.test",
+                            "Owner",
+                            "OWNER",
+                            OrganizationOwnerMemberHandle),
+                        new AccountOrganizationMember(
+                            "manager@example.test",
+                            "Manager",
+                            OrganizationManagedMemberRole,
+                            OrganizationManagedMemberHandle),
+                    }
+                    : new[]
+                    {
+                        new AccountOrganizationMember(
+                            "owner@example.test",
+                            "Owner",
+                            "OWNER",
+                            OrganizationOwnerMemberHandle),
+                    }
                 : Array.Empty<AccountOrganizationMember>(),
             manageMembers
                 ? OrganizationInvitationIssued
@@ -4400,6 +4646,96 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
         throw new InvalidOperationException(
             "Unexpected certification invitation management action.");
+    }
+
+    public Task<AccountOrganizationMemberManageResponse> ManageAccountOrganizationMemberAsync(
+        AccountOrganizationMemberManageRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OrganizationMemberManageCount++;
+        LastOrganizationMemberManageRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountOrganizationMemberManageResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "AUTH_REQUIRED",
+                    new AccountOrganizationError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (OrganizationMemberManageOutcomeUnknown)
+        {
+            OrganizationMemberManageOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountOrganizationMemberManageResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    new AccountOrganizationError(
+                        "ORGANIZATION_MEMBER_MANAGEMENT_OUTCOME_UNKNOWN",
+                        "The member management result could not be confirmed.",
+                        false)));
+        }
+
+        if (OrganizationMemberManageOutcome != "READY")
+        {
+            return Task.FromResult(
+                new AccountOrganizationMemberManageResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    OrganizationMemberManageOutcome,
+                    new AccountOrganizationError(
+                        OrganizationMemberManageOutcome,
+                        OrganizationMemberManageOutcome == "LAST_OWNER_REQUIRED"
+                            ? "The last Organization owner cannot be demoted or removed."
+                            : "The selected member cannot be managed.",
+                        false)));
+        }
+
+        if (request.ManagementHandle != OrganizationManagedMemberHandle)
+        {
+            throw new InvalidOperationException(
+                "Unexpected certification member management handle.");
+        }
+
+        if (request.Action == "UPDATE_ROLE")
+        {
+            OrganizationManagedMemberRole =
+                request.Role ??
+                throw new InvalidOperationException(
+                    "Missing certification member role.");
+            return Task.FromResult(
+                new AccountOrganizationMemberManageResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "UPDATED",
+                    null));
+        }
+
+        if (request.Action == "REMOVE")
+        {
+            if (request.Role is not null)
+            {
+                throw new InvalidOperationException(
+                    "Certification member removal carried a role.");
+            }
+            OrganizationManagedMemberExists = false;
+            return Task.FromResult(
+                new AccountOrganizationMemberManageResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "REMOVED",
+                    null));
+        }
+
+        throw new InvalidOperationException(
+            "Unexpected certification member management action.");
     }
 
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(

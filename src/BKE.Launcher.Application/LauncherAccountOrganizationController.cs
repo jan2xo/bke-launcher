@@ -195,6 +195,51 @@ public sealed class LauncherAccountOrganizationController
         return response;
     }
 
+    public async Task<AccountOrganizationMemberManageResponse> ManageMemberAsync(
+        string action,
+        string managementHandle,
+        string? role,
+        CancellationToken cancellationToken)
+    {
+        if (action is not ("UPDATE_ROLE" or "REMOVE"))
+        {
+            throw new ArgumentException(
+                "Organization member action is invalid.");
+        }
+
+        RequireMemberManagementHandle(managementHandle);
+
+        if (action == "UPDATE_ROLE")
+        {
+            if (role is not (
+                "OWNER" or
+                "BILLING" or
+                "LICENSE_MANAGER" or
+                "MEMBER"))
+            {
+                throw new ArgumentException(
+                    "Organization member role is invalid.");
+            }
+        }
+        else if (role is not null)
+        {
+            throw new ArgumentException(
+                "Organization member removal must not include a role.");
+        }
+
+        var response =
+            await _agent.ManageAccountOrganizationMemberAsync(
+                new AccountOrganizationMemberManageRequest(
+                    Guid.NewGuid().ToString("N"),
+                    action,
+                    managementHandle,
+                    role),
+                cancellationToken);
+
+        ValidateMemberManageContract(response);
+        return response;
+    }
+
     private static void ValidateContract(
         AccountOrganizationOverviewResponse response)
     {
@@ -279,6 +324,8 @@ public sealed class LauncherAccountOrganizationController
             RequireBounded(member.Email, 320, "member email");
             RequireOptionalBounded(member.Name, 160, "member name");
             RequireRole(member.Role);
+            RequireContractMemberManagementHandle(
+                member.ManagementHandle);
         }
 
         foreach (var invitation in response.Invitations)
@@ -290,6 +337,55 @@ public sealed class LauncherAccountOrganizationController
             RequireTimestamp(invitation.CreatedAt, "invitation creation");
             RequireContractInvitationManagementHandle(
                 invitation.ManagementHandle);
+        }
+    }
+
+    private static void ValidateMemberManageContract(
+        AccountOrganizationMemberManageResponse response)
+    {
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountOrganizationCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountOrganizationContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-member management contract drifted.");
+        }
+
+        if (response.Status is not (
+            "UPDATED" or
+            "REMOVED" or
+            "INVALID_INPUT" or
+            "NOT_ORGANIZATION" or
+            "ACCOUNT_FORBIDDEN" or
+            "MEMBER_NOT_FOUND" or
+            "LAST_OWNER_REQUIRED" or
+            "CLOSED_ACCOUNT" or
+            "SUSPENDED_ACCOUNT" or
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN" or
+            "FAILED"))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-member management status drifted.");
+        }
+
+        if (response.Status is "UPDATED" or "REMOVED")
+        {
+            if (response.Error is not null)
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization-member success exposed error state.");
+            }
+            return;
+        }
+
+        if (response.Error is null ||
+            string.IsNullOrWhiteSpace(response.Error.Code) ||
+            string.IsNullOrWhiteSpace(response.Error.Message))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-member failure is missing error state.");
         }
     }
 
@@ -574,6 +670,34 @@ public sealed class LauncherAccountOrganizationController
         {
             throw new ArgumentException(
                 $"Organization {label} is invalid.");
+        }
+    }
+
+    private static void RequireContractMemberManagementHandle(
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            !System.Text.RegularExpressions.Regex.IsMatch(
+                value,
+                "^bke-org-member-v1_[0-9a-f]{64}$",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization member management handle drifted.");
+        }
+    }
+
+    private static void RequireMemberManagementHandle(
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            !System.Text.RegularExpressions.Regex.IsMatch(
+                value,
+                "^bke-org-member-v1_[0-9a-f]{64}$",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+        {
+            throw new ArgumentException(
+                "Organization member management handle is invalid.");
         }
     }
 
