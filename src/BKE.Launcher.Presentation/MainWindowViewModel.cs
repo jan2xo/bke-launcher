@@ -109,6 +109,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _organizationInvitationEmail = string.Empty;
     private string _organizationInvitationRole = "MEMBER";
     private string _organizationInvitationCode = string.Empty;
+    private string _organizationMemberManagementStatus = "IDLE";
+    private string _organizationMemberManagementMessage =
+        "Manage members after loading the Agent-authoritative Organization overview.";
     private AccountOrganizationAccount? _organizationAccount;
     private AccountOrganizationPermissions? _organizationPermissions;
     private AccountOrganizationProfile? _organizationProfile;
@@ -973,6 +976,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CanManageOrganizationInvitationActions &&
         ValidOrganizationCreateEmail(OrganizationInvitationEmail) &&
         ValidOrganizationMemberRole(OrganizationInvitationRole);
+
+    public string OrganizationMemberManagementStatus
+    {
+        get => _organizationMemberManagementStatus;
+        private set
+        {
+            SetField(ref _organizationMemberManagementStatus, value);
+            RaiseAccountOrganizationCapabilities();
+        }
+    }
+
+    public string OrganizationMemberManagementMessage
+    {
+        get => _organizationMemberManagementMessage;
+        private set =>
+            SetField(ref _organizationMemberManagementMessage, value);
+    }
+
+    public bool CanManageOrganizationMemberActions =>
+        OrganizationReady &&
+        _organizationPermissions?.ManageMembers == true &&
+        OrganizationMemberManagementStatus != "MANAGING";
 
     public bool ShowOrganizationMembers =>
         OrganizationReady &&
@@ -3564,6 +3589,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _organizationBillingEmail = response.BillingEmail;
             _organizationTaxId = response.TaxId;
             LoadOrganizationProfileEditorFromAuthority();
+            ResetOrganizationMemberManagementState();
 
             OrganizationMembers.Clear();
             foreach (var member in response.Members)
@@ -3972,6 +3998,131 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CanManageOrganizationInvitations
                 ? "Invitation code dismissed. You may issue another Organization invitation."
                 : "Refresh organization details before issuing another invitation.";
+    }
+
+    public async Task ManageAccountOrganizationMemberAsync(
+        AccountOrganizationMember member,
+        string action,
+        string? role,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManageOrganizationMemberActions)
+        {
+            OrganizationMemberManagementStatus = "INVALID_INPUT";
+            OrganizationMemberManagementMessage =
+                "Refresh the selected Organization before managing members.";
+            return;
+        }
+
+        if (action is not ("UPDATE_ROLE" or "REMOVE") ||
+            string.IsNullOrWhiteSpace(member.ManagementHandle))
+        {
+            OrganizationMemberManagementStatus = "INVALID_INPUT";
+            OrganizationMemberManagementMessage =
+                "The selected member cannot be managed safely. Refresh Organization details.";
+            return;
+        }
+
+        OrganizationMemberManagementStatus = "MANAGING";
+        OrganizationMemberManagementMessage =
+            action == "REMOVE"
+                ? $"Removing {member.Email} through the BKE Licensing Agent…"
+                : $"Updating {member.Email} to {role} through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.ManageMemberAsync(
+                action,
+                member.ManagementHandle,
+                role,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                ResetAccountOrganizationState();
+                EnterAccountOrganizationReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "NOT_ORGANIZATION")
+            {
+                ClearAccountOrganization(
+                    "NOT_ORGANIZATION",
+                    "The selected BKE account is not an Organization account.");
+                return;
+            }
+
+            if (response.Status is "UPDATED" or "REMOVED")
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+
+                if (IsAuthenticated)
+                {
+                    OrganizationMemberManagementStatus =
+                        response.Status;
+                    OrganizationMemberManagementMessage =
+                        response.Status == "UPDATED"
+                            ? $"Member role updated for {member.Email}. Organization members were refreshed from the authoritative account state."
+                            : $"Member {member.Email} was removed. Organization members were refreshed from the authoritative account state.";
+                }
+                return;
+            }
+
+            if (response.Status is
+                "OUTCOME_UNKNOWN" or
+                "MEMBER_NOT_FOUND")
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+
+                if (IsAuthenticated)
+                {
+                    OrganizationMemberManagementStatus =
+                        response.Status;
+                    OrganizationMemberManagementMessage =
+                        response.Status == "OUTCOME_UNKNOWN"
+                            ? "The member-management result could not be confirmed. Organization members were refreshed when possible; review the current state before changing or removing the member again."
+                            : response.Error?.Message ??
+                              "The selected member changed. Organization members were refreshed.";
+                }
+                return;
+            }
+
+            OrganizationMemberManagementStatus = response.Status;
+            OrganizationMemberManagementMessage =
+                response.Error?.Message ??
+                "The Organization member was not changed.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            try
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+            }
+            catch
+            {
+                // RefreshAccountOrganizationAsync reports its own state.
+            }
+
+            if (IsAuthenticated)
+            {
+                OrganizationMemberManagementStatus =
+                    "OUTCOME_UNKNOWN";
+                OrganizationMemberManagementMessage =
+                    "The member-management result could not be confirmed. Organization members were refreshed when possible; review the current state before changing or removing the member again.";
+            }
+        }
+        catch (ArgumentException error)
+        {
+            OrganizationMemberManagementStatus = "INVALID_INPUT";
+            OrganizationMemberManagementMessage = error.Message;
+        }
     }
 
     public async Task RefreshAccountPrivacyAsync(
@@ -4517,6 +4668,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Create a BKE Organization, then switch accounts to select it.";
         ResetOrganizationProfileEditor();
         ResetOrganizationInvitationState();
+        ResetOrganizationMemberManagementState();
         _organizationAccount = null;
         _organizationPermissions = null;
         _organizationProfile = null;
@@ -4538,6 +4690,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OrganizationCreateBillingEmail = string.Empty;
         OrganizationCreateRegistrationNumber = string.Empty;
         OrganizationCreateTaxId = string.Empty;
+    }
+
+    private void ResetOrganizationMemberManagementState()
+    {
+        OrganizationMemberManagementStatus = "IDLE";
+        OrganizationMemberManagementMessage =
+            "Manage members after loading the Agent-authoritative Organization overview.";
     }
 
     private void ResetOrganizationInvitationState()
@@ -4628,6 +4787,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _organizationTaxId = null;
         ResetOrganizationProfileEditor();
         ResetOrganizationInvitationState();
+        ResetOrganizationMemberManagementState();
         OrganizationMembers.Clear();
         OrganizationInvitations.Clear();
         AccountOrganizationStatus = status;
@@ -4684,6 +4844,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanManageOrganizationInvitationActions));
         Raise(nameof(ShowOrganizationInviteSection));
         Raise(nameof(CanInviteOrganizationMember));
+        Raise(nameof(OrganizationMemberManagementStatus));
+        Raise(nameof(OrganizationMemberManagementMessage));
+        Raise(nameof(CanManageOrganizationMemberActions));
         Raise(nameof(ShowOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationMembers));
         Raise(nameof(ShowEmptyOrganizationInvitations));
