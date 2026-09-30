@@ -90,6 +90,7 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountOrganizationCreateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationProfileUpdateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationInvitationCreateResponse).GetProperties())
+    .Concat(typeof(AccountOrganizationInvitationAcceptResponse).GetProperties())
     .Concat(typeof(AccountOrganizationInvitationIssued).GetProperties())
     .Concat(typeof(AccountOrganizationAccount).GetProperties())
     .Concat(typeof(AccountOrganizationPermissions).GetProperties())
@@ -168,6 +169,7 @@ Require(agentMethods.SetEquals([
     "CreateAccountOrganizationAsync",
     "UpdateAccountOrganizationProfileAsync",
     "CreateAccountOrganizationInvitationAsync",
+    "AcceptAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationMemberAsync",
     "TransferAccountOrganizationOwnershipAsync",
