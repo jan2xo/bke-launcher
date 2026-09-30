@@ -34,6 +34,9 @@ Require(AgentLocalContract.AccountPrivacyListPath == "/v1/account/privacy/reques
 Require(AgentLocalContract.AccountPrivacyCreatePath == "/v1/account/privacy/requests/create", "account privacy create path drifted");
 Require(AgentLocalContract.AccountPrivacyCapabilityId == "bke.account-privacy", "account privacy capability id drifted");
 Require(AgentLocalContract.AccountPrivacyContractVersion == 1, "account privacy contract version drifted");
+Require(AgentLocalContract.AccountPurchasesPath == "/v1/account/purchases", "account purchases path drifted");
+Require(AgentLocalContract.AccountPurchasesCapabilityId == "bke.account-purchases", "account purchases capability id drifted");
+Require(AgentLocalContract.AccountPurchasesContractVersion == 1, "account purchases contract version drifted");
 Require(BkePlatformContract.NativeMfaVerifyPath == "/api/agent-sessions/native/mfa/verify", "native MFA verify path drifted");
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
 Require(AgentLocalContract.SoftwareCatalogCapabilityId == "bke.software-catalog", "software catalog capability id drifted");
@@ -86,6 +89,14 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountPrivacyCreateResponse).GetProperties())
     .Concat(typeof(AccountPrivacyItem).GetProperties())
     .Concat(typeof(AccountPrivacyError).GetProperties())
+    .Concat(typeof(AccountPurchasesResponse).GetProperties())
+    .Concat(typeof(AccountPurchasesAccount).GetProperties())
+    .Concat(typeof(AccountPurchasesPermissions).GetProperties())
+    .Concat(typeof(AccountPurchasesLicense).GetProperties())
+    .Concat(typeof(AccountPurchasesSubscription).GetProperties())
+    .Concat(typeof(AccountPurchasesOrder).GetProperties())
+    .Concat(typeof(AccountPurchasesOrderItem).GetProperties())
+    .Concat(typeof(AccountPurchasesError).GetProperties())
     .Concat(typeof(AccountOrganizationOverviewResponse).GetProperties())
     .Concat(typeof(AccountOrganizationCreateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationProfileUpdateResponse).GetProperties())
@@ -165,6 +176,7 @@ Require(agentMethods.SetEquals([
     "RegenerateAccountMfaRecoveryAsync",
     "GetAccountPrivacyRequestsAsync",
     "CreateAccountPrivacyRequestAsync",
+    "GetAccountPurchasesAsync",
     "GetAccountOrganizationAsync",
     "CreateAccountOrganizationAsync",
     "UpdateAccountOrganizationProfileAsync",
@@ -337,10 +349,118 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 }
 
 Require(
+    typeof(AccountPurchasesRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId"]),
+    "Launcher widened the Agent account purchases request.");
+
+using (var accountPurchasesDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountPurchasesRequest(
+            "account-purchases-cert"))))
+{
+    var root = accountPurchasesDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual(["correlation_id"]) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("license_id", out _) &&
+        !root.TryGetProperty("order_id", out _) &&
+        !root.TryGetProperty("subscription_id", out _) &&
+        !root.TryGetProperty("invoice_id", out _) &&
+        !root.TryGetProperty("device_id", out _),
+        "Launcher account purchases wire request widened beyond correlation-only intent.");
+}
+
+foreach (var type in new[]
+{
+    typeof(AccountPurchasesResponse),
+    typeof(AccountPurchasesAccount),
+    typeof(AccountPurchasesPermissions),
+    typeof(AccountPurchasesLicense),
+    typeof(AccountPurchasesSubscription),
+    typeof(AccountPurchasesOrder),
+    typeof(AccountPurchasesOrderItem),
+})
+{
+    Require(
+        type.GetProperties().All(property =>
+            !property.Name.Contains(
+                "AccessToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "RefreshToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Handoff",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "CheckoutUrl",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "AccountId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "UserId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "LicenseId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "OrderId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "SubscriptionId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "InvoiceId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "DeviceId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "LicenseKey",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Payment",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Provider",
+                StringComparison.OrdinalIgnoreCase)),
+        $"Launcher account purchases contract {type.Name} exposes authority/payment material.");
+}
+
+var purchasesControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherAccountPurchasesController.cs"));
+var purchasesClientSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.AgentClient",
+        "AgentLoopbackClient.cs"));
+Require(
+    !purchasesControllerSource.Contains(
+        "/api/agent-sessions/account/purchases",
+        StringComparison.OrdinalIgnoreCase) &&
+    !purchasesClientSource.Contains(
+        "/api/agent-sessions/account/purchases",
+        StringComparison.OrdinalIgnoreCase) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountPurchasesPath",
+        StringComparison.Ordinal),
+    "Launcher bypassed the local Agent purchases authority.");
+
+Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "d19ddd7b72dd4162c8eb08002a42ab1f85683524",
-    "Launcher is not pinned to the merged Agent organization invitation-acceptance authority.");
+        "f4ddf4b09a40d9a6806560060bfd7af2dec13ab8",
+    "Launcher is not pinned to the merged Agent account-purchases authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -2454,6 +2574,7 @@ await CertifyNativePasswordResetRequestAsync();
 await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
+await CertifyAccountPurchasesSettingsAsync();
 await CertifyAccountOrganizationSettingsAsync();
 await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
@@ -2782,6 +2903,80 @@ static async Task CertifyAccountPrivacySettingsAsync()
             viewModel.AccountPrivacyRequests.Count == 0 &&
             viewModel.AccountPrivacyRequestTypes.Count == 0,
         "Launcher retained privacy state after Agent session invalidation.");
+}
+
+static async Task CertifyAccountPurchasesSettingsAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    viewModel.OpenAccountSurface();
+
+    Require(
+        viewModel.IsAuthenticated &&
+        viewModel.CanRefreshAccountPurchases &&
+        viewModel.AccountPurchasesStatus == "UNKNOWN",
+        "Account purchases certification did not begin from the authenticated account surface.");
+
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    Require(
+        agent.PurchasesReadCount == 1 &&
+        agent.LastAccountPurchasesRequest is not null &&
+        !string.IsNullOrWhiteSpace(
+            agent.LastAccountPurchasesRequest.CorrelationId) &&
+        viewModel.AccountPurchasesStatus == "READY" &&
+        viewModel.AccountPurchasesReady &&
+        viewModel.AccountLicenses.Count == 1 &&
+        viewModel.AccountSubscriptions.Count == 1 &&
+        viewModel.AccountOrders.Count == 1 &&
+        viewModel.AccountLicenses[0].LicenseKeyLabel.Contains(
+            "ABCD",
+            StringComparison.Ordinal) &&
+        viewModel.ShowAccountSubscriptions &&
+        viewModel.ShowAccountOrders &&
+        !viewModel.ShowAccountSubscriptionsUnavailable &&
+        !viewModel.ShowAccountOrdersUnavailable,
+        "Launcher did not present the Agent-authoritative purchases overview.");
+
+    agent.PurchasesRole = "MEMBER";
+    agent.PurchasesViewOrders = false;
+    agent.PurchasesViewSubscriptions = false;
+    agent.PurchasesViewAllLicenses = false;
+
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    Require(
+        agent.PurchasesReadCount == 2 &&
+        viewModel.AccountPurchasesStatus == "READY" &&
+        viewModel.AccountLicenses.Count == 1 &&
+        viewModel.AccountSubscriptions.Count == 0 &&
+        viewModel.AccountOrders.Count == 0 &&
+        viewModel.ShowAccountSubscriptionsUnavailable &&
+        viewModel.ShowAccountOrdersUnavailable &&
+        viewModel.AccountLicenseScopeLabel.Contains(
+            "assigned",
+            StringComparison.OrdinalIgnoreCase),
+        "Launcher invented role-hidden subscription/order data or lost assigned-license scope.");
+
+    agent.Authenticated = false;
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    Require(
+        !viewModel.IsAuthenticated &&
+        viewModel.AccountLicenses.Count == 0 &&
+        viewModel.AccountSubscriptions.Count == 0 &&
+        viewModel.AccountOrders.Count == 0,
+        "Launcher retained purchases state after Agent session invalidation.");
 }
 
 static async Task CertifyAccountOrganizationSettingsAsync()
@@ -4221,6 +4416,7 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountPasswordChangeController(agent),
         new LauncherAccountMfaController(agent),
         new LauncherAccountPrivacyController(agent),
+        new LauncherAccountPurchasesController(agent),
         new LauncherAccountOrganizationController(agent));
 }
 
@@ -4434,6 +4630,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PasswordChangeCount { get; private set; }
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
+    public int PurchasesReadCount { get; private set; }
     public int OrganizationReadCount { get; private set; }
     public int OrganizationCreateCount { get; private set; }
     public int OrganizationProfileUpdateCount { get; private set; }
@@ -4447,6 +4644,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public bool Authenticated { get; set; } = true;
     public string AccountType { get; set; } = "INDIVIDUAL";
     public string OrganizationRole { get; set; } = "OWNER";
+    public string PurchasesRole { get; set; } = "OWNER";
+    public bool PurchasesViewOrders { get; set; } = true;
+    public bool PurchasesViewSubscriptions { get; set; } = true;
+    public bool PurchasesViewAllLicenses { get; set; } = true;
+    public AccountPurchasesRequest? LastAccountPurchasesRequest
+        { get; private set; }
     public string OrganizationDisplayName { get; set; } =
         "Certification Organization";
     public string OrganizationLegalName { get; set; } =
@@ -4975,6 +5178,96 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             request.RequestType,
             "OPEN",
             null));
+    }
+
+    public Task<AccountPurchasesResponse> GetAccountPurchasesAsync(
+        AccountPurchasesRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PurchasesReadCount++;
+        LastAccountPurchasesRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountPurchasesResponse(
+                    AgentLocalContract.AccountPurchasesCapabilityId,
+                    AgentLocalContract.AccountPurchasesContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    null,
+                    Array.Empty<AccountPurchasesLicense>(),
+                    Array.Empty<AccountPurchasesSubscription>(),
+                    Array.Empty<AccountPurchasesOrder>(),
+                    new AccountPurchasesError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        var accountName = AccountType == "ORGANIZATION"
+            ? OrganizationDisplayName
+            : "Certification Customer";
+
+        return Task.FromResult(
+            new AccountPurchasesResponse(
+                AgentLocalContract.AccountPurchasesCapabilityId,
+                AgentLocalContract.AccountPurchasesContractVersion,
+                "READY",
+                new AccountPurchasesAccount(
+                    AccountType,
+                    accountName,
+                    "ACTIVE",
+                    PurchasesRole),
+                new AccountPurchasesPermissions(
+                    PurchasesViewOrders,
+                    PurchasesViewSubscriptions,
+                    PurchasesViewAllLicenses),
+                new[]
+                {
+                    new AccountPurchasesLicense(
+                        "Render Dock",
+                        "Pro",
+                        "ANNUAL",
+                        "ACTIVE",
+                        "ABCD",
+                        "2027-09-30T00:00:00.000Z",
+                        4,
+                        1),
+                },
+                PurchasesViewSubscriptions
+                    ? new[]
+                    {
+                        new AccountPurchasesSubscription(
+                            "Render Dock",
+                            "Pro",
+                            "ANNUAL",
+                            "ACTIVE",
+                            2,
+                            "2027-09-30T00:00:00.000Z"),
+                    }
+                    : Array.Empty<AccountPurchasesSubscription>(),
+                PurchasesViewOrders
+                    ? new[]
+                    {
+                        new AccountPurchasesOrder(
+                            "ORD-CERT-001",
+                            "PAID",
+                            30000000,
+                            "PHP",
+                            "2026-09-30T00:00:00.000Z",
+                            true,
+                            new[]
+                            {
+                                new AccountPurchasesOrderItem(
+                                    "Render Dock",
+                                    "Pro",
+                                    "Annual"),
+                            }),
+                    }
+                    : Array.Empty<AccountPurchasesOrder>(),
+                null));
     }
 
     public Task<AccountOrganizationOverviewResponse> GetAccountOrganizationAsync(

@@ -31,6 +31,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountPasswordChangeController _accountPasswordChange;
     private readonly LauncherAccountMfaController _accountMfa;
     private readonly LauncherAccountPrivacyController _accountPrivacy;
+    private readonly LauncherAccountPurchasesController _accountPurchases;
     private readonly LauncherAccountOrganizationController _accountOrganization;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
@@ -83,6 +84,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Refresh privacy requests to load the authoritative request types and history.";
     private string _accountPrivacySummary = string.Empty;
     private string? _selectedAccountPrivacyRequestType;
+    private string _accountPurchasesStatus = "UNKNOWN";
+    private string _accountPurchasesMessage =
+        "Refresh purchases and licenses to load the Agent-authoritative selected-account history.";
+    private AccountPurchasesAccount? _accountPurchasesAccount;
+    private AccountPurchasesPermissions? _accountPurchasesPermissions;
     private string _accountOrganizationStatus = "UNKNOWN";
     private string _accountOrganizationMessage =
         "Refresh organization details to load the Agent-authoritative selected-account overview.";
@@ -179,6 +185,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountPasswordChangeController accountPasswordChange,
         LauncherAccountMfaController accountMfa,
         LauncherAccountPrivacyController accountPrivacy,
+        LauncherAccountPurchasesController accountPurchases,
         LauncherAccountOrganizationController accountOrganization)
     {
         _accountSession = accountSession;
@@ -203,6 +210,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountPasswordChange = accountPasswordChange;
         _accountMfa = accountMfa;
         _accountPrivacy = accountPrivacy;
+        _accountPurchases = accountPurchases;
         _accountOrganization = accountOrganization;
         RestoreCheckoutRecoveryState();
     }
@@ -214,6 +222,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
+    public ObservableCollection<AccountLicenseViewModel> AccountLicenses { get; } = [];
+    public ObservableCollection<AccountSubscriptionViewModel> AccountSubscriptions { get; } = [];
+    public ObservableCollection<AccountOrderViewModel> AccountOrders { get; } = [];
     public ObservableCollection<AccountOrganizationMember> OrganizationMembers { get; } = [];
     public ObservableCollection<AccountOrganizationInvitation> OrganizationInvitations { get; } = [];
     public IReadOnlyList<string> OrganizationInvitationRoles { get; } =
@@ -612,6 +623,71 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyAccountPrivacyRequests =>
         AccountPrivacyStatus == "READY" &&
         AccountPrivacyRequests.Count == 0;
+
+    public string AccountPurchasesStatus
+    {
+        get => _accountPurchasesStatus;
+        private set
+        {
+            SetField(ref _accountPurchasesStatus, value);
+            RaiseAccountPurchasesCapabilities();
+        }
+    }
+
+    public string AccountPurchasesMessage
+    {
+        get => _accountPurchasesMessage;
+        private set => SetField(ref _accountPurchasesMessage, value);
+    }
+
+    public bool CanRefreshAccountPurchases =>
+        IsAuthenticated &&
+        AccountPurchasesStatus != "LOADING";
+
+    public bool AccountPurchasesReady =>
+        AccountPurchasesStatus == "READY" &&
+        _accountPurchasesAccount is not null &&
+        _accountPurchasesPermissions is not null;
+
+    public string AccountPurchasesAccountSummary =>
+        _accountPurchasesAccount is null
+            ? string.Empty
+            : $"{_accountPurchasesAccount.DisplayName} · {_accountPurchasesAccount.Role} · {_accountPurchasesAccount.LifecycleState}";
+
+    public string AccountLicenseScopeLabel =>
+        _accountPurchasesPermissions is null
+            ? string.Empty
+            : _accountPurchasesPermissions.ViewAllLicenses
+                ? "License scope: all licenses visible to this account role."
+                : "License scope: licenses assigned to this BKE identity.";
+
+    public bool ShowEmptyAccountLicenses =>
+        AccountPurchasesReady &&
+        AccountLicenses.Count == 0;
+
+    public bool ShowAccountSubscriptions =>
+        AccountPurchasesReady &&
+        _accountPurchasesPermissions?.ViewSubscriptions == true;
+
+    public bool ShowAccountSubscriptionsUnavailable =>
+        AccountPurchasesReady &&
+        _accountPurchasesPermissions?.ViewSubscriptions == false;
+
+    public bool ShowEmptyAccountSubscriptions =>
+        ShowAccountSubscriptions &&
+        AccountSubscriptions.Count == 0;
+
+    public bool ShowAccountOrders =>
+        AccountPurchasesReady &&
+        _accountPurchasesPermissions?.ViewOrders == true;
+
+    public bool ShowAccountOrdersUnavailable =>
+        AccountPurchasesReady &&
+        _accountPurchasesPermissions?.ViewOrders == false;
+
+    public bool ShowEmptyAccountOrders =>
+        ShowAccountOrders &&
+        AccountOrders.Count == 0;
 
     public string AccountOrganizationStatus
     {
@@ -1183,6 +1259,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(CanVerifyNativeMfa));
             RaiseAccountMfaCapabilities();
             RaiseAccountPrivacyCapabilities();
+            RaiseAccountPurchasesCapabilities();
             RaiseAccountOrganizationCapabilities();
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
@@ -1866,6 +1943,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ResetPasswordChangeState();
             ResetAccountMfaState(clearRecoveryCodes: true);
             ResetAccountPrivacyState();
+            ResetAccountPurchasesState();
         ResetAccountOrganizationState();
             SessionStatus = "SIGN_IN_UNAVAILABLE";
             AccountDisplay = "Not signed in";
@@ -1957,6 +2035,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetPasswordChangeState();
         ResetAccountMfaState(clearRecoveryCodes: true);
         ResetAccountPrivacyState();
+        ResetAccountPurchasesState();
         ResetAccountOrganizationState();
         AvailableAccounts.Clear();
         SelectedAccount = null;
@@ -2034,6 +2113,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 ClearNativeMfaState();
                 ResetAccountMfaState(clearRecoveryCodes: true);
             ResetAccountPrivacyState();
+            ResetAccountPurchasesState();
         ResetAccountOrganizationState();
                 ResetPasswordChangeState();
                 ResetShellSurface();
@@ -4562,6 +4642,88 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task RefreshAccountPurchasesAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ClearAccountPurchases(
+                "AUTH_REQUIRED",
+                "Sign in with BKE before opening purchases and licenses.");
+            return;
+        }
+
+        AccountPurchasesStatus = "LOADING";
+        AccountPurchasesMessage =
+            "Loading purchases and licenses through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountPurchases.GetAsync(
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            AccountLicenses.Clear();
+            AccountSubscriptions.Clear();
+            AccountOrders.Clear();
+            _accountPurchasesAccount = null;
+            _accountPurchasesPermissions = null;
+
+            if (response.Status != "READY" ||
+                response.Account is null ||
+                response.Permissions is null)
+            {
+                AccountPurchasesStatus = response.Status;
+                AccountPurchasesMessage =
+                    response.Error?.Message ??
+                    "BKE purchases and licenses are temporarily unavailable.";
+                RaiseAccountPurchasesCapabilities();
+                return;
+            }
+
+            _accountPurchasesAccount = response.Account;
+            _accountPurchasesPermissions = response.Permissions;
+
+            foreach (var license in response.Licenses)
+            {
+                AccountLicenses.Add(
+                    AccountLicenseViewModel.From(license));
+            }
+
+            foreach (var subscription in response.Subscriptions)
+            {
+                AccountSubscriptions.Add(
+                    AccountSubscriptionViewModel.From(subscription));
+            }
+
+            foreach (var order in response.Orders)
+            {
+                AccountOrders.Add(
+                    AccountOrderViewModel.From(order));
+            }
+
+            AccountPurchasesStatus = "READY";
+            AccountPurchasesMessage =
+                "Purchases and licenses loaded from BKE Digital Solutions for the selected account.";
+            RaiseAccountPurchasesCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ClearAccountPurchases(
+                "AGENT_UNAVAILABLE",
+                "Purchases and licenses are unavailable or the Licensing Agent returned an invalid response.");
+        }
+    }
+
     public async Task RefreshAccountPrivacyAsync(
         CancellationToken cancellationToken)
     {
@@ -4946,6 +5108,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearNativeMfaState();
             ResetAccountMfaState(clearRecoveryCodes: true);
             ResetAccountPrivacyState();
+            ResetAccountPurchasesState();
         ResetAccountOrganizationState();
             ResetShellSurface();
             SessionStatus = response.Status;
@@ -4998,6 +5161,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearNativeMfaState();
         ResetAccountMfaState(clearRecoveryCodes: true);
         ResetAccountPrivacyState();
+        ResetAccountPurchasesState();
         ResetAccountOrganizationState();
         PasswordChangeStatus = status;
         PasswordChangeMessage = message;
@@ -5071,6 +5235,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearNativeMfaState();
         ResetAccountMfaState(clearRecoveryCodes);
         ResetAccountPrivacyState();
+        ResetAccountPurchasesState();
         ResetAccountOrganizationState();
         ResetPasswordChangeState();
         ResetShellSurface();
@@ -5343,6 +5508,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(OrganizationLeaveMessage));
         Raise(nameof(ShowOrganizationLeaveSection));
         Raise(nameof(CanLeaveOrganization));
+    }
+
+    private void ResetAccountPurchasesState()
+    {
+        _accountPurchasesAccount = null;
+        _accountPurchasesPermissions = null;
+        AccountLicenses.Clear();
+        AccountSubscriptions.Clear();
+        AccountOrders.Clear();
+        AccountPurchasesStatus = "UNKNOWN";
+        AccountPurchasesMessage =
+            "Refresh purchases and licenses to load the Agent-authoritative selected-account history.";
+        RaiseAccountPurchasesCapabilities();
+    }
+
+    private void ClearAccountPurchases(
+        string status,
+        string message)
+    {
+        _accountPurchasesAccount = null;
+        _accountPurchasesPermissions = null;
+        AccountLicenses.Clear();
+        AccountSubscriptions.Clear();
+        AccountOrders.Clear();
+        AccountPurchasesStatus = status;
+        AccountPurchasesMessage = message;
+        RaiseAccountPurchasesCapabilities();
+    }
+
+    private void EnterAccountPurchasesReauthentication(
+        string message)
+    {
+        EnterAccountMfaReauthentication(
+            message,
+            clearRecoveryCodes: true);
+    }
+
+    private void RaiseAccountPurchasesCapabilities()
+    {
+        Raise(nameof(CanRefreshAccountPurchases));
+        Raise(nameof(AccountPurchasesReady));
+        Raise(nameof(AccountPurchasesAccountSummary));
+        Raise(nameof(AccountLicenseScopeLabel));
+        Raise(nameof(ShowEmptyAccountLicenses));
+        Raise(nameof(ShowAccountSubscriptions));
+        Raise(nameof(ShowAccountSubscriptionsUnavailable));
+        Raise(nameof(ShowEmptyAccountSubscriptions));
+        Raise(nameof(ShowAccountOrders));
+        Raise(nameof(ShowAccountOrdersUnavailable));
+        Raise(nameof(ShowEmptyAccountOrders));
     }
 
     private void ResetAccountPrivacyState()
@@ -5702,6 +5917,116 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void Raise(string? propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+public sealed record AccountLicenseViewModel(
+    string ProductLabel,
+    string Status,
+    string PlanLabel,
+    string LicenseKeyLabel,
+    string DeviceLabel,
+    string ExpiryLabel)
+{
+    public static AccountLicenseViewModel From(
+        AccountPurchasesLicense item) =>
+        new(
+            ProductLabelFor(
+                item.ProductName,
+                item.EditionName),
+            item.Status,
+            item.PlanType ?? "Plan not specified",
+            $"License ending {item.KeyLastFour}",
+            $"{item.ActiveDevices} of {item.MaxDevices} device slots active",
+            string.IsNullOrWhiteSpace(item.ExpiresAt)
+                ? "No expiry returned"
+                : $"Expires {FormatTimestamp(item.ExpiresAt)}");
+
+    private static string ProductLabelFor(
+        string product,
+        string? edition) =>
+        string.IsNullOrWhiteSpace(edition)
+            ? product
+            : $"{product} · {edition}";
+
+    private static string FormatTimestamp(string value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString(
+                "g",
+                CultureInfo.CurrentCulture)
+            : value;
+}
+
+public sealed record AccountSubscriptionViewModel(
+    string ProductLabel,
+    string Status,
+    string PlanLabel,
+    string SeatsLabel,
+    string PeriodEndLabel)
+{
+    public static AccountSubscriptionViewModel From(
+        AccountPurchasesSubscription item) =>
+        new(
+            string.IsNullOrWhiteSpace(item.EditionName)
+                ? item.ProductName
+                : $"{item.ProductName} · {item.EditionName}",
+            item.Status,
+            item.PlanType ?? "Plan not specified",
+            item.Seats == 1
+                ? "1 seat"
+                : $"{item.Seats} seats",
+            $"Current period ends {FormatTimestamp(item.CurrentPeriodEnd)}");
+
+    private static string FormatTimestamp(string value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString(
+                "g",
+                CultureInfo.CurrentCulture)
+            : value;
+}
+
+public sealed record AccountOrderViewModel(
+    string Number,
+    string Status,
+    string TotalLabel,
+    string CreatedLabel,
+    string InvoiceLabel,
+    string ItemsLabel)
+{
+    public static AccountOrderViewModel From(
+        AccountPurchasesOrder item)
+    {
+        var itemLabels = item.Items
+            .Select(orderItem =>
+            {
+                var labels = new[]
+                {
+                    orderItem.ProductName,
+                    orderItem.EditionName,
+                    orderItem.PlanName,
+                }
+                .Where(value =>
+                    !string.IsNullOrWhiteSpace(value));
+                return string.Join(" · ", labels!);
+            })
+            .ToArray();
+
+        return new AccountOrderViewModel(
+            item.Number,
+            item.Status,
+            $"{item.Currency} {(item.TotalMinor / 100m).ToString("N2", CultureInfo.CurrentCulture)}",
+            $"Created {FormatTimestamp(item.CreatedAt)}",
+            item.InvoiceAvailable
+                ? "Invoice available"
+                : "No invoice returned",
+            string.Join(", ", itemLabels));
+    }
+
+    private static string FormatTimestamp(string value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString(
+                "g",
+                CultureInfo.CurrentCulture)
+            : value;
 }
 
 public sealed record AccountPrivacyRequestViewModel(
