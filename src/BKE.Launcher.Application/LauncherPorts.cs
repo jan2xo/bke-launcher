@@ -80,6 +80,10 @@ public interface ILauncherAgentClient
         AccountOrganizationInvitationCreateRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountOrganizationInvitationAcceptResponse> AcceptAccountOrganizationInvitationAsync(
+        AccountOrganizationInvitationAcceptRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountOrganizationInvitationManageResponse> ManageAccountOrganizationInvitationAsync(
         AccountOrganizationInvitationManageRequest request,
         CancellationToken cancellationToken);
