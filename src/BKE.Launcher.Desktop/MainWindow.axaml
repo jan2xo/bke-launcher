@@ -450,6 +450,30 @@
                       </StackPanel>
                     </StackPanel>
 
+                    <Border IsVisible="{Binding ShowOrganizationLeaveSection}"
+                            Classes="content-card"
+                            Padding="12"
+                            Margin="0,6,0,0">
+                      <StackPanel Spacing="7">
+                        <TextBlock Text="Organization membership"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Leaving removes your membership from this Organization and requires fresh BKE account selection. It does not delete the Organization. Owners must transfer ownership before they can leave."
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.72" />
+                        <Button Content="Leave organization"
+                                IsEnabled="{Binding CanLeaveOrganization}"
+                                Click="LeaveAccountOrganization" />
+                        <TextBlock Text="{Binding OrganizationLeaveStatus}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding OrganizationLeaveMessage}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.72" />
+                      </StackPanel>
+                    </Border>
+
                     <StackPanel IsVisible="{Binding ShowOrganizationMembers}"
                                 Spacing="7"
                                 Margin="0,6,0,0">
