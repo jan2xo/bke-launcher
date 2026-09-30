@@ -1428,7 +1428,7 @@ Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "S
 Require(mainWindowMarkup.Contains("Content=\"Repair\"", StringComparison.Ordinal), "Software Repair action is missing.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanRepair}\"", StringComparison.Ordinal), "Software Repair visibility is not state-bound.");
 Require(mainWindowSource.Contains("RepairProduct", StringComparison.Ordinal), "Software Repair click handler is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Redeem Claim Code\"", StringComparison.Ordinal), "Claim Code redemption action is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Redeem to this account\"", StringComparison.Ordinal), "Claim Code redemption action is missing or its destination is ambiguous.");
 Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRedeemClaimCode}\"", StringComparison.Ordinal), "Claim Code redemption action is not session-bound.");
 Require(mainWindowSource.Contains("RedeemClaimCode", StringComparison.Ordinal), "Claim Code redemption click handler is missing.");
 Require(mainWindowMarkup.Contains("Text=\"Security\"", StringComparison.Ordinal),
