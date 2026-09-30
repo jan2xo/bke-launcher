@@ -3937,6 +3937,12 @@ static async Task CertifyClaimCodeRedemptionRefreshesMySoftwareAsync()
     var viewModel = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator);
 
     await viewModel.InitializeAsync(CancellationToken.None);
+    Require(
+        viewModel.ClaimStatus == "READY" &&
+        viewModel.ClaimMessage.Contains(
+            "signed-in BKE account",
+            StringComparison.Ordinal),
+        "Authenticated startup retained a stale Claim Code sign-in prompt.");
     await viewModel.OpenModuleAsync(0, CancellationToken.None);
     Require(viewModel.Products.Count == 1 &&
             viewModel.Products[0].StateLabel == "Not entitled",
