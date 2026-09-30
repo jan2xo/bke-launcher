@@ -3982,7 +3982,7 @@ static async Task CertifyClaimCodeRedemptionRefreshesMySoftwareAsync()
     var lockedRecovery = new CustomerJourneyRecoveryStore();
     lockedRecovery.Write(new LauncherCheckoutRecoveryState(
         "claim-checkout-lock-cert",
-        PurchasePlanId,
+        CustomerJourneyAgentClient.PurchasePlanId,
         "SELF",
         ["terms-cert", "privacy-cert"]));
     var lockedViewModel = BuildCustomerJourneyViewModel(
