@@ -453,6 +453,60 @@
                     <StackPanel IsVisible="{Binding ShowOrganizationMembers}"
                                 Spacing="7"
                                 Margin="0,6,0,0">
+                      <Border IsVisible="{Binding ShowOrganizationInviteSection}"
+                              Classes="content-card"
+                              Padding="12"
+                              Margin="0,5,0,4">
+                        <StackPanel Spacing="7">
+                          <TextBlock Text="Invite member"
+                                     FontWeight="SemiBold" />
+                          <TextBlock Text="Invitation authority stays in BKE Digital Solutions. Launcher sends only the invited email and role through the Licensing Agent."
+                                     FontSize="11"
+                                     TextWrapping="Wrap"
+                                     Opacity="0.68" />
+
+                          <StackPanel IsVisible="{Binding CanManageOrganizationInvitations}"
+                                      Spacing="5">
+                            <TextBlock Text="Email"
+                                       FontSize="11"
+                                       Opacity="0.68" />
+                            <TextBox Text="{Binding OrganizationInvitationEmail, Mode=TwoWay}"
+                                     MaxLength="320"
+                                     Watermark="member@example.com" />
+                            <TextBlock Text="Role"
+                                       FontSize="11"
+                                       Opacity="0.68" />
+                            <ComboBox ItemsSource="{Binding OrganizationInvitationRoles}"
+                                      SelectedItem="{Binding OrganizationInvitationRole, Mode=TwoWay}" />
+                            <Button Content="Issue invitation"
+                                    IsEnabled="{Binding CanInviteOrganizationMember}"
+                                    Click="CreateAccountOrganizationInvitation" />
+                          </StackPanel>
+
+                          <StackPanel IsVisible="{Binding HasOrganizationInvitationCode}"
+                                      Spacing="5">
+                            <TextBlock Text="One-time invitation code"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="Save or send this code before dismissing it. BKE does not persist a local copy and does not copy it to the clipboard automatically."
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Opacity="0.72" />
+                            <TextBox Text="{Binding OrganizationInvitationCode, Mode=OneWay}"
+                                     IsReadOnly="True" />
+                            <Button Content="I've saved or sent this invitation code"
+                                    Click="CompleteOrganizationInvitationDelivery" />
+                          </StackPanel>
+
+                          <TextBlock Text="{Binding OrganizationInvitationStatus}"
+                                     FontSize="11"
+                                     FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding OrganizationInvitationMessage}"
+                                     FontSize="11"
+                                     TextWrapping="Wrap"
+                                     Opacity="0.72" />
+                        </StackPanel>
+                      </Border>
+
                       <TextBlock Text="Members"
                                  FontWeight="SemiBold" />
                       <ItemsControl ItemsSource="{Binding OrganizationMembers}">

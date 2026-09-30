@@ -209,6 +209,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AccountOrganizationRequestTimeout,
             cancellationToken);
 
+    public Task<AccountOrganizationInvitationCreateResponse> CreateAccountOrganizationInvitationAsync(
+        AccountOrganizationInvitationCreateRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountOrganizationInvitationCreateRequest, AccountOrganizationInvitationCreateResponse>(
+            AgentLocalContract.AccountOrganizationInvitationCreatePath,
+            request,
+            AccountOrganizationRequestTimeout,
+            cancellationToken);
+
     public Task<AccountNotificationFeedResponse> GetAccountNotificationsAsync(
         AccountNotificationFeedRequest request,
         CancellationToken cancellationToken) =>

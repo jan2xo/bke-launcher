@@ -167,6 +167,21 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void CreateAccountOrganizationInvitation(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.CreateAccountOrganizationInvitationAsync(
+            CancellationToken.None);
+    }
+
+    private void CompleteOrganizationInvitationDelivery(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        ViewModel.CompleteOrganizationInvitationDelivery();
+    }
+
     private async void RefreshAccountPrivacy(
         object? sender,
         RoutedEventArgs args)

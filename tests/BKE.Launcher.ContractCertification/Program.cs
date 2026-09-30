@@ -89,6 +89,8 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountOrganizationOverviewResponse).GetProperties())
     .Concat(typeof(AccountOrganizationCreateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationProfileUpdateResponse).GetProperties())
+    .Concat(typeof(AccountOrganizationInvitationCreateResponse).GetProperties())
+    .Concat(typeof(AccountOrganizationInvitationIssued).GetProperties())
     .Concat(typeof(AccountOrganizationAccount).GetProperties())
     .Concat(typeof(AccountOrganizationPermissions).GetProperties())
     .Concat(typeof(AccountOrganizationProfile).GetProperties())
@@ -165,6 +167,7 @@ Require(agentMethods.SetEquals([
     "GetAccountOrganizationAsync",
     "CreateAccountOrganizationAsync",
     "UpdateAccountOrganizationProfileAsync",
+    "CreateAccountOrganizationInvitationAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -330,8 +333,8 @@ using (var privacyCreateDocument = JsonDocument.Parse(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "d1011336535867478d05c14b411715faf3245fac",
-    "Launcher is not pinned to the merged Agent organization-profile authority.");
+        "6e8ffe93e1db45041a02b548d6e9ecacc7044ce5",
+    "Launcher is not pinned to the merged Agent organization-invitation authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -340,6 +343,8 @@ Require(
         "/v1/account/organization/create" &&
     AgentLocalContract.AccountOrganizationProfileUpdatePath ==
         "/v1/account/organization/profile" &&
+    AgentLocalContract.AccountOrganizationInvitationCreatePath ==
+        "/v1/account/organization/invitations/create" &&
     AgentLocalContract.AccountOrganizationCapabilityId ==
         "bke.account-organization" &&
     AgentLocalContract.AccountOrganizationContractVersion == 1,
@@ -436,11 +441,51 @@ using (var organizationProfileDocument = JsonDocument.Parse(
         "Launcher organization-profile wire request widened or hid disabled-group authority.");
 }
 
+Require(
+    typeof(AccountOrganizationInvitationCreateRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "Email",
+            "Role"
+        ]),
+    "Launcher widened the Agent organization-invitation request.");
+
+using (var organizationInvitationDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountOrganizationInvitationCreateRequest(
+            "organization-invitation-cert",
+            "new-member@example.test",
+            "MEMBER"))))
+{
+    var root = organizationInvitationDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "email",
+            "role"
+        ]) &&
+        root.GetProperty("email").GetString() ==
+            "new-member@example.test" &&
+        root.GetProperty("role").GetString() == "MEMBER" &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("owner_id", out _) &&
+        !root.TryGetProperty("invitation_id", out _),
+        "Launcher organization-invitation wire request widened.");
+}
+
 foreach (var type in new[]
 {
     typeof(AccountOrganizationOverviewResponse),
     typeof(AccountOrganizationCreateResponse),
     typeof(AccountOrganizationProfileUpdateResponse),
+    typeof(AccountOrganizationInvitationCreateResponse),
+    typeof(AccountOrganizationInvitationIssued),
     typeof(AccountOrganizationAccount),
     typeof(AccountOrganizationMember),
     typeof(AccountOrganizationInvitation),
@@ -497,6 +542,9 @@ Require(
         StringComparison.Ordinal) &&
     organizationClientSource.Contains(
         "AgentLocalContract.AccountOrganizationProfileUpdatePath",
+        StringComparison.Ordinal) &&
+    organizationClientSource.Contains(
+        "AgentLocalContract.AccountOrganizationInvitationCreatePath",
         StringComparison.Ordinal),
     "Launcher bypassed the local Agent organization authority.");
 
@@ -1095,6 +1143,32 @@ Require(
         "UpdateAccountOrganizationProfileAsync",
         StringComparison.Ordinal),
     "Launcher permission-aware organization profile editor is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowOrganizationInviteSection}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ItemsSource=\"{Binding OrganizationInvitationRoles}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanInviteOrganizationMember}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding OrganizationInvitationCode, Mode=OneWay}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"I've saved or sent this invitation code\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsReadOnly=\"True\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "CreateAccountOrganizationInvitationAsync",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "CompleteOrganizationInvitationDelivery",
+        StringComparison.Ordinal),
+    "Launcher transient Organization invitation-code delivery UX is missing.");
 Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
     "Launcher does not resolve Agent-owned authentication state on startup.");
 Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
@@ -2556,6 +2630,73 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         !ownerViewModel.CanSaveOrganizationProfile,
         "OWNER organization-profile update widened the billing group or failed authoritative refresh.");
 
+    Require(
+        ownerViewModel.CanManageOrganizationInvitations &&
+        ownerViewModel.ShowOrganizationInviteSection &&
+        !ownerViewModel.HasOrganizationInvitationCode,
+        "OWNER did not receive MANAGE_MEMBERS invitation capability.");
+
+    ownerViewModel.OrganizationInvitationEmail =
+        "new-member@example.test";
+    ownerViewModel.OrganizationInvitationRole = "MEMBER";
+    Require(
+        ownerViewModel.CanInviteOrganizationMember,
+        "Valid OWNER invitation did not become issuable.");
+
+    await ownerViewModel.CreateAccountOrganizationInvitationAsync(
+        CancellationToken.None);
+
+    Require(
+        ownerAgent.OrganizationInvitationCreateCount == 1 &&
+        ownerAgent.LastOrganizationInvitationRequest is
+            {
+                Email: "new-member@example.test",
+                Role: "MEMBER"
+            } &&
+        ownerViewModel.OrganizationInvitationStatus == "CREATED" &&
+        ownerViewModel.OrganizationInvitationCode ==
+            "organization-invitation-code-cert" &&
+        ownerViewModel.HasOrganizationInvitationCode &&
+        !ownerViewModel.CanInviteOrganizationMember &&
+        ownerViewModel.OrganizationInvitations.Count == 2 &&
+        ownerAgent.OrganizationReadCount == 3,
+        "OWNER invitation did not preserve transient code delivery or authoritative refresh.");
+
+    await ownerViewModel.CreateAccountOrganizationInvitationAsync(
+        CancellationToken.None);
+    Require(
+        ownerAgent.OrganizationInvitationCreateCount == 1,
+        "Launcher overwrote an undelivered Organization invitation code with another issuance.");
+
+    ownerViewModel.CompleteOrganizationInvitationDelivery();
+    Require(
+        !ownerViewModel.HasOrganizationInvitationCode &&
+        string.IsNullOrEmpty(ownerViewModel.OrganizationInvitationCode) &&
+        ownerViewModel.OrganizationInvitationStatus == "IDLE",
+        "Launcher retained Organization invitation code after explicit delivery acknowledgement.");
+
+    ownerViewModel.OrganizationInvitationEmail =
+        "ambiguous@example.test";
+    ownerAgent.OrganizationInvitationOutcomeUnknown = true;
+    var ownerReadsBeforeAmbiguousInvitation =
+        ownerAgent.OrganizationReadCount;
+    await ownerViewModel.CreateAccountOrganizationInvitationAsync(
+        CancellationToken.None);
+
+    Require(
+        ownerAgent.OrganizationInvitationCreateCount == 2 &&
+        ownerAgent.OrganizationReadCount ==
+            ownerReadsBeforeAmbiguousInvitation + 1 &&
+        ownerViewModel.OrganizationInvitationStatus ==
+            "OUTCOME_UNKNOWN" &&
+        !ownerViewModel.HasOrganizationInvitationCode &&
+        string.IsNullOrEmpty(
+            ownerViewModel.OrganizationInvitationEmail) &&
+        ownerViewModel.OrganizationInvitationMessage.Contains(
+            "review",
+            StringComparison.OrdinalIgnoreCase),
+        "Ambiguous Organization invitation replayed, leaked a code, or skipped authoritative refresh.");
+
     var billingCatalog = new CustomerJourneyCatalogSource();
     var billingAgent = new CustomerJourneyAgentClient(billingCatalog)
     {
@@ -2592,6 +2733,11 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         billingViewModel.CanEditOrganizationBilling &&
         !billingViewModel.CanSaveOrganizationProfile,
         "BILLING organization profile editor exposed organization identity fields.");
+    Require(
+        !billingViewModel.CanManageOrganizationInvitations &&
+        !billingViewModel.ShowOrganizationInviteSection &&
+        !billingViewModel.CanInviteOrganizationMember,
+        "BILLING role received MANAGE_MEMBERS invitation UX.");
 
     billingViewModel.OrganizationEditBillingEmail =
         "billing-new@example.test";
@@ -2673,6 +2819,14 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         switchViewModel.OrganizationMembers.Count == 1,
         "Account-switch organization certification did not load initial organization state.");
 
+    switchViewModel.OrganizationInvitationEmail =
+        "switch-clear@example.test";
+    await switchViewModel.CreateAccountOrganizationInvitationAsync(
+        CancellationToken.None);
+    Require(
+        switchViewModel.HasOrganizationInvitationCode,
+        "Account-switch certification did not create transient invitation code state.");
+
     await switchViewModel.SwitchAccountAsync(CancellationToken.None);
 
     Require(
@@ -2688,6 +2842,13 @@ static async Task CertifyAccountOrganizationSettingsAsync()
             switchViewModel.OrganizationEditBillingEmail) &&
         switchViewModel.OrganizationProfileUpdateStatus == "IDLE",
         "Safe account switching retained organization-profile edit state.");
+    Require(
+        string.IsNullOrEmpty(
+            switchViewModel.OrganizationInvitationEmail) &&
+        string.IsNullOrEmpty(
+            switchViewModel.OrganizationInvitationCode) &&
+        switchViewModel.OrganizationInvitationStatus == "IDLE",
+        "Safe account switching retained transient Organization invitation delivery state.");
 
     switchAgent.Authenticated = true;
     switchAgent.OrganizationDisplayName = "Second Org";
@@ -3184,6 +3345,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int OrganizationReadCount { get; private set; }
     public int OrganizationCreateCount { get; private set; }
     public int OrganizationProfileUpdateCount { get; private set; }
+    public int OrganizationInvitationCreateCount { get; private set; }
     public int PlatformAuthorityCount { get; private set; }
     public bool Authenticated { get; set; } = true;
     public string AccountType { get; set; } = "INDIVIDUAL";
@@ -3202,6 +3364,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         "UPDATED";
     public bool OrganizationProfileUpdateOutcomeUnknown { get; set; }
     public AccountOrganizationProfileUpdateRequest? LastOrganizationProfileUpdateRequest
+        { get; private set; }
+    public string OrganizationInvitationOutcome { get; set; } =
+        "CREATED";
+    public bool OrganizationInvitationOutcomeUnknown { get; set; }
+    public bool OrganizationInvitationIssued { get; private set; }
+    public AccountOrganizationInvitationCreateRequest? LastOrganizationInvitationRequest
         { get; private set; }
     public string OrganizationCreateOutcome { get; set; } =
         "CREATED";
@@ -3737,15 +3905,31 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 }
                 : Array.Empty<AccountOrganizationMember>(),
             manageMembers
-                ? new[]
-                {
-                    new AccountOrganizationInvitation(
-                        "invitee@example.test",
-                        "MEMBER",
-                        "PENDING",
-                        "2026-10-01T12:00:00.000Z",
-                        "2026-09-29T12:00:00.000Z"),
-                }
+                ? OrganizationInvitationIssued
+                    ? new[]
+                    {
+                        new AccountOrganizationInvitation(
+                            "invitee@example.test",
+                            "MEMBER",
+                            "PENDING",
+                            "2026-10-01T12:00:00.000Z",
+                            "2026-09-29T12:00:00.000Z"),
+                        new AccountOrganizationInvitation(
+                            "new-member@example.test",
+                            "MEMBER",
+                            "PENDING",
+                            "2026-10-07T00:00:00.000Z",
+                            "2026-09-30T00:00:00.000Z"),
+                    }
+                    : new[]
+                    {
+                        new AccountOrganizationInvitation(
+                            "invitee@example.test",
+                            "MEMBER",
+                            "PENDING",
+                            "2026-10-01T12:00:00.000Z",
+                            "2026-09-29T12:00:00.000Z"),
+                    }
                 : Array.Empty<AccountOrganizationInvitation>(),
             null));
     }
@@ -3899,6 +4083,76 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 AgentLocalContract.AccountOrganizationCapabilityId,
                 AgentLocalContract.AccountOrganizationContractVersion,
                 "UPDATED",
+                null));
+    }
+
+    public Task<AccountOrganizationInvitationCreateResponse> CreateAccountOrganizationInvitationAsync(
+        AccountOrganizationInvitationCreateRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OrganizationInvitationCreateCount++;
+        LastOrganizationInvitationRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountOrganizationInvitationCreateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    null,
+                    new AccountOrganizationError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (OrganizationInvitationOutcomeUnknown)
+        {
+            OrganizationInvitationOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountOrganizationInvitationCreateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    null,
+                    null,
+                    new AccountOrganizationError(
+                        "ORGANIZATION_INVITATION_OUTCOME_UNKNOWN",
+                        "The invitation result could not be confirmed.",
+                        false)));
+        }
+
+        if (OrganizationInvitationOutcome != "CREATED")
+        {
+            return Task.FromResult(
+                new AccountOrganizationInvitationCreateResponse(
+                    AgentLocalContract.AccountOrganizationCapabilityId,
+                    AgentLocalContract.AccountOrganizationContractVersion,
+                    OrganizationInvitationOutcome,
+                    null,
+                    null,
+                    new AccountOrganizationError(
+                        OrganizationInvitationOutcome,
+                        "The selected role cannot issue this invitation.",
+                        false)));
+        }
+
+        OrganizationInvitationIssued = true;
+        return Task.FromResult(
+            new AccountOrganizationInvitationCreateResponse(
+                AgentLocalContract.AccountOrganizationCapabilityId,
+                AgentLocalContract.AccountOrganizationContractVersion,
+                "CREATED",
+                new AccountOrganizationInvitationIssued(
+                    request.Email,
+                    request.Role,
+                    "PENDING",
+                    "2026-10-07T00:00:00.000Z",
+                    "2026-09-30T00:00:00.000Z"),
+                "organization-invitation-code-cert",
                 null));
     }
 
