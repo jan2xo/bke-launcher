@@ -143,6 +143,34 @@ public sealed class LauncherAccountOrganizationController
         return response;
     }
 
+    public async Task<AccountOrganizationInvitationCreateResponse> CreateInvitationAsync(
+        string email,
+        string role,
+        CancellationToken cancellationToken)
+    {
+        RequireMemberEmail(email);
+        if (role is not (
+            "OWNER" or
+            "BILLING" or
+            "LICENSE_MANAGER" or
+            "MEMBER"))
+        {
+            throw new ArgumentException(
+                "Organization invitation role is invalid.");
+        }
+
+        var response =
+            await _agent.CreateAccountOrganizationInvitationAsync(
+                new AccountOrganizationInvitationCreateRequest(
+                    Guid.NewGuid().ToString("N"),
+                    email.Trim(),
+                    role),
+                cancellationToken);
+
+        ValidateInvitationCreateContract(response);
+        return response;
+    }
+
     private static void ValidateContract(
         AccountOrganizationOverviewResponse response)
     {
@@ -236,6 +264,82 @@ public sealed class LauncherAccountOrganizationController
             RequireToken(invitation.Status, 32, "invitation status");
             RequireTimestamp(invitation.ExpiresAt, "invitation expiry");
             RequireTimestamp(invitation.CreatedAt, "invitation creation");
+        }
+    }
+
+    private static void ValidateInvitationCreateContract(
+        AccountOrganizationInvitationCreateResponse response)
+    {
+        if (response.CapabilityId !=
+                AgentLocalContract.AccountOrganizationCapabilityId ||
+            response.ContractVersion !=
+                AgentLocalContract.AccountOrganizationContractVersion)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-invitation contract drifted.");
+        }
+
+        if (response.Status is not (
+            "CREATED" or
+            "INVALID_INPUT" or
+            "NOT_ORGANIZATION" or
+            "ACCOUNT_FORBIDDEN" or
+            "CONFLICT" or
+            "AUTH_REQUIRED" or
+            "OUTCOME_UNKNOWN" or
+            "FAILED"))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-invitation status drifted.");
+        }
+
+        if (response.Status == "CREATED")
+        {
+            if (response.Invitation is null ||
+                string.IsNullOrWhiteSpace(response.InvitationCode) ||
+                response.Error is not null)
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization-invitation success is incomplete.");
+            }
+
+            RequireContractEmail(
+                response.Invitation.Email,
+                "invitation email");
+            RequireRole(response.Invitation.Role);
+            RequireToken(
+                response.Invitation.Status,
+                32,
+                "invitation status");
+            RequireTimestamp(
+                response.Invitation.ExpiresAt,
+                "invitation expiry");
+            RequireTimestamp(
+                response.Invitation.CreatedAt,
+                "invitation creation");
+
+            if (response.InvitationCode.Length is < 8 or > 1024 ||
+                response.InvitationCode.Any(character => character < 32))
+            {
+                throw new InvalidDataException(
+                    "BKE Licensing Agent organization invitation code drifted.");
+            }
+            return;
+        }
+
+        if (response.Invitation is not null ||
+            response.InvitationCode is not null)
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-invitation failure exposed delivery state.");
+        }
+
+        if (response.Error is null ||
+            string.IsNullOrWhiteSpace(response.Error.Code) ||
+            string.IsNullOrWhiteSpace(response.Error.Message))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent organization-invitation failure is missing bounded error state.");
         }
     }
 
@@ -369,6 +473,42 @@ public sealed class LauncherAccountOrganizationController
         {
             throw new ArgumentException(
                 $"Organization {label} is invalid.");
+        }
+    }
+
+    private static void RequireMemberEmail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Length > 320 ||
+            !System.Net.Mail.MailAddress.TryCreate(
+                value.Trim(),
+                out var parsed) ||
+            !string.Equals(
+                parsed.Address,
+                value.Trim(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Organization invitation email is invalid.");
+        }
+    }
+
+    private static void RequireContractEmail(
+        string? value,
+        string label)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Length > 320 ||
+            !System.Net.Mail.MailAddress.TryCreate(
+                value.Trim(),
+                out var parsed) ||
+            !string.Equals(
+                parsed.Address,
+                value.Trim(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"Organization {label} drifted.");
         }
     }
 
