@@ -5289,6 +5289,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowPurchaseCheckoutState));
         Raise(nameof(CanSwitchAccount));
         Raise(nameof(SwitchAccountHint));
+        Raise(nameof(CanLeaveOrganization));
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
