@@ -170,6 +170,7 @@ Require(agentMethods.SetEquals([
     "CreateAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationInvitationAsync",
     "ManageAccountOrganizationMemberAsync",
+    "LeaveAccountOrganizationAsync",
     "GetAccountNotificationsAsync",
     "MutateAccountNotificationAsync",
     "RedeemClaimCodeAsync",
@@ -3344,7 +3345,7 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         switchViewModel.OrganizationLeaveStatus == "INVALID_INPUT",
         "OWNER-only Organization state incorrectly submitted self-leave intent.");
 
-        switchViewModel.OrganizationInvitationEmail =
+    switchViewModel.OrganizationInvitationEmail =
         "switch-clear@example.test";
     await switchViewModel.CreateAccountOrganizationInvitationAsync(
         CancellationToken.None);
