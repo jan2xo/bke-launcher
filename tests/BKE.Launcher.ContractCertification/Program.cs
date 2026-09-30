@@ -2100,6 +2100,53 @@ Require(!claimControllerSource.Contains("/api/agent-sessions/", StringComparison
     "Launcher Claim Code controller bypasses the Agent loopback boundary.");
 Require(!claimControllerSource.Contains("File.", StringComparison.Ordinal),
     "Launcher Claim Code controller persists one-time code material.");
+Require(
+    claimControllerSource.Contains(
+        "ValidClaimCode(normalized)",
+        StringComparison.Ordinal) &&
+    claimControllerSource.Contains(
+        "\"BKE-CLM-\"",
+        StringComparison.Ordinal) &&
+    claimControllerSource.Contains(
+        "code.Length != 43",
+        StringComparison.Ordinal),
+    "Launcher Claim Code controller does not fail closed on the Agent-defined code shape.");
+
+var claimRedeemMethodStart = normalizedViewModelSource.IndexOf(
+    "public async Task RedeemClaimCodeAsync(",
+    StringComparison.Ordinal);
+var claimClearBeforeMutation = normalizedViewModelSource.IndexOf(
+    "ClaimCode = string.Empty;",
+    claimRedeemMethodStart,
+    StringComparison.Ordinal);
+var claimMutationAwait = normalizedViewModelSource.IndexOf(
+    "await _claimCodeRedemption.RedeemAsync(",
+    claimRedeemMethodStart,
+    StringComparison.Ordinal);
+Require(
+    claimRedeemMethodStart >= 0 &&
+    claimClearBeforeMutation > claimRedeemMethodStart &&
+    claimMutationAwait > claimClearBeforeMutation,
+    "Launcher retains Claim Code plaintext in the bound field while redemption is submitted.");
+Require(
+    normalizedViewModelSource.Contains(
+        "Resolve the existing checkout attempt before redeeming a Claim Code.",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "BKE will not retry redemption automatically.",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "BKE will not replay the redemption automatically.",
+        StringComparison.Ordinal),
+    "Launcher Claim Code redemption lost checkout binding or no-blind-retry handling.");
+Require(
+    mainWindowMarkup.Contains(
+        "BKE does not store the plaintext code locally",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"Redeem to this account\"",
+        StringComparison.Ordinal),
+    "Launcher Claim Code redemption UI does not explain destination/transient handling.");
 
 var launcherSource = string.Join(
     "\n",
@@ -3909,6 +3956,109 @@ static async Task CertifyClaimCodeRedemptionRefreshesMySoftwareAsync()
             viewModel.Products[0].StateLabel == "Installable" &&
             viewModel.Products[0].CanInstall,
         "Claim Code redemption did not refresh the recipient entitlement into My Software.");
+
+    var malformedCatalog = new CustomerJourneyCatalogSource();
+    var malformedAgent = new CustomerJourneyAgentClient(malformedCatalog);
+    var malformedViewModel = BuildCustomerJourneyViewModel(
+        malformedAgent,
+        malformedCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await malformedViewModel.InitializeAsync(CancellationToken.None);
+    malformedViewModel.ClaimCode =
+        "BKE-CLM-NOT-A-VALID-CODE";
+    Require(
+        !malformedViewModel.CanRedeemClaimCode,
+        "Malformed Claim Code enabled redemption intent.");
+    await malformedViewModel.RedeemClaimCodeAsync(
+        CancellationToken.None);
+    Require(
+        malformedAgent.RedeemCount == 0 &&
+        malformedViewModel.ClaimStatus == "INVALID_REQUEST",
+        "Malformed Claim Code crossed the Agent boundary.");
+
+    var lockedCatalog = new CustomerJourneyCatalogSource();
+    var lockedAgent = new CustomerJourneyAgentClient(lockedCatalog);
+    var lockedRecovery = new CustomerJourneyRecoveryStore();
+    lockedRecovery.Write(new LauncherCheckoutRecoveryState(
+        "claim-checkout-lock-cert",
+        PurchasePlanId,
+        "SELF",
+        ["terms-cert", "privacy-cert"]));
+    var lockedViewModel = BuildCustomerJourneyViewModel(
+        lockedAgent,
+        lockedCatalog,
+        lockedRecovery,
+        new CustomerJourneyNavigator());
+    await lockedViewModel.InitializeAsync(CancellationToken.None);
+    lockedViewModel.ClaimCode =
+        CustomerJourneyAgentClient.GiftClaimCode;
+    Require(
+        !lockedViewModel.CanRedeemClaimCode,
+        "Account-bound checkout recovery did not disable Claim Code redemption.");
+    await lockedViewModel.RedeemClaimCodeAsync(
+        CancellationToken.None);
+    Require(
+        lockedAgent.RedeemCount == 0 &&
+        lockedViewModel.ClaimStatus == "BLOCKED" &&
+        lockedAgent.Authenticated,
+        "Launcher submitted Claim Code redemption during unresolved checkout recovery.");
+
+    var authCatalog = new CustomerJourneyCatalogSource();
+    var authAgent = new CustomerJourneyAgentClient(authCatalog)
+    {
+        ClaimRedemptionOutcome = "AUTH_REQUIRED",
+    };
+    var authViewModel = BuildCustomerJourneyViewModel(
+        authAgent,
+        authCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await authViewModel.InitializeAsync(CancellationToken.None);
+    authViewModel.ClaimCode =
+        CustomerJourneyAgentClient.GiftClaimCode;
+    await authViewModel.RedeemClaimCodeAsync(
+        CancellationToken.None);
+    Require(
+        authAgent.RedeemCount == 1 &&
+        !authAgent.Authenticated &&
+        !authViewModel.IsAuthenticated &&
+        authViewModel.ShowLoginPage &&
+        string.IsNullOrEmpty(authViewModel.ClaimCode),
+        "Agent AUTH_REQUIRED did not collapse stale Launcher authentication or clear Claim Code plaintext.");
+
+    var uncertainCatalog = new CustomerJourneyCatalogSource();
+    var uncertainAgent = new CustomerJourneyAgentClient(
+        uncertainCatalog)
+    {
+        ClaimRedemptionOutcome = "FAILED",
+    };
+    var uncertainViewModel = BuildCustomerJourneyViewModel(
+        uncertainAgent,
+        uncertainCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await uncertainViewModel.InitializeAsync(CancellationToken.None);
+    await uncertainViewModel.OpenModuleAsync(
+        0,
+        CancellationToken.None);
+    uncertainViewModel.ClaimCode =
+        CustomerJourneyAgentClient.GiftClaimCode;
+    await uncertainViewModel.RedeemClaimCodeAsync(
+        CancellationToken.None);
+    Require(
+        uncertainAgent.RedeemCount == 1 &&
+        uncertainAgent.Authenticated &&
+        uncertainViewModel.IsAuthenticated &&
+        uncertainViewModel.ClaimStatus == "FAILED" &&
+        string.IsNullOrEmpty(uncertainViewModel.ClaimCode) &&
+        uncertainViewModel.ClaimMessage.Contains(
+            "will not retry",
+            StringComparison.OrdinalIgnoreCase) &&
+        uncertainViewModel.Products.Count == 1 &&
+        uncertainViewModel.Products[0].StateLabel ==
+            "Not entitled",
+        "Unconfirmed Claim Code mutation retained plaintext, replayed, or skipped authoritative read refresh.");
 }
 
 static MainWindowViewModel BuildCustomerJourneyViewModel(
@@ -4137,7 +4287,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 {
     public const string ProductId = "bke-render-dock";
     public const string PurchasePlanId = "plan-cert-render-dock";
-    public const string GiftClaimCode = "BKE-CLM-CERT1-CERT2-CERT3-CERT4-CERT5-CERT6";
+    public const string GiftClaimCode = "BKE-CLM-ABCDE-12345-A1B2C-C0FFE-0F0F0-ABCDE";
     public const string OrganizationInvitationHandle =
         "bke-org-invite-v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     public const string NewOrganizationInvitationHandle =
@@ -4159,6 +4309,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int CheckoutStartCount { get; private set; }
     public int LogoutCount { get; private set; }
     public int RedeemCount { get; private set; }
+    public string ClaimRedemptionOutcome { get; set; } = "CLAIMED";
     public int PasswordChangeCount { get; private set; }
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
@@ -4433,6 +4584,36 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         RedeemCount++;
+
+        if (!Authenticated ||
+            ClaimRedemptionOutcome == "AUTH_REQUIRED")
+        {
+            Authenticated = false;
+            return Task.FromResult(new ClaimCodeRedeemResponse(
+                AgentLocalContract.ClaimCodeRedemptionCapabilityId,
+                AgentLocalContract.ClaimCodeRedemptionContractVersion,
+                "AUTH_REQUIRED",
+                null,
+                null,
+                new ClaimCodeRedeemError(
+                    "SESSION_INVALID",
+                    "Sign in again.",
+                    false)));
+        }
+
+        if (ClaimRedemptionOutcome == "FAILED")
+        {
+            return Task.FromResult(new ClaimCodeRedeemResponse(
+                AgentLocalContract.ClaimCodeRedemptionCapabilityId,
+                AgentLocalContract.ClaimCodeRedemptionContractVersion,
+                "FAILED",
+                null,
+                null,
+                new ClaimCodeRedeemError(
+                    "REMOTE_UNAVAILABLE",
+                    "Redemption authority could not confirm the result.",
+                    true)));
+        }
 
         if (!string.Equals(request.Code, GiftClaimCode, StringComparison.Ordinal))
         {
