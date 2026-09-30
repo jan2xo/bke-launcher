@@ -2291,7 +2291,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
-Console.WriteLine("Agent-mediated Organization Overview and duplicate-safe Create Organization presentation certified");
+Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/self-leave presentation and reauthentication boundaries certified");
 Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
@@ -2780,8 +2780,10 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         ownerViewModel.OrganizationInvitations.Count == 1 &&
         ownerViewModel.OrganizationInvitations[0].ManagementHandle ==
             CustomerJourneyAgentClient.OrganizationInvitationHandle &&
-        ownerViewModel.ShowOrganizationMembers,
-        "Launcher did not render the complete Agent-supplied OWNER organization overview.");
+        ownerViewModel.ShowOrganizationMembers &&
+        !ownerViewModel.ShowOrganizationLeaveSection &&
+        !ownerViewModel.CanLeaveOrganization,
+        "Launcher did not render the complete Agent-supplied OWNER organization overview or incorrectly enabled owner self-leave.");
 
     Require(
         ownerViewModel.ShowOrganizationProfileEditor &&
@@ -3128,8 +3130,10 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         !billingViewModel.CanManageOrganizationInvitations &&
         !billingViewModel.ShowOrganizationInviteSection &&
         !billingViewModel.CanInviteOrganizationMember &&
-        !billingViewModel.CanManageOrganizationMemberActions,
-        "BILLING role received MANAGE_MEMBERS member/invitation UX.");
+        !billingViewModel.CanManageOrganizationMemberActions &&
+        billingViewModel.ShowOrganizationLeaveSection &&
+        billingViewModel.CanLeaveOrganization,
+        "BILLING role received MANAGE_MEMBERS UX or lost independent Agent-authoritative self-leave permission.");
 
     billingViewModel.OrganizationEditBillingEmail =
         "billing-new@example.test";
@@ -3178,6 +3182,114 @@ static async Task CertifyAccountOrganizationSettingsAsync()
             StringComparison.OrdinalIgnoreCase),
         "Ambiguous organization-profile update replayed or failed to force authoritative review.");
 
+    var ownerLeaveController =
+        new LauncherAccountOrganizationController(ownerAgent);
+    var ownerLeaveResponse = await ownerLeaveController.LeaveAsync(
+        CancellationToken.None);
+    Require(
+        ownerAgent.OrganizationLeaveCount == 1 &&
+        ownerLeaveResponse.Status == "OWNER_CANNOT_LEAVE" &&
+        !ownerLeaveResponse.ReauthenticationRequired &&
+        ownerAgent.Authenticated,
+        "Launcher weakened owner self-leave protection or destroyed valid owner session state.");
+
+    var leaveCatalog = new CustomerJourneyCatalogSource();
+    var leaveAgent = new CustomerJourneyAgentClient(leaveCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "MEMBER",
+        OrganizationDisplayName = "Leave Certification Org",
+    };
+    var leaveViewModel = BuildCustomerJourneyViewModel(
+        leaveAgent,
+        leaveCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await leaveViewModel.InitializeAsync(CancellationToken.None);
+    await leaveViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        leaveViewModel.ShowOrganizationLeaveSection &&
+        leaveViewModel.CanLeaveOrganization &&
+        !leaveViewModel.ShowOrganizationMembers,
+        "Launcher did not expose DS-authoritative self-leave independently of MANAGE_MEMBERS.");
+
+    await leaveViewModel.LeaveAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        leaveAgent.OrganizationLeaveCount == 1 &&
+        leaveAgent.LastOrganizationLeaveRequest is not null &&
+        !leaveAgent.Authenticated &&
+        !leaveViewModel.IsAuthenticated &&
+        leaveViewModel.ShowLoginPage &&
+        !leaveViewModel.OrganizationReady &&
+        !leaveViewModel.ShowOrganizationSection &&
+        !leaveViewModel.ShowOrganizationLeaveSection &&
+        leaveViewModel.OrganizationMembers.Count == 0 &&
+        leaveViewModel.OrganizationInvitations.Count == 0 &&
+        leaveViewModel.Message.Contains(
+            "left",
+            StringComparison.OrdinalIgnoreCase),
+        "Successful Organization self-leave did not clear selected-account presentation and require fresh authentication.");
+
+    var staleLeaveCatalog = new CustomerJourneyCatalogSource();
+    var staleLeaveAgent = new CustomerJourneyAgentClient(
+        staleLeaveCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "MEMBER",
+        OrganizationDisplayName = "Stale Membership Org",
+        OrganizationLeaveOutcome = "MEMBER_NOT_FOUND",
+    };
+    var staleLeaveViewModel = BuildCustomerJourneyViewModel(
+        staleLeaveAgent,
+        staleLeaveCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await staleLeaveViewModel.InitializeAsync(
+        CancellationToken.None);
+    await staleLeaveViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    await staleLeaveViewModel.LeaveAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        staleLeaveAgent.OrganizationLeaveCount == 1 &&
+        !staleLeaveAgent.Authenticated &&
+        !staleLeaveViewModel.IsAuthenticated &&
+        staleLeaveViewModel.Message.Contains(
+            "no longer available",
+            StringComparison.OrdinalIgnoreCase),
+        "Stale Organization membership did not enter clean reauthentication exactly once.");
+
+    var unknownLeaveCatalog = new CustomerJourneyCatalogSource();
+    var unknownLeaveAgent = new CustomerJourneyAgentClient(
+        unknownLeaveCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "MEMBER",
+        OrganizationDisplayName = "Ambiguous Leave Org",
+        OrganizationLeaveOutcomeUnknown = true,
+    };
+    var unknownLeaveViewModel = BuildCustomerJourneyViewModel(
+        unknownLeaveAgent,
+        unknownLeaveCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+    await unknownLeaveViewModel.InitializeAsync(
+        CancellationToken.None);
+    await unknownLeaveViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    await unknownLeaveViewModel.LeaveAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        unknownLeaveAgent.OrganizationLeaveCount == 1 &&
+        !unknownLeaveAgent.Authenticated &&
+        !unknownLeaveViewModel.IsAuthenticated &&
+        unknownLeaveViewModel.Message.Contains(
+            "will not replay",
+            StringComparison.OrdinalIgnoreCase),
+        "Ambiguous Organization self-leave became replayable or retained selected-account presentation.");
+
     ownerAgent.Authenticated = false;
     await ownerViewModel.RefreshAccountOrganizationAsync(
         CancellationToken.None);
@@ -3225,7 +3337,14 @@ static async Task CertifyAccountOrganizationSettingsAsync()
         "Account-switch certification did not create member-management presentation state.");
     switchAgent.OrganizationMemberManageOutcome = "READY";
 
-    switchViewModel.OrganizationInvitationEmail =
+    await switchViewModel.LeaveAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        switchAgent.OrganizationLeaveCount == 0 &&
+        switchViewModel.OrganizationLeaveStatus == "INVALID_INPUT",
+        "OWNER-only Organization state incorrectly submitted self-leave intent.");
+
+        switchViewModel.OrganizationInvitationEmail =
         "switch-clear@example.test";
     await switchViewModel.CreateAccountOrganizationInvitationAsync(
         CancellationToken.None);
@@ -3258,6 +3377,10 @@ static async Task CertifyAccountOrganizationSettingsAsync()
     Require(
         switchViewModel.OrganizationMemberManagementStatus == "IDLE",
         "Safe account switching retained Organization member-management state.");
+    Require(
+        switchViewModel.OrganizationLeaveStatus == "IDLE" &&
+        !switchViewModel.ShowOrganizationLeaveSection,
+        "Safe account switching retained Organization self-leave presentation state.");
 
     switchAgent.Authenticated = true;
     switchAgent.OrganizationDisplayName = "Second Org";
@@ -3331,7 +3454,12 @@ static async Task CertifySafeAccountSwitchingAsync()
         "Safe account switching did not tell the customer to authenticate again.");
 
     var lockedCatalog = new CustomerJourneyCatalogSource();
-    var lockedAgent = new CustomerJourneyAgentClient(lockedCatalog);
+    var lockedAgent = new CustomerJourneyAgentClient(lockedCatalog)
+    {
+        AccountType = "ORGANIZATION",
+        OrganizationRole = "MEMBER",
+        OrganizationDisplayName = "Checkout Locked Org",
+    };
     var recovery = new CustomerJourneyRecoveryStore();
     var navigator = new CustomerJourneyNavigator();
     var lockedViewModel = BuildCustomerJourneyViewModel(
@@ -3341,6 +3469,11 @@ static async Task CertifySafeAccountSwitchingAsync()
         navigator);
 
     await lockedViewModel.InitializeAsync(CancellationToken.None);
+    await lockedViewModel.RefreshAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        lockedViewModel.CanLeaveOrganization,
+        "Checkout-lock certification did not begin with an otherwise leave-authorized Organization membership.");
     await lockedViewModel.OpenModuleAsync(2, CancellationToken.None);
     await lockedViewModel.ReviewPurchaseAsync(
         CustomerJourneyAgentClient.PurchasePlanId,
@@ -3355,8 +3488,21 @@ static async Task CertifySafeAccountSwitchingAsync()
 
     Require(
         recovery.State is not null &&
-        !lockedViewModel.CanSwitchAccount,
-        "Checkout recovery did not lock account switching to the current identity/account.");
+        !lockedViewModel.CanSwitchAccount &&
+        !lockedViewModel.CanLeaveOrganization,
+        "Checkout recovery did not lock account switching and Organization self-leave to the current identity/account.");
+
+    await lockedViewModel.LeaveAccountOrganizationAsync(
+        CancellationToken.None);
+    Require(
+        lockedAgent.OrganizationLeaveCount == 0 &&
+        lockedAgent.Authenticated &&
+        lockedViewModel.IsAuthenticated &&
+        lockedViewModel.OrganizationLeaveStatus == "BLOCKED" &&
+        lockedViewModel.OrganizationLeaveMessage.Contains(
+            "Resolve the existing checkout attempt",
+            StringComparison.Ordinal),
+        "Launcher submitted Organization self-leave while checkout recovery remained account-bound.");
 
     await lockedViewModel.SwitchAccountAsync(CancellationToken.None);
 
