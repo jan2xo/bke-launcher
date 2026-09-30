@@ -182,6 +182,40 @@ public sealed partial class MainWindow : Window
         ViewModel.CompleteOrganizationInvitationDelivery();
     }
 
+    private async void ResendOrganizationInvitation(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext:
+                    BKE.Launcher.Contracts.AccountOrganizationInvitation invitation,
+            })
+        {
+            await ViewModel.ManageAccountOrganizationInvitationAsync(
+                invitation,
+                "RESEND",
+                CancellationToken.None);
+        }
+    }
+
+    private async void RevokeOrganizationInvitation(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext:
+                    BKE.Launcher.Contracts.AccountOrganizationInvitation invitation,
+            })
+        {
+            await ViewModel.ManageAccountOrganizationInvitationAsync(
+                invitation,
+                "REVOKE",
+                CancellationToken.None);
+        }
+    }
+
     private async void RefreshAccountPrivacy(
         object? sender,
         RoutedEventArgs args)

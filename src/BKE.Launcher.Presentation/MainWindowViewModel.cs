@@ -964,10 +964,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CanManageOrganizationInvitations ||
         (IsAuthenticated && HasOrganizationInvitationCode);
 
-    public bool CanInviteOrganizationMember =>
+    public bool CanManageOrganizationInvitationActions =>
         CanManageOrganizationInvitations &&
-        OrganizationInvitationStatus != "ISSUING" &&
-        !HasOrganizationInvitationCode &&
+        OrganizationInvitationStatus is not ("ISSUING" or "MANAGING") &&
+        !HasOrganizationInvitationCode;
+
+    public bool CanInviteOrganizationMember =>
+        CanManageOrganizationInvitationActions &&
         ValidOrganizationCreateEmail(OrganizationInvitationEmail) &&
         ValidOrganizationMemberRole(OrganizationInvitationRole);
 
@@ -3817,6 +3820,150 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task ManageAccountOrganizationInvitationAsync(
+        AccountOrganizationInvitation invitation,
+        string action,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManageOrganizationInvitationActions)
+        {
+            OrganizationInvitationStatus = "INVALID_INPUT";
+            OrganizationInvitationMessage =
+                "Finish delivery of any visible invitation code and refresh the selected Organization before managing another invitation.";
+            return;
+        }
+
+        if (action is not ("RESEND" or "REVOKE") ||
+            string.IsNullOrWhiteSpace(invitation.ManagementHandle))
+        {
+            OrganizationInvitationStatus = "INVALID_INPUT";
+            OrganizationInvitationMessage =
+                "The selected pending invitation cannot be managed safely. Refresh Organization details.";
+            return;
+        }
+
+        OrganizationInvitationStatus = "MANAGING";
+        OrganizationInvitationMessage =
+            action == "RESEND"
+                ? $"Resending the invitation for {invitation.Email} through the BKE Licensing Agent…"
+                : $"Revoking the invitation for {invitation.Email} through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountOrganization.ManageInvitationAsync(
+                action,
+                invitation.ManagementHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                ResetAccountOrganizationState();
+                EnterAccountOrganizationReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "NOT_ORGANIZATION")
+            {
+                ClearAccountOrganization(
+                    "NOT_ORGANIZATION",
+                    "The selected BKE account is not an Organization account.");
+                return;
+            }
+
+            if (response.Status == "RESENT" &&
+                response.Invitation is not null &&
+                !string.IsNullOrWhiteSpace(response.InvitationCode))
+            {
+                var issued = response.Invitation;
+                var invitationCode = response.InvitationCode;
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+
+                if (IsAuthenticated)
+                {
+                    OrganizationInvitationCode = invitationCode;
+                    OrganizationInvitationStatus = "RESENT";
+                    OrganizationInvitationMessage =
+                        $"Invitation for {issued.Email} ({issued.Role}) was resent. Save or send the new one-time invitation code before dismissing it; BKE does not persist a local copy.";
+                }
+                return;
+            }
+
+            if (response.Status == "REVOKED" &&
+                response.Invitation is not null &&
+                response.InvitationCode is null)
+            {
+                var revoked = response.Invitation;
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+
+                if (IsAuthenticated)
+                {
+                    OrganizationInvitationStatus = "REVOKED";
+                    OrganizationInvitationMessage =
+                        $"Invitation for {revoked.Email} was revoked. Pending invitations were refreshed from the authoritative Organization state.";
+                }
+                return;
+            }
+
+            if (response.Status is
+                "OUTCOME_UNKNOWN" or
+                "INVITATION_NOT_FOUND" or
+                "INVITATION_NOT_PENDING" or
+                "INVITATION_EXPIRED")
+            {
+                OrganizationInvitationCode = string.Empty;
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+
+                if (IsAuthenticated)
+                {
+                    OrganizationInvitationStatus = response.Status;
+                    OrganizationInvitationMessage =
+                        response.Status == "OUTCOME_UNKNOWN"
+                            ? "The invitation management result could not be confirmed. Pending invitations were refreshed when possible; review the current Organization state before resending or revoking again."
+                            : response.Error?.Message ??
+                              "The selected pending invitation changed. The authoritative Organization overview was refreshed.";
+                }
+                return;
+            }
+
+            OrganizationInvitationStatus = response.Status;
+            OrganizationInvitationMessage =
+                response.Error?.Message ??
+                "The Organization invitation was not changed.";
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            OrganizationInvitationCode = string.Empty;
+            try
+            {
+                await RefreshAccountOrganizationAsync(
+                    cancellationToken);
+            }
+            catch
+            {
+                // RefreshAccountOrganizationAsync reports its own state.
+            }
+
+            if (IsAuthenticated)
+            {
+                OrganizationInvitationStatus = "OUTCOME_UNKNOWN";
+                OrganizationInvitationMessage =
+                    "The invitation management result could not be confirmed. Pending invitations were refreshed when possible; review the current Organization state before resending or revoking again.";
+            }
+        }
+        catch (ArgumentException error)
+        {
+            OrganizationInvitationStatus = "INVALID_INPUT";
+            OrganizationInvitationMessage = error.Message;
+        }
+    }
+
     public void CompleteOrganizationInvitationDelivery()
     {
         OrganizationInvitationCode = string.Empty;
@@ -4534,6 +4681,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(OrganizationInvitationMessage));
         Raise(nameof(HasOrganizationInvitationCode));
         Raise(nameof(CanManageOrganizationInvitations));
+        Raise(nameof(CanManageOrganizationInvitationActions));
         Raise(nameof(ShowOrganizationInviteSection));
         Raise(nameof(CanInviteOrganizationMember));
         Raise(nameof(ShowOrganizationMembers));
