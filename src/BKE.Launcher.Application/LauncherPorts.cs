@@ -76,6 +76,14 @@ public interface ILauncherAgentClient
         AccountLicenseSeatsManageRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountLicenseDevicesResponse> GetAccountLicenseDevicesAsync(
+        AccountLicenseDevicesRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountLicenseDeviceDeactivateResponse> DeactivateAccountLicenseDeviceAsync(
+        AccountLicenseDeviceDeactivateRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountOrganizationOverviewResponse> GetAccountOrganizationAsync(
         AccountOrganizationOverviewRequest request,
         CancellationToken cancellationToken);
