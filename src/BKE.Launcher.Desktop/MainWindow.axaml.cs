@@ -151,6 +151,14 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void RefreshAccountBilling(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RefreshAccountBillingAsync(
+            CancellationToken.None);
+    }
+
     private async void ContinueAccountPendingOrder(
         object? sender,
         RoutedEventArgs args)
