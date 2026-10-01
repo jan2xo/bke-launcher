@@ -19,7 +19,8 @@ internal static class Program
             args.Length == 1 &&
             string.Equals(args[0], "--ui-smoke", StringComparison.Ordinal);
 
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(
+            IsUiSmoke ? [] : args);
     }
 
     public static AppBuilder BuildAvaloniaApp() =>
