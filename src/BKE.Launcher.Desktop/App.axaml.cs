@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using BKE.Launcher.AgentClient;
 using BKE.Launcher.Application;
 using BKE.Launcher.Infrastructure;
@@ -104,6 +105,23 @@ public sealed partial class App : Avalonia.Application
             {
                 DataContext = viewModel,
             };
+
+            if (Program.IsUiSmoke)
+            {
+                desktop.MainWindow.Opened += (_, _) =>
+                {
+                    var timer = new DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromSeconds(1),
+                    };
+                    timer.Tick += (_, _) =>
+                    {
+                        timer.Stop();
+                        desktop.Shutdown(0);
+                    };
+                    timer.Start();
+                };
+            }
 
             desktop.Exit += (_, _) =>
             {
