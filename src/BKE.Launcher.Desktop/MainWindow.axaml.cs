@@ -44,13 +44,13 @@ public sealed partial class MainWindow : Window
     private async void ModuleChanged(object? sender, SelectionChangedEventArgs args)
     {
         if (!_startupInitialized ||
-            DataContext is not MainWindowViewModel viewModel ||
+            DataContext is not MainWindowViewModel ||
             sender is not TabControl { SelectedIndex: >= 0 } tabs)
         {
             return;
         }
 
-        await viewModel.OpenModuleAsync(
+        await ViewModel.OpenModuleAsync(
             tabs.SelectedIndex,
             CancellationToken.None);
     }
