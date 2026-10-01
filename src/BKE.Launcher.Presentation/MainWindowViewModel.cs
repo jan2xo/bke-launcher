@@ -32,6 +32,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountMfaController _accountMfa;
     private readonly LauncherAccountPrivacyController _accountPrivacy;
     private readonly LauncherAccountPurchasesController _accountPurchases;
+    private readonly LauncherAccountBillingController _accountBilling;
     private readonly LauncherAccountPendingOrdersController _accountPendingOrders;
     private readonly LauncherAccountLicenseSeatsController _accountLicenseSeats;
     private readonly LauncherAccountLicenseDevicesController _accountLicenseDevices;
@@ -92,6 +93,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Refresh purchases and licenses to load the Agent-authoritative selected-account history.";
     private AccountPurchasesAccount? _accountPurchasesAccount;
     private AccountPurchasesPermissions? _accountPurchasesPermissions;
+    private string _accountBillingStatus = "UNKNOWN";
+    private string _accountBillingMessage =
+        "Refresh billing history to load Agent-authoritative invoices and payments.";
+    private AccountBillingAccount? _accountBillingAccount;
+    private AccountBillingPermissions? _accountBillingPermissions;
     private string _accountPendingOrderStatus = "IDLE";
     private string _accountPendingOrderMessage =
         "Pending-order actions are available only when BKE Digital Solutions authorizes them for the selected account role.";
@@ -205,6 +211,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountMfaController accountMfa,
         LauncherAccountPrivacyController accountPrivacy,
         LauncherAccountPurchasesController accountPurchases,
+        LauncherAccountBillingController accountBilling,
         LauncherAccountPendingOrdersController accountPendingOrders,
         LauncherAccountLicenseSeatsController accountLicenseSeats,
         LauncherAccountLicenseDevicesController accountLicenseDevices,
@@ -233,6 +240,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountMfa = accountMfa;
         _accountPrivacy = accountPrivacy;
         _accountPurchases = accountPurchases;
+        _accountBilling = accountBilling;
         _accountPendingOrders = accountPendingOrders;
         _accountLicenseSeats = accountLicenseSeats;
         _accountLicenseDevices = accountLicenseDevices;
@@ -252,6 +260,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<AccountAuthorizedDeviceViewModel> AccountAuthorizedDevices { get; } = [];
     public ObservableCollection<AccountSubscriptionViewModel> AccountSubscriptions { get; } = [];
     public ObservableCollection<AccountOrderViewModel> AccountOrders { get; } = [];
+    public ObservableCollection<AccountInvoiceViewModel> AccountInvoices { get; } = [];
+    public ObservableCollection<AccountPaymentViewModel> AccountPayments { get; } = [];
     public ObservableCollection<AccountOrganizationMember> OrganizationMembers { get; } = [];
     public ObservableCollection<AccountOrganizationInvitation> OrganizationInvitations { get; } = [];
     public IReadOnlyList<string> OrganizationInvitationRoles { get; } =
@@ -717,6 +727,57 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyAccountOrders =>
         ShowAccountOrders &&
         AccountOrders.Count == 0;
+
+    public string AccountBillingStatus
+    {
+        get => _accountBillingStatus;
+        private set
+        {
+            SetField(ref _accountBillingStatus, value);
+            RaiseAccountBillingCapabilities();
+        }
+    }
+
+    public string AccountBillingMessage
+    {
+        get => _accountBillingMessage;
+        private set => SetField(ref _accountBillingMessage, value);
+    }
+
+    public bool CanRefreshAccountBilling =>
+        IsAuthenticated &&
+        AccountBillingStatus != "LOADING";
+
+    public bool AccountBillingReady =>
+        AccountBillingStatus == "READY" &&
+        _accountBillingAccount is not null &&
+        _accountBillingPermissions is not null;
+
+    public string AccountBillingAccountSummary =>
+        _accountBillingAccount is null
+            ? string.Empty
+            : $"{_accountBillingAccount.DisplayName} · {_accountBillingAccount.Role} · {_accountBillingAccount.LifecycleState}";
+
+    public bool ShowAccountInvoices =>
+        AccountBillingReady &&
+        _accountBillingPermissions?.ViewInvoices == true;
+
+    public bool ShowAccountPayments =>
+        AccountBillingReady &&
+        _accountBillingPermissions?.ViewPayments == true;
+
+    public bool ShowAccountBillingUnavailable =>
+        AccountBillingReady &&
+        _accountBillingPermissions?.ViewInvoices == false &&
+        _accountBillingPermissions.ViewPayments == false;
+
+    public bool ShowEmptyAccountInvoices =>
+        ShowAccountInvoices &&
+        AccountInvoices.Count == 0;
+
+    public bool ShowEmptyAccountPayments =>
+        ShowAccountPayments &&
+        AccountPayments.Count == 0;
 
     public string AccountPendingOrderStatus
     {
@@ -4888,6 +4949,81 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task RefreshAccountBillingAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ClearAccountBilling(
+                "AUTH_REQUIRED",
+                "Sign in with BKE before opening billing history.");
+            return;
+        }
+
+        AccountBillingStatus = "LOADING";
+        AccountBillingMessage =
+            "Loading invoices and payments through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountBilling.GetAsync(
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountMfaReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.",
+                    clearRecoveryCodes: true);
+                return;
+            }
+
+            AccountInvoices.Clear();
+            AccountPayments.Clear();
+            _accountBillingAccount = null;
+            _accountBillingPermissions = null;
+
+            if (response.Status != "READY" ||
+                response.Account is null ||
+                response.Permissions is null)
+            {
+                ClearAccountBilling(
+                    response.Status,
+                    response.Error?.Message ??
+                        "Billing history is unavailable for the selected BKE account.");
+                return;
+            }
+
+            _accountBillingAccount = response.Account;
+            _accountBillingPermissions = response.Permissions;
+
+            foreach (var invoice in response.Invoices)
+            {
+                AccountInvoices.Add(
+                    AccountInvoiceViewModel.From(invoice));
+            }
+
+            foreach (var payment in response.Payments)
+            {
+                AccountPayments.Add(
+                    AccountPaymentViewModel.From(payment));
+            }
+
+            AccountBillingStatus = "READY";
+            AccountBillingMessage =
+                "Commercial invoices and payment history loaded from BKE Digital Solutions through the Licensing Agent.";
+            RaiseAccountBillingCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ClearAccountBilling(
+                "AGENT_UNAVAILABLE",
+                "Billing history is unavailable or the Licensing Agent returned an invalid response.");
+        }
+    }
+
     public async Task ContinueAccountPendingOrderAsync(
         AccountOrderViewModel order,
         CancellationToken cancellationToken)
@@ -6243,6 +6379,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ResetAccountPurchasesState()
     {
+        ResetAccountBillingState();
         ResetAccountPendingOrderMutationState();
         ResetAccountLicenseSeatsState();
         ResetAccountLicenseDevicesState();
@@ -6304,6 +6441,43 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanMutateAccountPendingOrders));
         RaiseAccountLicenseSeatsCapabilities();
         RaiseAccountLicenseDevicesCapabilities();
+    }
+
+    private void ResetAccountBillingState()
+    {
+        _accountBillingAccount = null;
+        _accountBillingPermissions = null;
+        AccountInvoices.Clear();
+        AccountPayments.Clear();
+        AccountBillingStatus = "UNKNOWN";
+        AccountBillingMessage =
+            "Refresh billing history to load Agent-authoritative invoices and payments.";
+        RaiseAccountBillingCapabilities();
+    }
+
+    private void ClearAccountBilling(
+        string status,
+        string message)
+    {
+        _accountBillingAccount = null;
+        _accountBillingPermissions = null;
+        AccountInvoices.Clear();
+        AccountPayments.Clear();
+        AccountBillingStatus = status;
+        AccountBillingMessage = message;
+        RaiseAccountBillingCapabilities();
+    }
+
+    private void RaiseAccountBillingCapabilities()
+    {
+        Raise(nameof(CanRefreshAccountBilling));
+        Raise(nameof(AccountBillingReady));
+        Raise(nameof(AccountBillingAccountSummary));
+        Raise(nameof(ShowAccountInvoices));
+        Raise(nameof(ShowAccountPayments));
+        Raise(nameof(ShowAccountBillingUnavailable));
+        Raise(nameof(ShowEmptyAccountInvoices));
+        Raise(nameof(ShowEmptyAccountPayments));
     }
 
     private void ResetAccountPendingOrderMutationState()
@@ -6889,6 +7063,65 @@ public sealed record AccountSubscriptionViewModel(
                 ? "1 seat"
                 : $"{item.Seats} seats",
             $"Current period ends {FormatTimestamp(item.CurrentPeriodEnd)}");
+
+    private static string FormatTimestamp(string value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString(
+                "g",
+                CultureInfo.CurrentCulture)
+            : value;
+}
+
+public sealed record AccountInvoiceViewModel(
+    string Number,
+    string Status,
+    string OrderLabel,
+    string TotalLabel,
+    string TaxLabel,
+    string IssuedLabel,
+    string LinesLabel)
+{
+    public static AccountInvoiceViewModel From(
+        AccountBillingInvoice item)
+    {
+        var lines = item.Lines.Select(line =>
+            $"{line.Description} × {line.Quantity} · {item.Currency} {(line.TotalMinor / 100m).ToString("N2", CultureInfo.CurrentCulture)}");
+
+        return new AccountInvoiceViewModel(
+            item.Number,
+            item.Status,
+            $"Order {item.OrderNumber}",
+            $"{item.Currency} {(item.TotalMinor / 100m).ToString("N2", CultureInfo.CurrentCulture)}",
+            $"Tax {item.Currency} {(item.TaxMinor / 100m).ToString("N2", CultureInfo.CurrentCulture)}",
+            string.IsNullOrWhiteSpace(item.IssuedAt)
+                ? $"Created {FormatTimestamp(item.CreatedAt)}"
+                : $"Issued {FormatTimestamp(item.IssuedAt)}",
+            string.Join(", ", lines));
+    }
+
+    private static string FormatTimestamp(string value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString(
+                "g",
+                CultureInfo.CurrentCulture)
+            : value;
+}
+
+public sealed record AccountPaymentViewModel(
+    string OrderLabel,
+    string Status,
+    string AmountLabel,
+    string PaidLabel)
+{
+    public static AccountPaymentViewModel From(
+        AccountBillingPayment item) =>
+        new(
+            $"Order {item.OrderNumber}",
+            item.Status,
+            $"{item.Currency} {(item.AmountMinor / 100m).ToString("N2", CultureInfo.CurrentCulture)}",
+            string.IsNullOrWhiteSpace(item.PaidAt)
+                ? $"Created {FormatTimestamp(item.CreatedAt)}"
+                : $"Paid {FormatTimestamp(item.PaidAt)}");
 
     private static string FormatTimestamp(string value) =>
         DateTimeOffset.TryParse(value, out var parsed)
