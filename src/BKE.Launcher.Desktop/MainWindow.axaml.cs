@@ -103,6 +103,13 @@ public sealed partial class MainWindow : Window
         await ViewModel.RequestPasswordResetAsync(CancellationToken.None);
     }
 
+    private async void CompletePasswordReset(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.CompletePasswordResetAsync(CancellationToken.None);
+    }
+
     private async void RefreshStatus(object? sender, RoutedEventArgs args)
     {
         await ViewModel.RefreshStatusAsync(CancellationToken.None);
