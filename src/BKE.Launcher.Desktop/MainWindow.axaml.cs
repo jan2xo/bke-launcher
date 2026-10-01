@@ -774,6 +774,29 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void StartStoreTrial(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: StoreEditionViewModel edition,
+            })
+        {
+            await ViewModel.StartStoreTrialAsync(
+                edition,
+                CancellationToken.None);
+        }
+    }
+
+    private async void RefreshStoreTrialState(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RefreshStoreTrialStateAsync(
+            CancellationToken.None);
+    }
+
     private async void ReviewPurchase(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
