@@ -37,6 +37,10 @@ Require(AgentLocalContract.AccountPrivacyContractVersion == 1, "account privacy 
 Require(AgentLocalContract.AccountPurchasesPath == "/v1/account/purchases", "account purchases path drifted");
 Require(AgentLocalContract.AccountPurchasesCapabilityId == "bke.account-purchases", "account purchases capability id drifted");
 Require(AgentLocalContract.AccountPurchasesContractVersion == 1, "account purchases contract version drifted");
+Require(AgentLocalContract.AccountPendingOrderContinuePath == "/v1/account/orders/continue", "account pending-order continue path drifted");
+Require(AgentLocalContract.AccountPendingOrderCancelPath == "/v1/account/orders/cancel", "account pending-order cancel path drifted");
+Require(AgentLocalContract.AccountPendingOrdersCapabilityId == "bke.account-pending-orders", "account pending-order capability id drifted");
+Require(AgentLocalContract.AccountPendingOrdersContractVersion == 1, "account pending-order contract version drifted");
 Require(AgentLocalContract.AccountLicenseSeatsPath == "/v1/account/license-seats", "account license seats path drifted");
 Require(AgentLocalContract.AccountLicenseSeatsManagePath == "/v1/account/license-seats/manage", "account license seats manage path drifted");
 Require(AgentLocalContract.AccountLicenseSeatsCapabilityId == "bke.account-license-seats", "account license seats capability id drifted");
@@ -479,6 +483,130 @@ Require(
     "Launcher bypassed the local Agent purchases authority.");
 
 Require(
+    typeof(AccountPendingOrderContinueRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "OrderContinueHandle",
+        ]),
+    "Launcher widened the Agent pending-order continuation request.");
+
+Require(
+    typeof(AccountPendingOrderCancelRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "OrderCancelHandle",
+        ]),
+    "Launcher widened the Agent pending-order cancellation request.");
+
+using (var continueDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountPendingOrderContinueRequest(
+            "pending-order-continue-cert",
+            CustomerJourneyAgentClient.PendingOrderContinueHandle))))
+{
+    var root = continueDocument.RootElement;
+    Require(
+        root.EnumerateObject()
+            .Select(property => property.Name)
+            .SequenceEqual([
+                "correlation_id",
+                "order_continue_handle",
+            ]) &&
+        !root.TryGetProperty("order_id", out _) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _),
+        "Launcher pending-order continuation exposed raw authority identifiers.");
+}
+
+using (var cancelDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountPendingOrderCancelRequest(
+            "pending-order-cancel-cert",
+            CustomerJourneyAgentClient.PendingOrderCancelHandle))))
+{
+    var root = cancelDocument.RootElement;
+    Require(
+        root.EnumerateObject()
+            .Select(property => property.Name)
+            .SequenceEqual([
+                "correlation_id",
+                "order_cancel_handle",
+            ]) &&
+        !root.TryGetProperty("order_id", out _) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _),
+        "Launcher pending-order cancellation exposed raw authority identifiers.");
+}
+
+foreach (var type in new[]
+{
+    typeof(AccountPendingOrderContinueRequest),
+    typeof(AccountPendingOrderCancelRequest),
+    typeof(AccountPendingOrderContinueResponse),
+    typeof(AccountPendingOrderCancelResponse),
+    typeof(AccountPendingOrderError),
+})
+{
+    Require(
+        type.GetProperties().All(property =>
+            !property.Name.Equals(
+                "OrderId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "AccountId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "UserId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "AccessToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "RefreshToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Payment",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Provider",
+                StringComparison.OrdinalIgnoreCase)),
+        $"Launcher pending-order contract {type.Name} exposes raw authority or payment material.");
+}
+
+var pendingOrderControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherAccountPendingOrdersController.cs"));
+Require(
+    !pendingOrderControllerSource.Contains(
+        "/api/agent-sessions/account/orders/",
+        StringComparison.OrdinalIgnoreCase) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountPendingOrderContinuePath",
+        StringComparison.Ordinal) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountPendingOrderCancelPath",
+        StringComparison.Ordinal),
+    "Launcher bypassed the local Agent pending-order authority.");
+
+Require(
+    pendingOrderControllerSource.Contains(
+        "^bke-order-continue-v1_[0-9a-f]{64}$",
+        StringComparison.Ordinal) &&
+    pendingOrderControllerSource.Contains(
+        "^bke-order-cancel-v1_[0-9a-f]{64}$",
+        StringComparison.Ordinal) &&
+    pendingOrderControllerSource.Contains(
+        "uri.Scheme == Uri.UriSchemeHttps",
+        StringComparison.Ordinal),
+    "Launcher pending-order opaque-handle or secure-checkout validation drifted.");
+
+Require(
     typeof(AccountLicenseSeatsRequest)
         .GetProperties()
         .Select(property => property.Name)
@@ -752,7 +880,7 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "e93bc84fca2d854f724f8637dc8951324b880d0c",
+        "faf88ad65c1c8a2d792fa0f30922d1461b0600b1",
     "Launcher is not pinned to the merged Agent authorized-device authority.");
 
 Require(
@@ -2893,6 +3021,39 @@ Require(
 
 Require(
     mainWindowMarkup.Contains(
+        "Content=\"Continue payment\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"Cancel order\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanMutateAccountPendingOrders}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding CanContinuePayment}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding CanCancelOrder}\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ContinueAccountPendingOrder",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ConfirmPendingOrderCancellationAsync",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "cancel this pending order",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "ContinueHandle",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "CancelHandle",
+        StringComparison.Ordinal),
+    "Launcher pending-order UX/confirmation/opaque-handle boundary drifted.");
+
+Require(
+    mainWindowMarkup.Contains(
         "Content=\"Switch BKE account\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
@@ -2913,6 +3074,7 @@ await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
 await CertifyAccountPurchasesSettingsAsync();
+await CertifyAccountPendingOrderManagementAsync();
 await CertifyAccountLicenseSeatManagementAsync();
 await CertifyAccountLicenseDeviceManagementAsync();
 await CertifyAccountOrganizationSettingsAsync();
@@ -2925,6 +3087,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
+Console.WriteLine("Agent-mediated pending-order continuation/cancellation, authoritative refresh, checkout navigation, and ambiguity replay prevention certified");
 Console.WriteLine("Agent-mediated license seat assignment, authoritative refresh, and ambiguous-outcome replay prevention certified");
 Console.WriteLine("Agent-mediated authorized-device deactivation, authoritative refresh, confirmation, and ambiguous-outcome replay prevention certified");
 Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/ownership-transfer/self-leave presentation and reauthentication boundaries certified");
@@ -3278,7 +3441,17 @@ static async Task CertifyAccountPurchasesSettingsAsync()
         viewModel.AccountPurchasesReady &&
         viewModel.AccountLicenses.Count == 1 &&
         viewModel.AccountSubscriptions.Count == 1 &&
-        viewModel.AccountOrders.Count == 1 &&
+        viewModel.AccountOrders.Count == 2 &&
+        viewModel.AccountOrders.Single(order =>
+            order.Status == "PENDING").CanContinuePayment &&
+        viewModel.AccountOrders.Single(order =>
+            order.Status == "PENDING").CanCancelOrder &&
+        viewModel.AccountOrders.Single(order =>
+            order.Status == "PENDING").ContinueHandle ==
+            CustomerJourneyAgentClient.PendingOrderContinueHandle &&
+        viewModel.AccountOrders.Single(order =>
+            order.Status == "PENDING").CancelHandle ==
+            CustomerJourneyAgentClient.PendingOrderCancelHandle &&
         viewModel.AccountLicenses[0].LicenseKeyLabel.Contains(
             "ABCD",
             StringComparison.Ordinal) &&
@@ -3301,6 +3474,8 @@ static async Task CertifyAccountPurchasesSettingsAsync()
     agent.PurchasesViewAllLicenses = false;
     agent.PurchasesManageLicenseSeats = false;
     agent.PurchasesManageDevices = false;
+    agent.PurchasesContinuePendingOrders = false;
+    agent.PurchasesCancelPendingOrders = false;
 
     await viewModel.RefreshAccountPurchasesAsync(
         CancellationToken.None);
@@ -3330,6 +3505,141 @@ static async Task CertifyAccountPurchasesSettingsAsync()
         viewModel.AccountSubscriptions.Count == 0 &&
         viewModel.AccountOrders.Count == 0,
         "Launcher retained purchases state after Agent session invalidation.");
+}
+
+static async Task CertifyAccountPendingOrderManagementAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var navigator = new CustomerJourneyNavigator();
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        navigator);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    viewModel.OpenAccountSurface();
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    var pending = viewModel.AccountOrders.Single(order =>
+        order.Status == "PENDING");
+    Require(
+        viewModel.CanMutateAccountPendingOrders &&
+        pending.CanContinuePayment &&
+        pending.CanCancelOrder &&
+        pending.ContinueHandle ==
+            CustomerJourneyAgentClient.PendingOrderContinueHandle &&
+        pending.CancelHandle ==
+            CustomerJourneyAgentClient.PendingOrderCancelHandle,
+        "Launcher did not retain Agent-authoritative pending-order actions.");
+
+    await viewModel.ContinueAccountPendingOrderAsync(
+        pending,
+        CancellationToken.None);
+
+    Require(
+        agent.PendingOrderContinueCount == 1 &&
+        agent.LastPendingOrderContinueRequest?.OrderContinueHandle ==
+            CustomerJourneyAgentClient.PendingOrderContinueHandle &&
+        navigator.LastCheckoutUrl ==
+            CustomerJourneyAgentClient.PendingOrderCheckoutUrl &&
+        viewModel.AccountPendingOrderStatus == "CONTINUED" &&
+        viewModel.CanMutateAccountPendingOrders,
+        "Launcher did not open the Agent-returned existing checkout after confirmed continuation.");
+
+    pending = viewModel.AccountOrders.Single(order =>
+        order.Status == "PENDING");
+    await viewModel.CancelAccountPendingOrderAsync(
+        pending,
+        CancellationToken.None);
+
+    Require(
+        agent.PendingOrderCancelCount == 1 &&
+        agent.LastPendingOrderCancelRequest?.OrderCancelHandle ==
+            CustomerJourneyAgentClient.PendingOrderCancelHandle &&
+        agent.PurchasesReadCount == 2 &&
+        viewModel.AccountPurchasesStatus == "READY" &&
+        viewModel.AccountPendingOrderStatus == "CANCELLED" &&
+        viewModel.AccountOrders.All(order =>
+            order.Status != "PENDING") &&
+        viewModel.CanMutateAccountPendingOrders,
+        "Launcher did not refresh authoritative purchases after confirmed cancellation.");
+
+    var ambiguousCatalog = new CustomerJourneyCatalogSource();
+    var ambiguousAgent = new CustomerJourneyAgentClient(
+        ambiguousCatalog)
+    {
+        PendingOrderCancelOutcomeUnknown = true,
+        PendingOrderReadFailsOnceAfterMutation = true,
+    };
+    var ambiguousViewModel = BuildCustomerJourneyViewModel(
+        ambiguousAgent,
+        ambiguousCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await ambiguousViewModel.InitializeAsync(
+        CancellationToken.None);
+    ambiguousViewModel.OpenAccountSurface();
+    await ambiguousViewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+    pending = ambiguousViewModel.AccountOrders.Single(order =>
+        order.Status == "PENDING");
+
+    await ambiguousViewModel.CancelAccountPendingOrderAsync(
+        pending,
+        CancellationToken.None);
+
+    Require(
+        ambiguousAgent.PendingOrderCancelCount == 1 &&
+        ambiguousViewModel.AccountPurchasesStatus ==
+            "AGENT_UNAVAILABLE" &&
+        ambiguousViewModel.AccountPendingOrderStatus ==
+            "REFRESH_REQUIRED" &&
+        !ambiguousViewModel.CanMutateAccountPendingOrders &&
+        ambiguousViewModel.AccountPendingOrderMessage.Contains(
+            "do not replay",
+            StringComparison.OrdinalIgnoreCase),
+        "Launcher ambiguous cancellation did not lock replay when authoritative refresh failed.");
+
+    await ambiguousViewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    Require(
+        ambiguousAgent.PendingOrderCancelCount == 1 &&
+        ambiguousViewModel.AccountPurchasesStatus == "READY" &&
+        ambiguousViewModel.CanMutateAccountPendingOrders &&
+        ambiguousViewModel.AccountOrders.All(order =>
+            order.Status != "PENDING"),
+        "Launcher did not require authoritative purchase refresh before re-enabling pending-order mutation.");
+
+    var hiddenCatalog = new CustomerJourneyCatalogSource();
+    var hiddenAgent = new CustomerJourneyAgentClient(hiddenCatalog)
+    {
+        PurchasesContinuePendingOrders = false,
+        PurchasesCancelPendingOrders = false,
+    };
+    var hiddenViewModel = BuildCustomerJourneyViewModel(
+        hiddenAgent,
+        hiddenCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await hiddenViewModel.InitializeAsync(CancellationToken.None);
+    hiddenViewModel.OpenAccountSurface();
+    await hiddenViewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+    pending = hiddenViewModel.AccountOrders.Single(order =>
+        order.Status == "PENDING");
+
+    Require(
+        !pending.CanContinuePayment &&
+        !pending.CanCancelOrder &&
+        pending.ContinueHandle is null &&
+        pending.CancelHandle is null,
+        "Launcher invented pending-order actions when Agent permissions removed their handles.");
 }
 
 static async Task CertifyAccountLicenseSeatManagementAsync()
@@ -4970,6 +5280,7 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountMfaController(agent),
         new LauncherAccountPrivacyController(agent),
         new LauncherAccountPurchasesController(agent),
+        new LauncherAccountPendingOrdersController(agent),
         new LauncherAccountLicenseSeatsController(agent),
         new LauncherAccountLicenseDevicesController(agent),
         new LauncherAccountOrganizationController(agent));
@@ -5178,6 +5489,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         "bke-license-device-v1_2222222222222222222222222222222222222222222222222222222222222222";
     public const string AuthorizedDeviceHandle =
         "bke-license-device-target-v1_3333333333333333333333333333333333333333333333333333333333333333";
+    public const string PendingOrderContinueHandle =
+        "bke-order-continue-v1_4444444444444444444444444444444444444444444444444444444444444444";
+    public const string PendingOrderCancelHandle =
+        "bke-order-cancel-v1_5555555555555555555555555555555555555555555555555555555555555555";
+    public const string PendingOrderCheckoutUrl =
+        "https://checkout.example.test/pending-order";
 
     private const string AccountId = "acct-cert-recipient";
     private readonly CustomerJourneyCatalogSource _catalog;
@@ -5196,6 +5513,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
     public int PurchasesReadCount { get; private set; }
+    public int PendingOrderContinueCount { get; private set; }
+    public int PendingOrderCancelCount { get; private set; }
     public int LicenseSeatReadCount { get; private set; }
     public int LicenseSeatManageCount { get; private set; }
     public int LicenseDeviceReadCount { get; private set; }
@@ -5219,6 +5538,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public bool PurchasesViewAllLicenses { get; set; } = true;
     public bool PurchasesManageLicenseSeats { get; set; } = true;
     public bool PurchasesManageDevices { get; set; } = true;
+    public bool PurchasesContinuePendingOrders { get; set; } = true;
+    public bool PurchasesCancelPendingOrders { get; set; } = true;
+    public bool PendingOrderExists { get; set; } = true;
+    public bool PendingOrderContinueOutcomeUnknown { get; set; }
+    public bool PendingOrderCancelOutcomeUnknown { get; set; }
+    public bool PendingOrderReadFailsOnceAfterMutation { get; set; }
     public bool AuthorizedDeviceActive { get; set; } = true;
     public bool LicenseDeviceDeactivateOutcomeUnknown { get; set; }
     public bool LicenseDeviceReadFailsOnce { get; set; }
@@ -5234,6 +5559,10 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public AccountLicenseDeviceDeactivateRequest? LastLicenseDeviceDeactivateRequest
         { get; private set; }
     public AccountPurchasesRequest? LastAccountPurchasesRequest
+        { get; private set; }
+    public AccountPendingOrderContinueRequest? LastPendingOrderContinueRequest
+        { get; private set; }
+    public AccountPendingOrderCancelRequest? LastPendingOrderCancelRequest
         { get; private set; }
     public string OrganizationDisplayName { get; set; } =
         "Certification Organization";
@@ -5773,6 +6102,15 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         PurchasesReadCount++;
         LastAccountPurchasesRequest = request;
 
+        if (PendingOrderReadFailsOnceAfterMutation &&
+            (PendingOrderContinueCount > 0 ||
+             PendingOrderCancelCount > 0))
+        {
+            PendingOrderReadFailsOnceAfterMutation = false;
+            throw new HttpRequestException(
+                "Certified pending-order authoritative refresh failure.");
+        }
+
         if (!Authenticated)
         {
             return Task.FromResult(
@@ -5810,7 +6148,9 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                     PurchasesViewSubscriptions,
                     PurchasesViewAllLicenses,
                     PurchasesManageLicenseSeats,
-                    PurchasesManageDevices),
+                    PurchasesManageDevices,
+                    PurchasesContinuePendingOrders,
+                    PurchasesCancelPendingOrders),
                 new[]
                 {
                     new AccountPurchasesLicense(
@@ -5844,24 +6184,157 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                     }
                     : Array.Empty<AccountPurchasesSubscription>(),
                 PurchasesViewOrders
-                    ? new[]
-                    {
-                        new AccountPurchasesOrder(
-                            "ORD-CERT-001",
-                            "PAID",
-                            30000000,
-                            "PHP",
-                            "2026-09-30T00:00:00.000Z",
-                            true,
-                            new[]
-                            {
-                                new AccountPurchasesOrderItem(
-                                    "Render Dock",
-                                    "Pro",
-                                    "Annual"),
-                            }),
-                    }
+                    ? PendingOrderExists
+                        ? new[]
+                        {
+                            new AccountPurchasesOrder(
+                                "ORD-CERT-001",
+                                "PAID",
+                                30000000,
+                                "PHP",
+                                "2026-09-30T00:00:00.000Z",
+                                true,
+                                null,
+                                null,
+                                new[]
+                                {
+                                    new AccountPurchasesOrderItem(
+                                        "Render Dock",
+                                        "Pro",
+                                        "Annual"),
+                                }),
+                            new AccountPurchasesOrder(
+                                "ORD-CERT-PENDING",
+                                "PENDING",
+                                15000000,
+                                "PHP",
+                                "2026-10-01T00:00:00.000Z",
+                                false,
+                                PurchasesContinuePendingOrders
+                                    ? PendingOrderContinueHandle
+                                    : null,
+                                PurchasesCancelPendingOrders
+                                    ? PendingOrderCancelHandle
+                                    : null,
+                                new[]
+                                {
+                                    new AccountPurchasesOrderItem(
+                                        "Render Dock",
+                                        "Pro",
+                                        "Annual"),
+                                }),
+                        }
+                        : new[]
+                        {
+                            new AccountPurchasesOrder(
+                                "ORD-CERT-001",
+                                "PAID",
+                                30000000,
+                                "PHP",
+                                "2026-09-30T00:00:00.000Z",
+                                true,
+                                null,
+                                null,
+                                new[]
+                                {
+                                    new AccountPurchasesOrderItem(
+                                        "Render Dock",
+                                        "Pro",
+                                        "Annual"),
+                                }),
+                        }
                     : Array.Empty<AccountPurchasesOrder>(),
+                null));
+    }
+
+    public Task<AccountPendingOrderContinueResponse> ContinueAccountPendingOrderAsync(
+        AccountPendingOrderContinueRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PendingOrderContinueCount++;
+        LastPendingOrderContinueRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountPendingOrderContinueResponse(
+                    AgentLocalContract.AccountPendingOrdersCapabilityId,
+                    AgentLocalContract.AccountPendingOrdersContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    new AccountPendingOrderError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (PendingOrderContinueOutcomeUnknown)
+        {
+            PendingOrderContinueOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountPendingOrderContinueResponse(
+                    AgentLocalContract.AccountPendingOrdersCapabilityId,
+                    AgentLocalContract.AccountPendingOrdersContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    null,
+                    new AccountPendingOrderError(
+                        "ORDER_CONTINUE_OUTCOME_UNKNOWN",
+                        "Continuation could not be confirmed.",
+                        false)));
+        }
+
+        return Task.FromResult(
+            new AccountPendingOrderContinueResponse(
+                AgentLocalContract.AccountPendingOrdersCapabilityId,
+                AgentLocalContract.AccountPendingOrdersContractVersion,
+                "CONTINUED",
+                PendingOrderCheckoutUrl,
+                null));
+    }
+
+    public Task<AccountPendingOrderCancelResponse> CancelAccountPendingOrderAsync(
+        AccountPendingOrderCancelRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PendingOrderCancelCount++;
+        LastPendingOrderCancelRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountPendingOrderCancelResponse(
+                    AgentLocalContract.AccountPendingOrdersCapabilityId,
+                    AgentLocalContract.AccountPendingOrdersContractVersion,
+                    "AUTH_REQUIRED",
+                    new AccountPendingOrderError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        PendingOrderExists = false;
+
+        if (PendingOrderCancelOutcomeUnknown)
+        {
+            PendingOrderCancelOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountPendingOrderCancelResponse(
+                    AgentLocalContract.AccountPendingOrdersCapabilityId,
+                    AgentLocalContract.AccountPendingOrdersContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    new AccountPendingOrderError(
+                        "ORDER_CANCEL_OUTCOME_UNKNOWN",
+                        "Cancellation could not be confirmed.",
+                        false)));
+        }
+
+        return Task.FromResult(
+            new AccountPendingOrderCancelResponse(
+                AgentLocalContract.AccountPendingOrdersCapabilityId,
+                AgentLocalContract.AccountPendingOrdersContractVersion,
+                "CANCELLED",
                 null));
     }
 
