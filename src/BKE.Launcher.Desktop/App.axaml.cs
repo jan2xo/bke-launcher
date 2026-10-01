@@ -39,6 +39,7 @@ public sealed partial class App : Avalonia.Application
             var store = new LauncherStoreService(agentClient);
             var storeCheckoutReview = new LauncherStoreCheckoutReviewService(agentClient);
             var storeCheckoutStart = new LauncherStoreCheckoutStartService(agentClient);
+            var storeTrialStart = new LauncherStoreTrialStartService(agentClient);
             var storeCheckoutStatus = new LauncherStoreCheckoutStatusService(agentClient);
             var storeGiftClaimReveal = new LauncherStoreGiftClaimRevealService(agentClient);
             var notifications = new LauncherNotificationInboxService(agentClient);
@@ -69,6 +70,7 @@ public sealed partial class App : Avalonia.Application
                 store,
                 storeCheckoutReview,
                 storeCheckoutStart,
+                storeTrialStart,
                 storeCheckoutStatus,
                 storeGiftClaimReveal,
                 notifications,
