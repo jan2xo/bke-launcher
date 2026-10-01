@@ -37,6 +37,9 @@ Require(AgentLocalContract.AccountPrivacyContractVersion == 1, "account privacy 
 Require(AgentLocalContract.AccountPurchasesPath == "/v1/account/purchases", "account purchases path drifted");
 Require(AgentLocalContract.AccountPurchasesCapabilityId == "bke.account-purchases", "account purchases capability id drifted");
 Require(AgentLocalContract.AccountPurchasesContractVersion == 1, "account purchases contract version drifted");
+Require(AgentLocalContract.AccountBillingPath == "/v1/account/billing", "account billing path drifted");
+Require(AgentLocalContract.AccountBillingCapabilityId == "bke.account-billing", "account billing capability id drifted");
+Require(AgentLocalContract.AccountBillingContractVersion == 1, "account billing contract version drifted");
 Require(AgentLocalContract.AccountPendingOrderContinuePath == "/v1/account/orders/continue", "account pending-order continue path drifted");
 Require(AgentLocalContract.AccountPendingOrderCancelPath == "/v1/account/orders/cancel", "account pending-order cancel path drifted");
 Require(AgentLocalContract.AccountPendingOrdersCapabilityId == "bke.account-pending-orders", "account pending-order capability id drifted");
@@ -202,6 +205,7 @@ Require(agentMethods.SetEquals([
     "GetAccountPrivacyRequestsAsync",
     "CreateAccountPrivacyRequestAsync",
     "GetAccountPurchasesAsync",
+    "GetAccountBillingAsync",
     "ContinueAccountPendingOrderAsync",
     "CancelAccountPendingOrderAsync",
     "GetAccountLicenseSeatsAsync",
@@ -486,6 +490,71 @@ Require(
         "AgentLocalContract.AccountPurchasesPath",
         StringComparison.Ordinal),
     "Launcher bypassed the local Agent purchases authority.");
+
+Require(
+    typeof(AccountBillingRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId"]),
+    "Launcher widened the Agent account billing request.");
+
+foreach (var type in new[]
+{
+    typeof(AccountBillingResponse),
+    typeof(AccountBillingAccount),
+    typeof(AccountBillingPermissions),
+    typeof(AccountBillingInvoice),
+    typeof(AccountBillingInvoiceLine),
+    typeof(AccountBillingPayment),
+    typeof(AccountBillingError),
+})
+{
+    Require(
+        type.GetProperties().All(property =>
+            !property.Name.Equals("InvoiceId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("PaymentId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("OrderId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("AccountId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Provider", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("External", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Checkout", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("Snapshot", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("AccessToken", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("RefreshToken", StringComparison.OrdinalIgnoreCase)),
+        $"Launcher billing contract {type.Name} exposes raw cloud/provider authority.");
+}
+
+var billingControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherAccountBillingController.cs"));
+Require(
+    !billingControllerSource.Contains(
+        "/api/agent-sessions/account/billing",
+        StringComparison.OrdinalIgnoreCase) &&
+    !purchasesClientSource.Contains(
+        "/api/agent-sessions/account/billing",
+        StringComparison.OrdinalIgnoreCase) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountBillingPath",
+        StringComparison.Ordinal),
+    "Launcher bypassed the local Agent billing authority.");
+
+Require(
+    billingControllerSource.Contains(
+        "MaximumItems = 50",
+        StringComparison.Ordinal) &&
+    billingControllerSource.Contains(
+        "MaximumInvoiceLines = 100",
+        StringComparison.Ordinal) &&
+    billingControllerSource.Contains(
+        "!response.Permissions.ViewInvoices",
+        StringComparison.Ordinal) &&
+    billingControllerSource.Contains(
+        "!response.Permissions.ViewPayments",
+        StringComparison.Ordinal),
+    "Launcher billing bounds or permission-consistency validation drifted.");
 
 Require(
     typeof(AccountPendingOrderContinueRequest)
@@ -885,7 +954,7 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "b5045510cfa4adfc48af43ce9a50023744c01644",
+        "24cad67ad70648de3b09991f1e04f4b591233fe0",
     "Launcher is not pinned to the merged Agent authorized-device authority.");
 
 Require(
@@ -3059,6 +3128,36 @@ Require(
 
 Require(
     mainWindowMarkup.Contains(
+        "Text=\"Billing history\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"Refresh billing history\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ItemsSource=\"{Binding AccountInvoices}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ItemsSource=\"{Binding AccountPayments}\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "RefreshAccountBilling",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "InvoiceId",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "PaymentId",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "Provider",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "ExternalId",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher billing history UX/identifier boundary drifted.");
+
+Require(
+    mainWindowMarkup.Contains(
         "Content=\"Switch BKE account\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
@@ -3079,6 +3178,7 @@ await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
 await CertifyAccountPurchasesSettingsAsync();
+await CertifyAccountBillingHistoryAsync();
 await CertifyAccountPendingOrderManagementAsync();
 await CertifyAccountLicenseSeatManagementAsync();
 await CertifyAccountLicenseDeviceManagementAsync();
@@ -3092,6 +3192,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
+Console.WriteLine("Agent-mediated selected-account Billing History role-filtered presentation and provider/identifier boundary certified");
 Console.WriteLine("Agent-mediated pending-order continuation/cancellation, authoritative refresh, checkout navigation, and ambiguity replay prevention certified");
 Console.WriteLine("Agent-mediated license seat assignment, authoritative refresh, and ambiguous-outcome replay prevention certified");
 Console.WriteLine("Agent-mediated authorized-device deactivation, authoritative refresh, confirmation, and ambiguous-outcome replay prevention certified");
@@ -3510,6 +3611,64 @@ static async Task CertifyAccountPurchasesSettingsAsync()
         viewModel.AccountSubscriptions.Count == 0 &&
         viewModel.AccountOrders.Count == 0,
         "Launcher retained purchases state after Agent session invalidation.");
+}
+
+static async Task CertifyAccountBillingHistoryAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    viewModel.OpenAccountSurface();
+    await viewModel.RefreshAccountBillingAsync(
+        CancellationToken.None);
+
+    Require(
+        agent.BillingReadCount == 1 &&
+        agent.LastAccountBillingRequest is not null &&
+        !string.IsNullOrWhiteSpace(
+            agent.LastAccountBillingRequest.CorrelationId) &&
+        viewModel.AccountBillingStatus == "READY" &&
+        viewModel.AccountBillingReady &&
+        viewModel.ShowAccountInvoices &&
+        viewModel.ShowAccountPayments &&
+        viewModel.AccountInvoices.Count == 1 &&
+        viewModel.AccountPayments.Count == 1 &&
+        viewModel.AccountInvoices[0].Number == "INV-CERT-001" &&
+        viewModel.AccountInvoices[0].OrderLabel == "Order ORD-CERT-001" &&
+        viewModel.AccountPayments[0].OrderLabel == "Order ORD-CERT-001" &&
+        viewModel.AccountPayments[0].Status == "PAID",
+        "Launcher did not present Agent-authoritative billing history.");
+
+    agent.BillingViewInvoices = false;
+    agent.BillingViewPayments = false;
+    await viewModel.RefreshAccountBillingAsync(
+        CancellationToken.None);
+
+    Require(
+        agent.BillingReadCount == 2 &&
+        viewModel.AccountBillingStatus == "READY" &&
+        viewModel.ShowAccountBillingUnavailable &&
+        !viewModel.ShowAccountInvoices &&
+        !viewModel.ShowAccountPayments &&
+        viewModel.AccountInvoices.Count == 0 &&
+        viewModel.AccountPayments.Count == 0,
+        "Launcher invented billing history for a role without billing permissions.");
+
+    agent.Authenticated = false;
+    await viewModel.RefreshAccountBillingAsync(
+        CancellationToken.None);
+
+    Require(
+        !viewModel.IsAuthenticated &&
+        viewModel.AccountInvoices.Count == 0 &&
+        viewModel.AccountPayments.Count == 0,
+        "Launcher retained billing history after Agent session invalidation.");
 }
 
 static async Task CertifyAccountPendingOrderManagementAsync()
@@ -5316,6 +5475,7 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountMfaController(agent),
         new LauncherAccountPrivacyController(agent),
         new LauncherAccountPurchasesController(agent),
+        new LauncherAccountBillingController(agent),
         new LauncherAccountPendingOrdersController(agent),
         new LauncherAccountLicenseSeatsController(agent),
         new LauncherAccountLicenseDevicesController(agent),
@@ -5549,6 +5709,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
     public int PurchasesReadCount { get; private set; }
+    public int BillingReadCount { get; private set; }
     public int PendingOrderContinueCount { get; private set; }
     public int PendingOrderCancelCount { get; private set; }
     public int LicenseSeatReadCount { get; private set; }
@@ -5570,6 +5731,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public string OrganizationRole { get; set; } = "OWNER";
     public string PurchasesRole { get; set; } = "OWNER";
     public string PurchasesLifecycleState { get; set; } = "ACTIVE";
+    public bool BillingViewInvoices { get; set; } = true;
+    public bool BillingViewPayments { get; set; } = true;
     public bool PurchasesViewOrders { get; set; } = true;
     public bool PurchasesViewSubscriptions { get; set; } = true;
     public bool PurchasesViewAllLicenses { get; set; } = true;
@@ -5596,6 +5759,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public AccountLicenseDeviceDeactivateRequest? LastLicenseDeviceDeactivateRequest
         { get; private set; }
     public AccountPurchasesRequest? LastAccountPurchasesRequest
+        { get; private set; }
+    public AccountBillingRequest? LastAccountBillingRequest
         { get; private set; }
     public AccountPendingOrderContinueRequest? LastPendingOrderContinueRequest
         { get; private set; }
@@ -6283,6 +6448,86 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                                 }),
                         }
                     : Array.Empty<AccountPurchasesOrder>(),
+                null));
+    }
+
+    public Task<AccountBillingResponse> GetAccountBillingAsync(
+        AccountBillingRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BillingReadCount++;
+        LastAccountBillingRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountBillingResponse(
+                    AgentLocalContract.AccountBillingCapabilityId,
+                    AgentLocalContract.AccountBillingContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    null,
+                    Array.Empty<AccountBillingInvoice>(),
+                    Array.Empty<AccountBillingPayment>(),
+                    new AccountBillingError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        var accountName = AccountType == "ORGANIZATION"
+            ? OrganizationDisplayName
+            : "Certification Customer";
+
+        return Task.FromResult(
+            new AccountBillingResponse(
+                AgentLocalContract.AccountBillingCapabilityId,
+                AgentLocalContract.AccountBillingContractVersion,
+                "READY",
+                new AccountBillingAccount(
+                    AccountType,
+                    accountName,
+                    PurchasesLifecycleState,
+                    PurchasesRole),
+                new AccountBillingPermissions(
+                    BillingViewInvoices,
+                    BillingViewPayments),
+                BillingViewInvoices
+                    ? new[]
+                    {
+                        new AccountBillingInvoice(
+                            "INV-CERT-001",
+                            "FINAL",
+                            "ORD-CERT-001",
+                            "PHP",
+                            30000000,
+                            0,
+                            30000000,
+                            "2026-10-01T01:05:00.000Z",
+                            "2026-10-01T01:04:00.000Z",
+                            new[]
+                            {
+                                new AccountBillingInvoiceLine(
+                                    "Render Dock · Pro · Annual",
+                                    1,
+                                    30000000,
+                                    30000000),
+                            }),
+                    }
+                    : Array.Empty<AccountBillingInvoice>(),
+                BillingViewPayments
+                    ? new[]
+                    {
+                        new AccountBillingPayment(
+                            "ORD-CERT-001",
+                            "PAID",
+                            30000000,
+                            "PHP",
+                            "2026-10-01T01:00:00.000Z",
+                            "2026-10-01T00:59:00.000Z"),
+                    }
+                    : Array.Empty<AccountBillingPayment>(),
                 null));
     }
 
