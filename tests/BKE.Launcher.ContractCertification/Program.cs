@@ -3284,6 +3284,8 @@ Require(
     !mainWindowMarkup.Contains(
         "ExternalId",
         StringComparison.OrdinalIgnoreCase),
+    "Launcher billing history UX/identifier boundary drifted.");
+
 Require(
     mainWindowMarkup.Contains(
         "Text=\"Gift Claim Codes\"",
@@ -3322,8 +3324,6 @@ Require(
         "OrderId",
         StringComparison.OrdinalIgnoreCase),
     "Launcher persistent Gift Claim Code UX/recent-auth/identifier boundary drifted.");
-
-    "Launcher billing history UX/identifier boundary drifted.");
 
 Require(
     mainWindowMarkup.Contains(
