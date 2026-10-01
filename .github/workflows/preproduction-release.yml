@@ -1,0 +1,238 @@
+name: BKE Preproduction Release Publication
+
+on:
+  push:
+    branches:
+      - "preproduction-release/**"
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: bke-preproduction-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish certified PREPRODUCTION parent
+    if: github.event.created == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REQUEST_PATH: eng/preproduction-parent-release.json
+    steps:
+      - name: Checkout publication authority
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate PREPRODUCTION publication request
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME#preproduction-release/}"
+          test "$TAG" != "$GITHUB_REF_NAME"
+          test -f "$REQUEST_PATH"
+
+          test "$(jq -r '.schema' "$REQUEST_PATH")" = "bke.preproduction-release-request.v1"
+          test "$(jq -r '.status' "$REQUEST_PATH")" = "PREPRODUCTION"
+          test "$(jq -r '.production_ready' "$REQUEST_PATH")" = "false"
+          test "$(jq -r '.tag' "$REQUEST_PATH")" = "$TAG"
+          [[ "$TAG" =~ ^bke-v[0-9A-Za-z.+-]+-preproduction\.[0-9A-Za-z.+-]+$ ]]
+
+          SOURCE_SHA="$(jq -r '.source_sha' "$REQUEST_PATH")"
+          AGENT_SOURCE_SHA="$(jq -r '.agent_source_sha' "$REQUEST_PATH")"
+          RUN_ID="$(jq -r '.certification_run_id' "$REQUEST_PATH")"
+          ARTIFACT_NAME="$(jq -r '.certification_artifact_name' "$REQUEST_PATH")"
+          INSTALLER_FILE="$(jq -r '.installer.file' "$REQUEST_PATH")"
+          EXPECTED_SHA256="$(jq -r '.installer.sha256' "$REQUEST_PATH")"
+          EXPECTED_BYTES="$(jq -r '.installer.bytes' "$REQUEST_PATH")"
+
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AGENT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          test "$ARTIFACT_NAME" = "BKE-Windows-Parent-Installer-PREPRODUCTION"
+          [[ "$INSTALLER_FILE" =~ ^BKE-[^/]+-PREPRODUCTION-Windows\.exe$ ]]
+          [[ "$EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_BYTES" =~ ^[0-9]+$ ]]
+
+          git fetch --no-tags origin main
+          git cat-file -e "$SOURCE_SHA^{commit}"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          test "$(git show "$SOURCE_SHA:eng/licensing-agent-source.sha" | tr -d '\r\n')" = "$AGENT_SOURCE_SHA"
+
+          {
+            echo "tag=$TAG"
+            echo "source_sha=$SOURCE_SHA"
+            echo "agent_source_sha=$AGENT_SOURCE_SHA"
+            echo "run_id=$RUN_ID"
+            echo "artifact_name=$ARTIFACT_NAME"
+            echo "installer_file=$INSTALLER_FILE"
+            echo "expected_sha256=$EXPECTED_SHA256"
+            echo "expected_bytes=$EXPECTED_BYTES"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Require exact parent certification evidence
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.request.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" > run.json
+          test "$(jq -r '.conclusion' run.json)" = "success"
+
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" > jobs.json
+          for required in             "parent / Launcher contracts / Launcher build + contracts"             "parent / Pinned Agent contracts"             "parent / Build immutable parent package"             "parent / Defender scan"             "parent / Fresh install + runtime health"             "parent / Managed root uninstall"             "parent / Fail-closed unknown provenance"             "parent / Evidence + final candidates"             "parent / Required parent certification"             "Required certification"
+          do
+            jq -e --arg name "$required" '.jobs[] | select(.name == $name and .conclusion == "success")' jobs.json >/dev/null
+          done
+
+      - name: Download exact certified parent artifact
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.request.outputs.run_id }}
+          ARTIFACT_NAME: ${{ steps.request.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-input
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir release-input
+
+      - name: Verify immutable PREPRODUCTION package boundary
+        id: package
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.request.outputs.source_sha }}
+          AGENT_SOURCE_SHA: ${{ steps.request.outputs.agent_source_sha }}
+          INSTALLER_FILE: ${{ steps.request.outputs.installer_file }}
+          EXPECTED_SHA256: ${{ steps.request.outputs.expected_sha256 }}
+          EXPECTED_BYTES: ${{ steps.request.outputs.expected_bytes }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t installers < <(find release-input -type f -name "$INSTALLER_FILE")
+          mapfile -t package_manifests < <(find release-input -type f -name PACKAGE-MANIFEST.json)
+          mapfile -t component_manifests < <(find release-input -type f -name COMPONENT-MANIFEST.json)
+          mapfile -t not_production_files < <(find release-input -type f -name NOT-PRODUCTION.txt)
+
+          test "${#installers[@]}" -eq 1
+          test "${#package_manifests[@]}" -eq 1
+          test "${#component_manifests[@]}" -eq 1
+          test "${#not_production_files[@]}" -eq 1
+
+          INSTALLER="${installers[0]}"
+          PACKAGE_MANIFEST="${package_manifests[0]}"
+          COMPONENT_MANIFEST="${component_manifests[0]}"
+          NOT_PRODUCTION="${not_production_files[0]}"
+
+          jq -e             --arg source "$SOURCE_SHA"             --arg agent "$AGENT_SOURCE_SHA"             --arg file "$INSTALLER_FILE"             --arg sha "$EXPECTED_SHA256"             --argjson bytes "$EXPECTED_BYTES"             '
+              .schema == "bke.parent-package-boundary.v2" and
+              .status == "PREPRODUCTION" and
+              .production_ready == false and
+              .source_sha == $source and
+              .agent_source_sha == $agent and
+              .installer.platform == "windows" and
+              .installer.application_architecture == "x64" and
+              .installer.file == $file and
+              .installer.sha256 == $sha and
+              .installer.bytes == $bytes
+            ' "$PACKAGE_MANIFEST" >/dev/null
+
+          jq -e             --arg source "$SOURCE_SHA"             --arg agent "$AGENT_SOURCE_SHA"             '
+              .schema == "bke.parent-installer-components.v2" and
+              .status == "PREPRODUCTION" and
+              .production_ready == false and
+              .bke_source_sha == $source and
+              .agent_source_sha == $agent and
+              .agent_trust == "DISPOSABLE_PREPRODUCTION"
+            ' "$COMPONENT_MANIFEST" >/dev/null
+
+          grep -F "PREPRODUCTION ONLY" "$NOT_PRODUCTION" >/dev/null
+
+          ACTUAL_SHA256="$(sha256sum "$INSTALLER" | awk '{print $1}')"
+          ACTUAL_BYTES="$(stat -c '%s' "$INSTALLER")"
+          test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
+          test "$ACTUAL_BYTES" = "$EXPECTED_BYTES"
+
+          {
+            echo "installer=$INSTALLER"
+            echo "package_manifest=$PACKAGE_MANIFEST"
+            echo "component_manifest=$COMPONENT_MANIFEST"
+            echo "not_production=$NOT_PRODUCTION"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub prerelease from certified bytes
+        shell: bash
+        env:
+          TAG: ${{ steps.request.outputs.tag }}
+          SOURCE_SHA: ${{ steps.request.outputs.source_sha }}
+          INSTALLER: ${{ steps.package.outputs.installer }}
+          PACKAGE_MANIFEST: ${{ steps.package.outputs.package_manifest }}
+          COMPONENT_MANIFEST: ${{ steps.package.outputs.component_manifest }}
+          NOT_PRODUCTION: ${{ steps.package.outputs.not_production }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to overwrite immutable publication." >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists; refusing to retarget immutable publication." >&2
+            exit 1
+          fi
+
+          cat > release-notes.md <<EOF
+          PREPRODUCTION ONLY.
+
+          This BKE Windows parent installer is an exact certified artifact.
+          It is not production-ready and is published only for disposable/UTM certification.
+
+          BKE source SHA: $SOURCE_SHA
+          Certification run: ${{ steps.request.outputs.run_id }}
+          Licensing Agent SHA: ${{ steps.request.outputs.agent_source_sha }}
+          EOF
+
+          gh release create "$TAG"             "$INSTALLER"             "$PACKAGE_MANIFEST"             "$COMPONENT_MANIFEST"             "$NOT_PRODUCTION"             --repo "$GITHUB_REPOSITORY"             --target "$SOURCE_SHA"             --prerelease             --title "BKE 0.1.0 PREPRODUCTION"             --notes-file release-notes.md
+
+      - name: Re-download and verify published release bytes
+        shell: bash
+        env:
+          TAG: ${{ steps.request.outputs.tag }}
+          SOURCE_SHA: ${{ steps.request.outputs.source_sha }}
+          INSTALLER_FILE: ${{ steps.request.outputs.installer_file }}
+          EXPECTED_SHA256: ${{ steps.request.outputs.expected_sha256 }}
+          EXPECTED_BYTES: ${{ steps.request.outputs.expected_bytes }}
+        run: |
+          set -euo pipefail
+
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > release.json
+          test "$(jq -r '.draft' release.json)" = "false"
+          test "$(jq -r '.prerelease' release.json)" = "true"
+          test "$(jq -r '.tag_name' release.json)" = "$TAG"
+
+          git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git rev-list -n 1 "$TAG")" = "$SOURCE_SHA"
+
+          mkdir -p release-verify
+          gh release download "$TAG"             --repo "$GITHUB_REPOSITORY"             --pattern "$INSTALLER_FILE"             --dir release-verify
+
+          PUBLISHED="release-verify/$INSTALLER_FILE"
+          test -f "$PUBLISHED"
+          test "$(sha256sum "$PUBLISHED" | awk '{print $1}')" = "$EXPECTED_SHA256"
+          test "$(stat -c '%s' "$PUBLISHED")" = "$EXPECTED_BYTES"
+
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${INSTALLER_FILE}"
+          {
+            echo "## BKE PREPRODUCTION release published"
+            echo
+            echo "- Tag: `$TAG`"
+            echo "- Source: `$SOURCE_SHA`"
+            echo "- Installer SHA-256: `$EXPECTED_SHA256`"
+            echo "- Download: $DOWNLOAD_URL"
+            echo
+            echo "**PREPRODUCTION ONLY — not production-ready.**"
+          } >> "$GITHUB_STEP_SUMMARY"

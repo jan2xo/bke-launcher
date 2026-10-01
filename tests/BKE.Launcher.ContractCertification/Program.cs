@@ -11,6 +11,99 @@ var agentBase = new Uri(AgentLocalContract.DefaultBaseAddress, UriKind.Absolute)
 Require(agentBase.IsLoopback, "Agent default address is not loopback.");
 Require(agentBase.Scheme == Uri.UriSchemeHttp, "Agent default address must use local HTTP.");
 
+var preproductionReleaseRequestPath = Path.Combine(
+    "eng",
+    "preproduction-parent-release.json");
+var preproductionReleaseWorkflowPath = Path.Combine(
+    ".github",
+    "workflows",
+    "preproduction-release.yml");
+Require(
+    File.Exists(preproductionReleaseRequestPath),
+    "BKE preproduction release request is missing.");
+Require(
+    File.Exists(preproductionReleaseWorkflowPath),
+    "BKE preproduction release publication workflow is missing.");
+
+using (var releaseRequest = JsonDocument.Parse(
+    File.ReadAllText(preproductionReleaseRequestPath)))
+{
+    var root = releaseRequest.RootElement;
+    var tag = root.GetProperty("tag").GetString() ?? string.Empty;
+    var sourceSha = root.GetProperty("source_sha").GetString() ?? string.Empty;
+    var agentSourceSha =
+        root.GetProperty("agent_source_sha").GetString() ?? string.Empty;
+    var artifactName =
+        root.GetProperty("certification_artifact_name").GetString() ??
+        string.Empty;
+    var installer = root.GetProperty("installer");
+    var installerFile = installer.GetProperty("file").GetString() ?? string.Empty;
+    var installerSha =
+        installer.GetProperty("sha256").GetString() ?? string.Empty;
+
+    Require(
+        root.GetProperty("schema").GetString() ==
+            "bke.preproduction-release-request.v1" &&
+        root.GetProperty("status").GetString() == "PREPRODUCTION" &&
+        root.GetProperty("production_ready").GetBoolean() == false,
+        "BKE preproduction release request crossed the production boundary.");
+    Require(
+        tag.StartsWith("bke-v", StringComparison.Ordinal) &&
+        tag.Contains("-preproduction.", StringComparison.Ordinal) &&
+        !tag.Contains("latest", StringComparison.OrdinalIgnoreCase),
+        "BKE preproduction release tag is not fail-closed.");
+    Require(
+        sourceSha.Length == 40 &&
+        sourceSha.All(Uri.IsHexDigit) &&
+        agentSourceSha.Length == 40 &&
+        agentSourceSha.All(Uri.IsHexDigit),
+        "BKE preproduction release authority SHA is invalid.");
+    Require(
+        root.GetProperty("certification_run_id").GetInt64() > 0 &&
+        artifactName == "BKE-Windows-Parent-Installer-PREPRODUCTION",
+        "BKE preproduction release certification authority drifted.");
+    Require(
+        installerFile.StartsWith("BKE-", StringComparison.Ordinal) &&
+        installerFile.EndsWith(
+            "-PREPRODUCTION-Windows.exe",
+            StringComparison.Ordinal) &&
+        installerSha.Length == 64 &&
+        installerSha.All(Uri.IsHexDigit) &&
+        installer.GetProperty("bytes").GetInt64() > 0,
+        "BKE preproduction installer identity is invalid.");
+}
+
+var preproductionReleaseWorkflow =
+    File.ReadAllText(preproductionReleaseWorkflowPath);
+foreach (var requiredMarker in new[]
+{
+    "\"preproduction-release/**\"",
+    "actions: read",
+    "contents: write",
+    "github.event.created == true",
+    "eng/preproduction-parent-release.json",
+    "gh run download",
+    "bke.parent-package-boundary.v2",
+    "git merge-base --is-ancestor",
+    "gh release create",
+    "--prerelease",
+    "gh release download",
+    "sha256sum",
+})
+{
+    Require(
+        preproductionReleaseWorkflow.Contains(
+            requiredMarker,
+            StringComparison.Ordinal),
+        $"BKE preproduction release workflow is missing guard: {requiredMarker}");
+}
+Require(
+    !preproductionReleaseWorkflow.Contains(
+        "--latest",
+        StringComparison.OrdinalIgnoreCase),
+    "BKE preproduction release workflow must not publish a latest alias.");
+
+
 Require(AgentLocalContract.PlatformAuthorityPath == "/v1/runtime/platform-authority", "platform-authority path drifted");
 Require(AgentLocalContract.PlatformAuthorityCapabilityId == "bke.platform-authority", "platform-authority capability id drifted");
 Require(AgentLocalContract.PlatformAuthorityContractVersion == 1, "platform-authority contract version drifted");

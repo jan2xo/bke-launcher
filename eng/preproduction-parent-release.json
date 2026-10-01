@@ -1,0 +1,15 @@
+{
+  "schema": "bke.preproduction-release-request.v1",
+  "status": "PREPRODUCTION",
+  "production_ready": false,
+  "tag": "bke-v0.1.0-preproduction.20261002",
+  "source_sha": "c276c0d692b6c29b7f3a9631d478af3f78eba518",
+  "agent_source_sha": "49aac38f7a7312ec19ac60f1158252c7e1945bb2",
+  "certification_run_id": 36932481734,
+  "certification_artifact_name": "BKE-Windows-Parent-Installer-PREPRODUCTION",
+  "installer": {
+    "file": "BKE-0.1.0-PREPRODUCTION-Windows.exe",
+    "sha256": "77ca9a87ab19e3df493001014da259481f46e12941554bb9e7ffd8e1435fe827",
+    "bytes": 250878877
+  }
+}
