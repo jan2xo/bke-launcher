@@ -3149,7 +3149,10 @@ Require(
         "PaymentId",
         StringComparison.OrdinalIgnoreCase) &&
     !mainWindowMarkup.Contains(
-        "Provider",
+        "ProviderId",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "ProviderName",
         StringComparison.OrdinalIgnoreCase) &&
     !mainWindowMarkup.Contains(
         "ExternalId",
