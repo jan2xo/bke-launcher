@@ -308,9 +308,15 @@
                               <TextBlock Text="{Binding ExpiryLabel}"
                                          FontSize="11"
                                          Opacity="0.72" />
-                              <Button Content="Manage seats"
-                                      IsVisible="{Binding CanManageSeats}"
-                                      Click="OpenAccountLicenseSeats" />
+                              <StackPanel Orientation="Horizontal"
+                                          Spacing="6">
+                                <Button Content="Manage seats"
+                                        IsVisible="{Binding CanManageSeats}"
+                                        Click="OpenAccountLicenseSeats" />
+                                <Button Content="Manage devices"
+                                        IsVisible="{Binding CanManageDevices}"
+                                        Click="OpenAccountLicenseDevices" />
+                              </StackPanel>
                             </StackPanel>
                           </Border>
                         </DataTemplate>
@@ -381,6 +387,79 @@
 
                         <TextBlock Text="No eligible or currently assigned seat targets are visible for this license."
                                    IsVisible="{Binding ShowEmptyAccountLicenseSeatTargets}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.68" />
+                      </StackPanel>
+                    </Border>
+
+                    <Border Classes="content-card"
+                            IsVisible="{Binding ShowAccountLicenseDeviceManagement}"
+                            Padding="12"
+                            Margin="0,6,0,0">
+                      <StackPanel Spacing="7">
+                        <TextBlock Text="Authorized devices"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AccountLicenseDeviceProductLabel}"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding AccountLicenseDeviceSummary}"
+                                   IsVisible="{Binding AccountLicenseDevicesReady}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding AccountLicenseDevicesStatus}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AccountLicenseDevicesMessage}"
+                                   TextWrapping="Wrap"
+                                   Opacity="0.72" />
+                        <Button Content="Refresh devices"
+                                IsEnabled="{Binding CanRefreshAccountLicenseDevices}"
+                                Click="RefreshAccountLicenseDevices" />
+
+                        <StackPanel IsVisible="{Binding AccountLicenseDevicesReady}"
+                                    IsEnabled="{Binding CanMutateAccountLicenseDevices}"
+                                    Spacing="5">
+                          <ItemsControl ItemsSource="{Binding AccountAuthorizedDevices}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:AccountAuthorizedDeviceViewModel">
+                                <Border Classes="content-card"
+                                        Padding="10"
+                                        Margin="0,0,0,5">
+                                  <StackPanel Spacing="3">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                      <TextBlock Text="{Binding DisplayLabel}"
+                                                 FontWeight="SemiBold"
+                                                 TextWrapping="Wrap" />
+                                      <TextBlock Grid.Column="1"
+                                                 Text="{Binding StatusLabel}"
+                                                 FontSize="11"
+                                                 FontWeight="SemiBold" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding PlatformLabel}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Opacity="0.72" />
+                                    <TextBlock Text="{Binding ActivityLabel}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding ActivatedLabel}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Opacity="0.72" />
+                                    <Button Content="Deactivate device"
+                                            IsVisible="{Binding CanDeactivate}"
+                                            IsEnabled="{Binding CanDeactivate}"
+                                            Click="DeactivateAccountLicenseDevice" />
+                                  </StackPanel>
+                                </Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+
+                        <TextBlock Text="No authorized devices are recorded for this license."
+                                   IsVisible="{Binding ShowEmptyAccountAuthorizedDevices}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    Opacity="0.68" />
