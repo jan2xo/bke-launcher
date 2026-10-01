@@ -652,7 +652,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool CanRefreshAccountPurchases =>
         IsAuthenticated &&
-        AccountPurchasesStatus != "LOADING";
+        AccountPurchasesStatus != "LOADING" &&
+        AccountLicenseSeatsStatus != "CHANGING";
 
     public bool AccountPurchasesReady =>
         AccountPurchasesStatus == "READY" &&
@@ -734,7 +735,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool CanRefreshAccountLicenseSeats =>
         IsAuthenticated &&
         ShowAccountLicenseSeatManagement &&
-        AccountLicenseSeatsStatus != "LOADING";
+        AccountLicenseSeatsStatus is not ("LOADING" or "CHANGING");
 
     public bool CanMutateAccountLicenseSeats =>
         IsAuthenticated &&
@@ -5829,6 +5830,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void RaiseAccountLicenseSeatsCapabilities()
     {
+        Raise(nameof(CanRefreshAccountPurchases));
         Raise(nameof(ShowAccountLicenseSeatManagement));
         Raise(nameof(AccountLicenseSeatsReady));
         Raise(nameof(AccountLicenseSeatProductLabel));
