@@ -32,6 +32,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountMfaController _accountMfa;
     private readonly LauncherAccountPrivacyController _accountPrivacy;
     private readonly LauncherAccountPurchasesController _accountPurchases;
+    private readonly LauncherAccountLicenseSeatsController _accountLicenseSeats;
     private readonly LauncherAccountOrganizationController _accountOrganization;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
@@ -89,6 +90,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Refresh purchases and licenses to load the Agent-authoritative selected-account history.";
     private AccountPurchasesAccount? _accountPurchasesAccount;
     private AccountPurchasesPermissions? _accountPurchasesPermissions;
+    private AccountLicenseViewModel? _selectedAccountLicenseForSeats;
+    private AccountLicenseSeatInfo? _accountLicenseSeatInfo;
+    private string _accountLicenseSeatsStatus = "IDLE";
+    private string _accountLicenseSeatsMessage =
+        "Choose a manageable license to load its authoritative seat assignments.";
+    private bool _accountLicenseSeatMutationLocked;
     private string _accountOrganizationStatus = "UNKNOWN";
     private string _accountOrganizationMessage =
         "Refresh organization details to load the Agent-authoritative selected-account overview.";
@@ -186,6 +193,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountMfaController accountMfa,
         LauncherAccountPrivacyController accountPrivacy,
         LauncherAccountPurchasesController accountPurchases,
+        LauncherAccountLicenseSeatsController accountLicenseSeats,
         LauncherAccountOrganizationController accountOrganization)
     {
         _accountSession = accountSession;
@@ -211,6 +219,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountMfa = accountMfa;
         _accountPrivacy = accountPrivacy;
         _accountPurchases = accountPurchases;
+        _accountLicenseSeats = accountLicenseSeats;
         _accountOrganization = accountOrganization;
         RestoreCheckoutRecoveryState();
     }
@@ -223,6 +232,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
     public ObservableCollection<AccountLicenseViewModel> AccountLicenses { get; } = [];
+    public ObservableCollection<AccountLicenseSeatTargetViewModel> AccountLicenseSeatTargets { get; } = [];
     public ObservableCollection<AccountSubscriptionViewModel> AccountSubscriptions { get; } = [];
     public ObservableCollection<AccountOrderViewModel> AccountOrders { get; } = [];
     public ObservableCollection<AccountOrganizationMember> OrganizationMembers { get; } = [];
@@ -688,6 +698,52 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyAccountOrders =>
         ShowAccountOrders &&
         AccountOrders.Count == 0;
+
+    public string AccountLicenseSeatsStatus
+    {
+        get => _accountLicenseSeatsStatus;
+        private set
+        {
+            SetField(ref _accountLicenseSeatsStatus, value);
+            RaiseAccountLicenseSeatsCapabilities();
+        }
+    }
+
+    public string AccountLicenseSeatsMessage
+    {
+        get => _accountLicenseSeatsMessage;
+        private set => SetField(ref _accountLicenseSeatsMessage, value);
+    }
+
+    public bool ShowAccountLicenseSeatManagement =>
+        _selectedAccountLicenseForSeats is not null;
+
+    public bool AccountLicenseSeatsReady =>
+        AccountLicenseSeatsStatus == "READY" &&
+        _accountLicenseSeatInfo is not null;
+
+    public string AccountLicenseSeatProductLabel =>
+        _selectedAccountLicenseForSeats?.ProductLabel ??
+        string.Empty;
+
+    public string AccountLicenseSeatSummary =>
+        _accountLicenseSeatInfo is null
+            ? string.Empty
+            : $"{_accountLicenseSeatInfo.AssignedSeats} of {_accountLicenseSeatInfo.MaxSeats} seats assigned · {_accountLicenseSeatInfo.AvailableSeats} available";
+
+    public bool CanRefreshAccountLicenseSeats =>
+        IsAuthenticated &&
+        ShowAccountLicenseSeatManagement &&
+        AccountLicenseSeatsStatus != "LOADING";
+
+    public bool CanMutateAccountLicenseSeats =>
+        IsAuthenticated &&
+        AccountLicenseSeatsReady &&
+        !_accountLicenseSeatMutationLocked;
+
+    public bool ShowEmptyAccountLicenseSeatTargets =>
+        AccountLicenseSeatsReady &&
+        AccountLicenseSeatTargets.Count == 0;
 
     public string AccountOrganizationStatus
     {
@@ -1260,6 +1316,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RaiseAccountMfaCapabilities();
             RaiseAccountPrivacyCapabilities();
             RaiseAccountPurchasesCapabilities();
+            RaiseAccountLicenseSeatsCapabilities();
             RaiseAccountOrganizationCapabilities();
             Raise(nameof(CanRefreshNotifications));
             Raise(nameof(CanCheckCheckoutStatus));
@@ -4669,6 +4726,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
+            ResetAccountLicenseSeatsState();
             AccountLicenses.Clear();
             AccountSubscriptions.Clear();
             AccountOrders.Clear();
@@ -4721,6 +4779,200 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClearAccountPurchases(
                 "AGENT_UNAVAILABLE",
                 "Purchases and licenses are unavailable or the Licensing Agent returned an invalid response.");
+        }
+    }
+
+    public async Task OpenAccountLicenseSeatsAsync(
+        AccountLicenseViewModel license,
+        CancellationToken cancellationToken)
+    {
+        if (!license.CanManageSeats ||
+            string.IsNullOrWhiteSpace(
+                license.SeatManagementHandle))
+        {
+            ResetAccountLicenseSeatsState();
+            AccountLicenseSeatsStatus = "NOT_AVAILABLE";
+            AccountLicenseSeatsMessage =
+                "This license is not manageable for the selected BKE account role.";
+            return;
+        }
+
+        _selectedAccountLicenseForSeats = license;
+        _accountLicenseSeatInfo = null;
+        AccountLicenseSeatTargets.Clear();
+        _accountLicenseSeatMutationLocked = false;
+        RaiseAccountLicenseSeatsCapabilities();
+
+        await RefreshAccountLicenseSeatsAsync(
+            cancellationToken);
+    }
+
+    public async Task RefreshAccountLicenseSeatsAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ResetAccountLicenseSeatsState();
+            AccountLicenseSeatsStatus = "AUTH_REQUIRED";
+            AccountLicenseSeatsMessage =
+                "Sign in with BKE before managing license seats.";
+            return;
+        }
+
+        var license = _selectedAccountLicenseForSeats;
+        if (license is null ||
+            string.IsNullOrWhiteSpace(
+                license.SeatManagementHandle))
+        {
+            ResetAccountLicenseSeatsState();
+            return;
+        }
+
+        var recoveringMutation =
+            _accountLicenseSeatMutationLocked;
+        AccountLicenseSeatsStatus = "LOADING";
+        AccountLicenseSeatsMessage = recoveringMutation
+            ? "Refreshing authoritative seat state before another change is allowed…"
+            : "Loading authoritative license seat assignments through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountLicenseSeats.GetAsync(
+                license.SeatManagementHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            _accountLicenseSeatInfo = null;
+            AccountLicenseSeatTargets.Clear();
+
+            if (response.Status != "READY" ||
+                response.License is null)
+            {
+                AccountLicenseSeatsStatus = response.Status;
+                AccountLicenseSeatsMessage =
+                    response.Error?.Message ??
+                    "BKE license seat state is temporarily unavailable.";
+                RaiseAccountLicenseSeatsCapabilities();
+                return;
+            }
+
+            _accountLicenseSeatInfo = response.License;
+
+            foreach (var target in response.Targets)
+            {
+                AccountLicenseSeatTargets.Add(
+                    AccountLicenseSeatTargetViewModel.From(
+                        target,
+                        response.License.AvailableSeats));
+            }
+
+            _accountLicenseSeatMutationLocked = false;
+            AccountLicenseSeatsStatus = "READY";
+            AccountLicenseSeatsMessage = recoveringMutation
+                ? "Authoritative seat state refreshed. Another seat change may now be made."
+                : "License seat assignments loaded from BKE Digital Solutions.";
+            RaiseAccountLicenseSeatsCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            _accountLicenseSeatInfo = null;
+            AccountLicenseSeatTargets.Clear();
+            AccountLicenseSeatsStatus = "AGENT_UNAVAILABLE";
+            AccountLicenseSeatsMessage = recoveringMutation
+                ? "The previous seat change could not be confirmed and the authoritative refresh also failed. Use Refresh seats before attempting another change."
+                : "License seat state is unavailable or the Licensing Agent returned an invalid response.";
+            RaiseAccountLicenseSeatsCapabilities();
+        }
+    }
+
+    public async Task ChangeAccountLicenseSeatAsync(
+        AccountLicenseSeatTargetViewModel target,
+        CancellationToken cancellationToken)
+    {
+        var license = _selectedAccountLicenseForSeats;
+        if (!CanMutateAccountLicenseSeats ||
+            license is null ||
+            string.IsNullOrWhiteSpace(
+                license.SeatManagementHandle) ||
+            !AccountLicenseSeatTargets.Contains(target) ||
+            !target.CanChange)
+        {
+            return;
+        }
+
+        var action = target.Assigned
+            ? "REMOVE"
+            : "ASSIGN";
+
+        _accountLicenseSeatMutationLocked = true;
+        AccountLicenseSeatsStatus = "CHANGING";
+        AccountLicenseSeatsMessage = action == "ASSIGN"
+            ? $"Assigning a seat to {target.DisplayLabel}…"
+            : $"Removing the seat from {target.DisplayLabel}…";
+        RaiseAccountLicenseSeatsCapabilities();
+
+        try
+        {
+            var response = await _accountLicenseSeats.ManageAsync(
+                action,
+                license.SeatManagementHandle,
+                target.ManagementHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status is
+                "ASSIGNED" or
+                "EXISTING" or
+                "REMOVED" or
+                "NOT_ASSIGNED" or
+                "OUTCOME_UNKNOWN")
+            {
+                AccountLicenseSeatsMessage =
+                    response.Status == "OUTCOME_UNKNOWN"
+                        ? "The seat change outcome could not be confirmed. BKE will not replay it; refreshing authoritative state now."
+                        : "Seat change accepted. Refreshing authoritative state before another change is allowed.";
+
+                await RefreshAccountLicenseSeatsAsync(
+                    cancellationToken);
+                return;
+            }
+
+            _accountLicenseSeatMutationLocked = false;
+            AccountLicenseSeatsStatus = response.Status;
+            AccountLicenseSeatsMessage =
+                response.Error?.Message ??
+                "The license seat assignment was not changed.";
+            RaiseAccountLicenseSeatsCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            // The local Agent may have received the mutation even when
+            // Launcher did not receive a valid response. Do not replay it.
+            AccountLicenseSeatsStatus = "OUTCOME_UNKNOWN";
+            AccountLicenseSeatsMessage =
+                "The seat change outcome could not be confirmed. BKE will not replay it; refreshing authoritative state now.";
+            RaiseAccountLicenseSeatsCapabilities();
+
+            await RefreshAccountLicenseSeatsAsync(
+                cancellationToken);
         }
     }
 
@@ -5512,6 +5764,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ResetAccountPurchasesState()
     {
+        ResetAccountLicenseSeatsState();
         _accountPurchasesAccount = null;
         _accountPurchasesPermissions = null;
         AccountLicenses.Clear();
@@ -5527,6 +5780,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string status,
         string message)
     {
+        ResetAccountLicenseSeatsState();
         _accountPurchasesAccount = null;
         _accountPurchasesPermissions = null;
         AccountLicenses.Clear();
@@ -5558,6 +5812,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowAccountOrders));
         Raise(nameof(ShowAccountOrdersUnavailable));
         Raise(nameof(ShowEmptyAccountOrders));
+        RaiseAccountLicenseSeatsCapabilities();
+    }
+
+    private void ResetAccountLicenseSeatsState()
+    {
+        _selectedAccountLicenseForSeats = null;
+        _accountLicenseSeatInfo = null;
+        _accountLicenseSeatMutationLocked = false;
+        AccountLicenseSeatTargets.Clear();
+        AccountLicenseSeatsStatus = "IDLE";
+        AccountLicenseSeatsMessage =
+            "Choose a manageable license to load its authoritative seat assignments.";
+        RaiseAccountLicenseSeatsCapabilities();
+    }
+
+    private void RaiseAccountLicenseSeatsCapabilities()
+    {
+        Raise(nameof(ShowAccountLicenseSeatManagement));
+        Raise(nameof(AccountLicenseSeatsReady));
+        Raise(nameof(AccountLicenseSeatProductLabel));
+        Raise(nameof(AccountLicenseSeatSummary));
+        Raise(nameof(CanRefreshAccountLicenseSeats));
+        Raise(nameof(CanMutateAccountLicenseSeats));
+        Raise(nameof(ShowEmptyAccountLicenseSeatTargets));
     }
 
     private void ResetAccountPrivacyState()
@@ -5925,8 +6203,13 @@ public sealed record AccountLicenseViewModel(
     string PlanLabel,
     string LicenseKeyLabel,
     string DeviceLabel,
-    string ExpiryLabel)
+    string SeatLabel,
+    string ExpiryLabel,
+    string? SeatManagementHandle)
 {
+    public bool CanManageSeats =>
+        !string.IsNullOrWhiteSpace(SeatManagementHandle);
+
     public static AccountLicenseViewModel From(
         AccountPurchasesLicense item) =>
         new(
@@ -5937,9 +6220,11 @@ public sealed record AccountLicenseViewModel(
             item.PlanType ?? "Plan not specified",
             $"License ending {item.KeyLastFour}",
             $"{item.ActiveDevices} of {item.MaxDevices} device slots active",
+            $"{item.AssignedSeats} of {item.MaxSeats} seats assigned",
             string.IsNullOrWhiteSpace(item.ExpiresAt)
                 ? "No expiry returned"
-                : $"Expires {FormatTimestamp(item.ExpiresAt)}");
+                : $"Expires {FormatTimestamp(item.ExpiresAt)}",
+            item.SeatManagementHandle);
 
     private static string ProductLabelFor(
         string product,
@@ -5954,6 +6239,58 @@ public sealed record AccountLicenseViewModel(
                 "g",
                 CultureInfo.CurrentCulture)
             : value;
+}
+
+public sealed record AccountLicenseSeatTargetViewModel(
+    string DisplayLabel,
+    string Email,
+    string AssignmentLabel,
+    string EligibilityLabel,
+    string ActionLabel,
+    bool Assigned,
+    bool Eligible,
+    bool CanChange,
+    string ManagementHandle)
+{
+    public static AccountLicenseSeatTargetViewModel From(
+        AccountLicenseSeatTarget item,
+        int availableSeats)
+    {
+        var displayLabel = string.IsNullOrWhiteSpace(item.Name)
+            ? item.Email
+            : item.Name;
+
+        var canChange =
+            item.Assigned ||
+            item.Eligible && availableSeats > 0;
+
+        var actionLabel = item.Assigned
+            ? "Remove seat"
+            : item.Eligible && availableSeats > 0
+                ? "Assign seat"
+                : item.Eligible
+                    ? "No seats available"
+                    : "Not eligible";
+
+        var eligibilityLabel = item.Eligible
+            ? "Eligible account member"
+            : item.Assigned
+                ? "No longer eligible · assigned seat can still be removed"
+                : "Not eligible for a new seat";
+
+        return new AccountLicenseSeatTargetViewModel(
+            displayLabel,
+            item.Email,
+            item.Assigned
+                ? "Seat assigned"
+                : "No seat assigned",
+            eligibilityLabel,
+            actionLabel,
+            item.Assigned,
+            item.Eligible,
+            canChange,
+            item.ManagementHandle);
+    }
 }
 
 public sealed record AccountSubscriptionViewModel(
