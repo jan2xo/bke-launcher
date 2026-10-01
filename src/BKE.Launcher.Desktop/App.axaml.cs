@@ -56,6 +56,8 @@ public sealed partial class App : Avalonia.Application
             var accountMfa = new LauncherAccountMfaController(agentClient);
             var accountPrivacy = new LauncherAccountPrivacyController(agentClient);
             var accountPurchases = new LauncherAccountPurchasesController(agentClient);
+            var persistentGiftClaims =
+                new LauncherPersistentGiftClaimsController(agentClient);
             var accountBilling = new LauncherAccountBillingController(agentClient);
             var accountPendingOrders = new LauncherAccountPendingOrdersController(agentClient);
             var accountLicenseSeats = new LauncherAccountLicenseSeatsController(agentClient);
@@ -86,6 +88,7 @@ public sealed partial class App : Avalonia.Application
                 accountMfa,
                 accountPrivacy,
                 accountPurchases,
+                persistentGiftClaims,
                 accountBilling,
                 accountPendingOrders,
                 accountLicenseSeats,

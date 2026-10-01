@@ -172,6 +172,11 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountPendingOrderContinueResponse).GetProperties())
     .Concat(typeof(AccountPendingOrderCancelResponse).GetProperties())
     .Concat(typeof(AccountPendingOrderError).GetProperties())
+    .Concat(typeof(AccountRecentAuthResponse).GetProperties())
+    .Concat(typeof(AccountRecentAuthError).GetProperties())
+    .Concat(typeof(StoreGiftClaimsResponse).GetProperties())
+    .Concat(typeof(StoreGiftClaimsError).GetProperties())
+    .Concat(typeof(StoreGiftClaimPersistentRevealResponse).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -207,6 +212,8 @@ Require(agentMethods.SetEquals([
     "StartAccountMfaProofAsync",
     "DisableAccountMfaAsync",
     "RegenerateAccountMfaRecoveryAsync",
+    "StartAccountRecentAuthAsync",
+    "CompleteAccountRecentAuthAsync",
     "GetAccountPrivacyRequestsAsync",
     "CreateAccountPrivacyRequestAsync",
     "GetAccountPurchasesAsync",
@@ -235,6 +242,8 @@ Require(agentMethods.SetEquals([
     "StartStoreTrialAsync",
     "CheckStoreCheckoutStatusAsync",
     "RevealStoreGiftClaimCodeAsync",
+    "GetStoreGiftClaimsAsync",
+    "RevealPersistentStoreGiftClaimAsync",
     "GetSoftwareCatalogAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
@@ -960,8 +969,67 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "7a0dcef180df43401d30190bdc84d94b796c7308",
+        "aacf8970d4afad4c0b78175a130d69c0a78f761d",
     "Launcher is not pinned to the merged Agent authority.");
+
+Require(
+    AgentLocalContract.AccountRecentAuthStartPath ==
+        "/v1/account/recent-auth/start" &&
+    AgentLocalContract.AccountRecentAuthCompletePath ==
+        "/v1/account/recent-auth/complete" &&
+    AgentLocalContract.AccountRecentAuthCapabilityId ==
+        "bke.account-recent-auth" &&
+    AgentLocalContract.StoreGiftClaimsPath ==
+        "/v1/store/gift-claim-codes" &&
+    AgentLocalContract.StoreGiftClaimPersistentRevealPath ==
+        "/v1/store/gift-claim-codes/reveal" &&
+    AgentLocalContract.StoreGiftClaimsCapabilityId ==
+        "bke.store-gift-claims" &&
+    AgentLocalContract.StoreGiftClaimPersistentRevealCapabilityId ==
+        "bke.store-gift-claim-persistent-reveal",
+    "Launcher persistent Gift Claim Code capability identity drifted.");
+
+Require(
+    typeof(AccountRecentAuthStartRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId", "CurrentPassword"]) &&
+    typeof(AccountRecentAuthCompleteRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId", "ChallengeToken", "Code"]) &&
+    typeof(StoreGiftClaimsRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId"]) &&
+    typeof(StoreGiftClaimPersistentRevealRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId", "GiftClaimHandle"]),
+    "Launcher widened the persistent Gift Claim Code/recent-auth request boundary.");
+
+var persistentGiftControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherPersistentGiftClaimsController.cs"));
+Require(
+    !persistentGiftControllerSource.Contains(
+        "/api/agent-sessions/",
+        StringComparison.OrdinalIgnoreCase) &&
+    !persistentGiftControllerSource.Contains(
+        "File.",
+        StringComparison.Ordinal) &&
+    !persistentGiftControllerSource.Contains(
+        "account_id",
+        StringComparison.OrdinalIgnoreCase) &&
+    !persistentGiftControllerSource.Contains(
+        "claim_code_id",
+        StringComparison.OrdinalIgnoreCase) &&
+    !persistentGiftControllerSource.Contains(
+        "order_id",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher persistent Gift Claim Code controller bypassed Agent or widened cloud authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -3217,6 +3285,45 @@ Require(
         "ExternalId",
         StringComparison.OrdinalIgnoreCase),
     "Launcher billing history UX/identifier boundary drifted.");
+
+Require(
+    mainWindowMarkup.Contains(
+        "Text=\"Gift Claim Codes\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"Refresh Gift Claim Codes\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"Reveal Claim Code\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "GiftClaimRecentPassword",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "GiftClaimMfaCode",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"I've saved this Claim Code\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "RefreshPersistentGiftClaims",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "RevealPersistentGiftClaim",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "StartPersistentGiftClaimRecentAuth",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "CompletePersistentGiftClaimRecentAuth",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "ClaimCodeId",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "OrderId",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher persistent Gift Claim Code UX/recent-auth/identifier boundary drifted.");
 
 Require(
     mainWindowMarkup.Contains(
@@ -5625,6 +5732,7 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountMfaController(agent),
         new LauncherAccountPrivacyController(agent),
         new LauncherAccountPurchasesController(agent),
+        new LauncherPersistentGiftClaimsController(agent),
         new LauncherAccountBillingController(agent),
         new LauncherAccountPendingOrdersController(agent),
         new LauncherAccountLicenseSeatsController(agent),
@@ -5818,6 +5926,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public const string PurchasePlanId = "plan-cert-render-dock";
     public const string EditionId = "edition-cert-render-dock";
     public const string GiftClaimCode = "BKE-CLM-ABCDE-12345-A1B2C-C0FFE-0F0F0-ABCDE";
+    public const string GiftClaimHandle =
+        "bke-gift-claim-v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     public const string OrganizationInvitationHandle =
         "bke-org-invite-v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     public const string NewOrganizationInvitationHandle =
@@ -5854,6 +5964,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public int CheckoutStartCount { get; private set; }
     public int TrialStartCount { get; private set; }
+    public int GiftClaimsReadCount { get; private set; }
+    public int PersistentGiftRevealCount { get; private set; }
+    public int RecentAuthStartCount { get; private set; }
+    public int RecentAuthCompleteCount { get; private set; }
+    public bool RecentAuthVerified { get; private set; }
+    public bool RecentAuthRequiresMfa { get; set; } = true;
     public int LogoutCount { get; private set; }
     public int RedeemCount { get; private set; }
     public string ClaimRedemptionOutcome { get; set; } = "CLAIMED";
@@ -6230,6 +6346,124 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             "order-gift-cert",
             "claim-cert",
             GiftClaimCode,
+            null));
+    }
+
+    public Task<StoreGiftClaimsResponse> GetStoreGiftClaimsAsync(
+        StoreGiftClaimsRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        GiftClaimsReadCount++;
+        return Task.FromResult(new StoreGiftClaimsResponse(
+            AgentLocalContract.StoreGiftClaimsCapabilityId,
+            AgentLocalContract.StoreGiftClaimsContractVersion,
+            "READY",
+            request.CorrelationId,
+            "ACTIVE",
+            [
+                new StoreGiftClaimItem(
+                    GiftClaimHandle,
+                    "BKE-2026-GIFT-CERT",
+                    "Render Dock",
+                    "Standard",
+                    "Perpetual",
+                    "BCDE",
+                    "AVAILABLE",
+                    "2026-10-01T06:00:00.000Z",
+                    null),
+            ],
+            null));
+    }
+
+    public Task<StoreGiftClaimPersistentRevealResponse>
+        RevealPersistentStoreGiftClaimAsync(
+            StoreGiftClaimPersistentRevealRequest request,
+            CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PersistentGiftRevealCount++;
+
+        if (!RecentAuthVerified)
+        {
+            return Task.FromResult(
+                new StoreGiftClaimPersistentRevealResponse(
+                    AgentLocalContract.StoreGiftClaimPersistentRevealCapabilityId,
+                    AgentLocalContract.StoreGiftClaimPersistentRevealContractVersion,
+                    "RECENT_AUTH_REQUIRED",
+                    request.CorrelationId,
+                    null,
+                    null,
+                    new StoreGiftClaimsError(
+                        "RECENT_AUTH_REQUIRED",
+                        "Recent authentication required.",
+                        false)));
+        }
+
+        return Task.FromResult(
+            new StoreGiftClaimPersistentRevealResponse(
+                AgentLocalContract.StoreGiftClaimPersistentRevealCapabilityId,
+                AgentLocalContract.StoreGiftClaimPersistentRevealContractVersion,
+                "AVAILABLE",
+                request.CorrelationId,
+                request.GiftClaimHandle,
+                GiftClaimCode,
+                null));
+    }
+
+    public Task<AccountRecentAuthResponse> StartAccountRecentAuthAsync(
+        AccountRecentAuthStartRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RecentAuthStartCount++;
+
+        if (!RecentAuthRequiresMfa)
+        {
+            RecentAuthVerified = true;
+            return Task.FromResult(new AccountRecentAuthResponse(
+                AgentLocalContract.AccountRecentAuthCapabilityId,
+                AgentLocalContract.AccountRecentAuthContractVersion,
+                "VERIFIED",
+                request.CorrelationId,
+                "2026-10-01T07:15:00.000Z",
+                null,
+                null,
+                null,
+                null,
+                null));
+        }
+
+        return Task.FromResult(new AccountRecentAuthResponse(
+            AgentLocalContract.AccountRecentAuthCapabilityId,
+            AgentLocalContract.AccountRecentAuthContractVersion,
+            "MFA_CHALLENGE_ISSUED",
+            request.CorrelationId,
+            null,
+            "challenge-cert-transient",
+            "2026-10-01T07:05:00.000Z",
+            true,
+            "MFA-CERT",
+            null));
+    }
+
+    public Task<AccountRecentAuthResponse> CompleteAccountRecentAuthAsync(
+        AccountRecentAuthCompleteRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RecentAuthCompleteCount++;
+        RecentAuthVerified = true;
+        return Task.FromResult(new AccountRecentAuthResponse(
+            AgentLocalContract.AccountRecentAuthCapabilityId,
+            AgentLocalContract.AccountRecentAuthContractVersion,
+            "VERIFIED",
+            request.CorrelationId,
+            "2026-10-01T07:15:00.000Z",
+            null,
+            null,
+            null,
+            null,
             null));
     }
 

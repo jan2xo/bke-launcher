@@ -169,6 +169,24 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AccountMfaRequestTimeout,
             cancellationToken);
 
+    public Task<AccountRecentAuthResponse> StartAccountRecentAuthAsync(
+        AccountRecentAuthStartRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountRecentAuthStartRequest, AccountRecentAuthResponse>(
+            AgentLocalContract.AccountRecentAuthStartPath,
+            request,
+            AccountMfaRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountRecentAuthResponse> CompleteAccountRecentAuthAsync(
+        AccountRecentAuthCompleteRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountRecentAuthCompleteRequest, AccountRecentAuthResponse>(
+            AgentLocalContract.AccountRecentAuthCompletePath,
+            request,
+            AccountMfaRequestTimeout,
+            cancellationToken);
+
     public Task<AccountPrivacyListResponse> GetAccountPrivacyRequestsAsync(
         AccountPrivacyListRequest request,
         CancellationToken cancellationToken) =>
@@ -412,6 +430,24 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
         CancellationToken cancellationToken) =>
         PostAsync<StoreGiftClaimRevealRequest, StoreGiftClaimRevealResponse>(
             AgentLocalContract.StoreGiftClaimRevealPath,
+            request,
+            StoreCheckoutRequestTimeout,
+            cancellationToken);
+
+    public Task<StoreGiftClaimsResponse> GetStoreGiftClaimsAsync(
+        StoreGiftClaimsRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<StoreGiftClaimsRequest, StoreGiftClaimsResponse>(
+            AgentLocalContract.StoreGiftClaimsPath,
+            request,
+            StoreCheckoutRequestTimeout,
+            cancellationToken);
+
+    public Task<StoreGiftClaimPersistentRevealResponse> RevealPersistentStoreGiftClaimAsync(
+        StoreGiftClaimPersistentRevealRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<StoreGiftClaimPersistentRevealRequest, StoreGiftClaimPersistentRevealResponse>(
+            AgentLocalContract.StoreGiftClaimPersistentRevealPath,
             request,
             StoreCheckoutRequestTimeout,
             cancellationToken);

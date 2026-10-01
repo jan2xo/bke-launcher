@@ -56,6 +56,14 @@ public interface ILauncherAgentClient
         AccountMfaMutationRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountRecentAuthResponse> StartAccountRecentAuthAsync(
+        AccountRecentAuthStartRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountRecentAuthResponse> CompleteAccountRecentAuthAsync(
+        AccountRecentAuthCompleteRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountPrivacyListResponse> GetAccountPrivacyRequestsAsync(
         AccountPrivacyListRequest request,
         CancellationToken cancellationToken);
@@ -166,6 +174,14 @@ public interface ILauncherAgentClient
 
     Task<StoreGiftClaimRevealResponse> RevealStoreGiftClaimCodeAsync(
         StoreGiftClaimRevealRequest request,
+        CancellationToken cancellationToken);
+
+    Task<StoreGiftClaimsResponse> GetStoreGiftClaimsAsync(
+        StoreGiftClaimsRequest request,
+        CancellationToken cancellationToken);
+
+    Task<StoreGiftClaimPersistentRevealResponse> RevealPersistentStoreGiftClaimAsync(
+        StoreGiftClaimPersistentRevealRequest request,
         CancellationToken cancellationToken);
 
     Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(

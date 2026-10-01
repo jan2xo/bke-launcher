@@ -33,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountMfaController _accountMfa;
     private readonly LauncherAccountPrivacyController _accountPrivacy;
     private readonly LauncherAccountPurchasesController _accountPurchases;
+    private readonly LauncherPersistentGiftClaimsController _persistentGiftClaims;
     private readonly LauncherAccountBillingController _accountBilling;
     private readonly LauncherAccountPendingOrdersController _accountPendingOrders;
     private readonly LauncherAccountLicenseSeatsController _accountLicenseSeats;
@@ -94,6 +95,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Refresh purchases and licenses to load the Agent-authoritative selected-account history.";
     private AccountPurchasesAccount? _accountPurchasesAccount;
     private AccountPurchasesPermissions? _accountPurchasesPermissions;
+    private string _giftClaimsStatus = "UNKNOWN";
+    private string _giftClaimsMessage =
+        "Refresh Gift Claim Codes to recover previously purchased codes.";
+    private string _giftClaimRevealStatus = "IDLE";
+    private string _giftClaimRevealMessage =
+        "Choose an available Gift Claim Code to reveal it.";
+    private string _giftClaimRecentPassword = string.Empty;
+    private string _giftClaimMfaCode = string.Empty;
+    private string _giftClaimMfaReference = string.Empty;
+    private string? _giftClaimRecentAuthChallengeToken;
+    private string? _selectedGiftClaimHandle;
+    private string _revealedPersistentGiftClaimCode = string.Empty;
+    private bool _giftClaimRevealLocked;
     private string _accountBillingStatus = "UNKNOWN";
     private string _accountBillingMessage =
         "Refresh billing history to load Agent-authoritative invoices and payments.";
@@ -217,6 +231,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountMfaController accountMfa,
         LauncherAccountPrivacyController accountPrivacy,
         LauncherAccountPurchasesController accountPurchases,
+        LauncherPersistentGiftClaimsController persistentGiftClaims,
         LauncherAccountBillingController accountBilling,
         LauncherAccountPendingOrdersController accountPendingOrders,
         LauncherAccountLicenseSeatsController accountLicenseSeats,
@@ -247,6 +262,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountMfa = accountMfa;
         _accountPrivacy = accountPrivacy;
         _accountPurchases = accountPurchases;
+        _persistentGiftClaims = persistentGiftClaims;
         _accountBilling = accountBilling;
         _accountPendingOrders = accountPendingOrders;
         _accountLicenseSeats = accountLicenseSeats;
@@ -263,6 +279,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
     public ObservableCollection<AccountLicenseViewModel> AccountLicenses { get; } = [];
+    public ObservableCollection<PersistentGiftClaimViewModel> PersistentGiftClaims { get; } = [];
     public ObservableCollection<AccountLicenseSeatTargetViewModel> AccountLicenseSeatTargets { get; } = [];
     public ObservableCollection<AccountAuthorizedDeviceViewModel> AccountAuthorizedDevices { get; } = [];
     public ObservableCollection<AccountSubscriptionViewModel> AccountSubscriptions { get; } = [];
@@ -734,6 +751,114 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyAccountOrders =>
         ShowAccountOrders &&
         AccountOrders.Count == 0;
+
+    public string GiftClaimsStatus
+    {
+        get => _giftClaimsStatus;
+        private set
+        {
+            SetField(ref _giftClaimsStatus, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimsMessage
+    {
+        get => _giftClaimsMessage;
+        private set => SetField(ref _giftClaimsMessage, value);
+    }
+
+    public string GiftClaimRevealStatus
+    {
+        get => _giftClaimRevealStatus;
+        private set
+        {
+            SetField(ref _giftClaimRevealStatus, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimRevealMessage
+    {
+        get => _giftClaimRevealMessage;
+        private set => SetField(ref _giftClaimRevealMessage, value);
+    }
+
+    public string GiftClaimRecentPassword
+    {
+        get => _giftClaimRecentPassword;
+        set
+        {
+            SetField(ref _giftClaimRecentPassword, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimMfaCode
+    {
+        get => _giftClaimMfaCode;
+        set
+        {
+            SetField(ref _giftClaimMfaCode, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimMfaReference
+    {
+        get => _giftClaimMfaReference;
+        private set => SetField(ref _giftClaimMfaReference, value);
+    }
+
+    public string RevealedPersistentGiftClaimCode
+    {
+        get => _revealedPersistentGiftClaimCode;
+        private set
+        {
+            SetField(ref _revealedPersistentGiftClaimCode, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public bool CanRefreshGiftClaims =>
+        IsAuthenticated &&
+        GiftClaimsStatus != "LOADING" &&
+        !_giftClaimRevealLocked;
+
+    public bool GiftClaimsReady => GiftClaimsStatus == "READY";
+
+    public bool ShowEmptyGiftClaims =>
+        GiftClaimsReady &&
+        PersistentGiftClaims.Count == 0;
+
+    public bool ShowGiftClaimRecentAuth =>
+        IsAuthenticated &&
+        GiftClaimRevealStatus == "RECENT_AUTH_REQUIRED" &&
+        _selectedGiftClaimHandle is not null &&
+        _giftClaimRecentAuthChallengeToken is null &&
+        !_giftClaimRevealLocked;
+
+    public bool CanStartGiftClaimRecentAuth =>
+        ShowGiftClaimRecentAuth &&
+        !string.IsNullOrEmpty(GiftClaimRecentPassword);
+
+    public bool ShowGiftClaimMfaChallenge =>
+        IsAuthenticated &&
+        _selectedGiftClaimHandle is not null &&
+        !string.IsNullOrWhiteSpace(
+            _giftClaimRecentAuthChallengeToken) &&
+        !_giftClaimRevealLocked;
+
+    public bool CanCompleteGiftClaimRecentAuth =>
+        ShowGiftClaimMfaChallenge &&
+        GiftClaimMfaCode.Length is >= 6 and <= 32;
+
+    public bool HasRevealedPersistentGiftClaimCode =>
+        !string.IsNullOrWhiteSpace(
+            RevealedPersistentGiftClaimCode);
+
+    public bool GiftClaimRevealLocked =>
+        _giftClaimRevealLocked;
 
     public string AccountBillingStatus
     {
@@ -5079,6 +5204,325 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task RefreshPersistentGiftClaimsAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ResetPersistentGiftClaimsState();
+            GiftClaimsStatus = "AUTH_REQUIRED";
+            GiftClaimsMessage =
+                "Sign in with BKE before viewing purchased Gift Claim Codes.";
+            return;
+        }
+
+        ClearPersistentGiftClaimSecret();
+        _giftClaimRevealLocked = false;
+        _selectedGiftClaimHandle = null;
+        GiftClaimRevealStatus = "IDLE";
+        GiftClaimRevealMessage =
+            "Choose an available Gift Claim Code to reveal it.";
+        GiftClaimsStatus = "LOADING";
+        GiftClaimsMessage =
+            "Loading purchased Gift Claim Codes through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _persistentGiftClaims.GetAsync(
+                cancellationToken);
+
+            PersistentGiftClaims.Clear();
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status != "READY")
+            {
+                GiftClaimsStatus = response.Status;
+                GiftClaimsMessage =
+                    response.Error?.Message ??
+                    "Gift Claim Code history is temporarily unavailable.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            foreach (var claim in response.Claims)
+            {
+                PersistentGiftClaims.Add(
+                    PersistentGiftClaimViewModel.From(claim));
+            }
+
+            GiftClaimsStatus = "READY";
+            GiftClaimsMessage =
+                response.Claims.Count == 0
+                    ? "No purchased Gift Claim Codes are recorded for the selected account."
+                    : "Gift Claim Code metadata loaded. Reveal remains protected by recent authentication.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            PersistentGiftClaims.Clear();
+            GiftClaimsStatus = "FAILED";
+            GiftClaimsMessage =
+                "Gift Claim Code history could not be loaded safely. No secret material was retained.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public async Task RevealPersistentGiftClaimAsync(
+        PersistentGiftClaimViewModel claim,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated ||
+            GiftClaimsStatus != "READY" ||
+            _giftClaimRevealLocked ||
+            !claim.CanReveal)
+        {
+            return;
+        }
+
+        ClearPersistentGiftClaimSecret();
+        _selectedGiftClaimHandle = claim.GiftClaimHandle;
+        GiftClaimRevealStatus = "REVEALING";
+        GiftClaimRevealMessage =
+            $"Requesting protected reveal for {claim.ProductLabel}…";
+
+        await ContinuePersistentGiftClaimRevealAsync(
+            claim.GiftClaimHandle,
+            cancellationToken);
+    }
+
+    public async Task StartPersistentGiftClaimRecentAuthAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanStartGiftClaimRecentAuth ||
+            _selectedGiftClaimHandle is null)
+        {
+            return;
+        }
+
+        var password = GiftClaimRecentPassword;
+        GiftClaimRecentPassword = string.Empty;
+        GiftClaimRevealStatus = "VERIFYING";
+        GiftClaimRevealMessage =
+            "Confirming recent authentication through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _persistentGiftClaims.StartRecentAuthAsync(
+                password,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "VERIFIED")
+            {
+                GiftClaimRevealStatus = "REVEALING";
+                GiftClaimRevealMessage =
+                    "Recent authentication confirmed. Revealing the selected Gift Claim Code…";
+                await ContinuePersistentGiftClaimRevealAsync(
+                    _selectedGiftClaimHandle,
+                    cancellationToken);
+                return;
+            }
+
+            if (response.Status == "MFA_CHALLENGE_ISSUED")
+            {
+                _giftClaimRecentAuthChallengeToken =
+                    response.ChallengeToken;
+                GiftClaimMfaReference =
+                    response.MfaReference ?? string.Empty;
+                GiftClaimMfaCode = string.Empty;
+                GiftClaimRevealStatus = "MFA_REQUIRED";
+                GiftClaimRevealMessage =
+                    response.EmailSent == true
+                        ? "Enter the MFA code sent to your account email."
+                        : "Enter an MFA recovery code to continue.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            if (response.Status == "RESULT_UNKNOWN")
+            {
+                LockPersistentGiftClaimReveal(
+                    "Recent authentication may have reached BKE Digital Solutions, but the result could not be confirmed. BKE will not replay the credential proof automatically. Refresh Gift Claim Codes before trying again.");
+                return;
+            }
+
+            GiftClaimRevealStatus = response.Status;
+            GiftClaimRevealMessage =
+                response.Error?.Message ??
+                "Recent authentication could not be completed.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            LockPersistentGiftClaimReveal(
+                "Recent authentication could not be confirmed. BKE will not replay the credential proof automatically. Refresh Gift Claim Codes before trying again.");
+        }
+    }
+
+    public async Task CompletePersistentGiftClaimRecentAuthAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanCompleteGiftClaimRecentAuth ||
+            _selectedGiftClaimHandle is null ||
+            _giftClaimRecentAuthChallengeToken is null)
+        {
+            return;
+        }
+
+        var challengeToken =
+            _giftClaimRecentAuthChallengeToken;
+        var code = GiftClaimMfaCode;
+        GiftClaimMfaCode = string.Empty;
+        GiftClaimRevealStatus = "VERIFYING";
+        GiftClaimRevealMessage =
+            "Verifying MFA proof through the BKE Licensing Agent…";
+
+        try
+        {
+            var response =
+                await _persistentGiftClaims.CompleteRecentAuthAsync(
+                    challengeToken,
+                    code,
+                    cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "VERIFIED")
+            {
+                _giftClaimRecentAuthChallengeToken = null;
+                GiftClaimMfaReference = string.Empty;
+                GiftClaimRevealStatus = "REVEALING";
+                GiftClaimRevealMessage =
+                    "MFA verified. Revealing the selected Gift Claim Code…";
+                await ContinuePersistentGiftClaimRevealAsync(
+                    _selectedGiftClaimHandle,
+                    cancellationToken);
+                return;
+            }
+
+            if (response.Status == "RESULT_UNKNOWN")
+            {
+                LockPersistentGiftClaimReveal(
+                    "MFA verification may have completed remotely, but the result could not be confirmed. BKE will not replay the proof automatically. Refresh Gift Claim Codes before trying again.");
+                return;
+            }
+
+            GiftClaimRevealStatus = response.Status;
+            GiftClaimRevealMessage =
+                response.Error?.Message ??
+                "The MFA proof was not accepted.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            LockPersistentGiftClaimReveal(
+                "MFA verification could not be confirmed. BKE will not replay the proof automatically. Refresh Gift Claim Codes before trying again.");
+        }
+    }
+
+    public void CompletePersistentGiftClaimReveal()
+    {
+        ClearPersistentGiftClaimSecret();
+        _selectedGiftClaimHandle = null;
+        _giftClaimRecentAuthChallengeToken = null;
+        GiftClaimMfaReference = string.Empty;
+        GiftClaimRevealStatus = "IDLE";
+        GiftClaimRevealMessage =
+            "Claim Code cleared from Launcher memory. Refresh metadata if you need to reveal it again.";
+        RaisePersistentGiftClaimCapabilities();
+    }
+
+    private async Task ContinuePersistentGiftClaimRevealAsync(
+        string giftClaimHandle,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _persistentGiftClaims.RevealAsync(
+                giftClaimHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "AVAILABLE")
+            {
+                _giftClaimRecentAuthChallengeToken = null;
+                GiftClaimMfaReference = string.Empty;
+                GiftClaimRecentPassword = string.Empty;
+                GiftClaimMfaCode = string.Empty;
+                RevealedPersistentGiftClaimCode =
+                    response.ClaimCode ?? string.Empty;
+                GiftClaimRevealStatus = "AVAILABLE";
+                GiftClaimRevealMessage =
+                    "Gift Claim Code revealed in memory only. Save it securely, then clear it from Launcher.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            if (response.Status == "RECENT_AUTH_REQUIRED")
+            {
+                GiftClaimRevealStatus =
+                    "RECENT_AUTH_REQUIRED";
+                GiftClaimRevealMessage =
+                    "Enter your current BKE password to authorize this secret reveal.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            if (response.Status == "RESULT_UNKNOWN")
+            {
+                LockPersistentGiftClaimReveal(
+                    "The secret reveal result could not be confirmed. BKE will not replay it automatically. Refresh Gift Claim Codes before deciding whether to reveal again.");
+                return;
+            }
+
+            GiftClaimRevealStatus = response.Status;
+            GiftClaimRevealMessage =
+                response.Error?.Message ??
+                "The Gift Claim Code could not be revealed.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            LockPersistentGiftClaimReveal(
+                "The secret reveal could not be confirmed. BKE will not replay it automatically. Refresh Gift Claim Codes before deciding whether to reveal again.");
+        }
+    }
+
     public async Task RefreshAccountPurchasesAsync(
         CancellationToken cancellationToken)
     {
@@ -6610,6 +7054,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void ResetAccountPurchasesState()
     {
         ResetAccountBillingState();
+        ResetPersistentGiftClaimsState();
         ResetAccountPendingOrderMutationState();
         ResetAccountLicenseSeatsState();
         ResetAccountLicenseDevicesState();
@@ -6629,6 +7074,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string message,
         bool preservePendingOrderMutation = false)
     {
+        ResetPersistentGiftClaimsState();
         if (!preservePendingOrderMutation)
         {
             ResetAccountPendingOrderMutationState();
@@ -6671,6 +7117,54 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanMutateAccountPendingOrders));
         RaiseAccountLicenseSeatsCapabilities();
         RaiseAccountLicenseDevicesCapabilities();
+    }
+
+    private void ResetPersistentGiftClaimsState()
+    {
+        PersistentGiftClaims.Clear();
+        GiftClaimsStatus = "UNKNOWN";
+        GiftClaimsMessage =
+            "Refresh Gift Claim Codes to recover previously purchased codes.";
+        _selectedGiftClaimHandle = null;
+        _giftClaimRecentAuthChallengeToken = null;
+        _giftClaimRevealLocked = false;
+        GiftClaimMfaReference = string.Empty;
+        ClearPersistentGiftClaimSecret();
+        GiftClaimRevealStatus = "IDLE";
+        GiftClaimRevealMessage =
+            "Choose an available Gift Claim Code to reveal it.";
+        RaisePersistentGiftClaimCapabilities();
+    }
+
+    private void ClearPersistentGiftClaimSecret()
+    {
+        GiftClaimRecentPassword = string.Empty;
+        GiftClaimMfaCode = string.Empty;
+        RevealedPersistentGiftClaimCode = string.Empty;
+    }
+
+    private void LockPersistentGiftClaimReveal(string message)
+    {
+        ClearPersistentGiftClaimSecret();
+        _giftClaimRecentAuthChallengeToken = null;
+        GiftClaimMfaReference = string.Empty;
+        _giftClaimRevealLocked = true;
+        GiftClaimRevealStatus = "RESULT_UNKNOWN";
+        GiftClaimRevealMessage = message;
+        RaisePersistentGiftClaimCapabilities();
+    }
+
+    private void RaisePersistentGiftClaimCapabilities()
+    {
+        Raise(nameof(CanRefreshGiftClaims));
+        Raise(nameof(GiftClaimsReady));
+        Raise(nameof(ShowEmptyGiftClaims));
+        Raise(nameof(ShowGiftClaimRecentAuth));
+        Raise(nameof(CanStartGiftClaimRecentAuth));
+        Raise(nameof(ShowGiftClaimMfaChallenge));
+        Raise(nameof(CanCompleteGiftClaimRecentAuth));
+        Raise(nameof(HasRevealedPersistentGiftClaimCode));
+        Raise(nameof(GiftClaimRevealLocked));
     }
 
     private void ResetAccountBillingState()
@@ -7774,5 +8268,54 @@ public sealed record SoftwareProductViewModel(
                 or LauncherProductState.UpdateAvailable
                 or LauncherProductState.InstalledNotEntitled
                 or LauncherProductState.RepairRequired);
+    }
+}
+
+
+public sealed record PersistentGiftClaimViewModel(
+    string GiftClaimHandle,
+    string OrderNumber,
+    string ProductLabel,
+    string Status,
+    string LastFourLabel,
+    string CreatedLabel,
+    string ExpiryLabel,
+    bool CanReveal)
+{
+    public static PersistentGiftClaimViewModel From(
+        StoreGiftClaimItem item)
+    {
+        var product = string.Join(
+            " · ",
+            new[]
+            {
+                item.ProductName,
+                item.EditionName,
+                item.PlanName,
+            }.Where(value =>
+                !string.IsNullOrWhiteSpace(value)));
+
+        var created = DateTimeOffset.TryParse(
+            item.CreatedAt,
+            out var createdAt)
+            ? $"Purchased {createdAt.ToLocalTime():g}"
+            : "Purchase date unavailable";
+
+        var expiry = item.ExpiresAt is not null &&
+                     DateTimeOffset.TryParse(
+                         item.ExpiresAt,
+                         out var expiresAt)
+            ? $"Expires {expiresAt.ToLocalTime():g}"
+            : "No expiry recorded";
+
+        return new PersistentGiftClaimViewModel(
+            item.GiftClaimHandle,
+            item.OrderNumber,
+            product,
+            item.Status,
+            $"Code ending · {item.LastFour}",
+            created,
+            expiry,
+            item.Status == "AVAILABLE");
     }
 }
