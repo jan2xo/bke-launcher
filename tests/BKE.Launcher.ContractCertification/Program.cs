@@ -161,6 +161,9 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(StoreCheckoutStartError).GetProperties())
     .Concat(typeof(StoreCheckoutStatusResponse).GetProperties())
     .Concat(typeof(StoreCheckoutStatusError).GetProperties())
+    .Concat(typeof(AccountPendingOrderContinueResponse).GetProperties())
+    .Concat(typeof(AccountPendingOrderCancelResponse).GetProperties())
+    .Concat(typeof(AccountPendingOrderError).GetProperties())
     .Select(property => property.Name)
     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -199,6 +202,8 @@ Require(agentMethods.SetEquals([
     "GetAccountPrivacyRequestsAsync",
     "CreateAccountPrivacyRequestAsync",
     "GetAccountPurchasesAsync",
+    "ContinueAccountPendingOrderAsync",
+    "CancelAccountPendingOrderAsync",
     "GetAccountLicenseSeatsAsync",
     "ManageAccountLicenseSeatsAsync",
     "GetAccountLicenseDevicesAsync",
