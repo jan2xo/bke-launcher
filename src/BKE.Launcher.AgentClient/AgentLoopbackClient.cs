@@ -14,6 +14,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
     internal static readonly TimeSpan AccountPrivacyRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountPurchasesRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountLicenseSeatsRequestTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan AccountLicenseDevicesRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountOrganizationRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
@@ -209,6 +210,24 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AgentLocalContract.AccountLicenseSeatsManagePath,
             request,
             AccountLicenseSeatsRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountLicenseDevicesResponse> GetAccountLicenseDevicesAsync(
+        AccountLicenseDevicesRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountLicenseDevicesRequest, AccountLicenseDevicesResponse>(
+            AgentLocalContract.AccountLicenseDevicesPath,
+            request,
+            AccountLicenseDevicesRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountLicenseDeviceDeactivateResponse> DeactivateAccountLicenseDeviceAsync(
+        AccountLicenseDeviceDeactivateRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountLicenseDeviceDeactivateRequest, AccountLicenseDeviceDeactivateResponse>(
+            AgentLocalContract.AccountLicenseDevicesManagePath,
+            request,
+            AccountLicenseDevicesRequestTimeout,
             cancellationToken);
 
     public Task<AccountOrganizationOverviewResponse> GetAccountOrganizationAsync(
