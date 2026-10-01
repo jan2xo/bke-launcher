@@ -1969,7 +1969,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             if (response.Status == "AUTHENTICATED")
             {
-                ResetShellSurface();
+                PrepareAuthenticatedShellSurface();
                 return;
             }
 
@@ -2578,7 +2578,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ClaimMessage =
                 "Enter a one-time Claim Code to redeem it into the signed-in BKE account.";
             ResetPasswordResetState();
-            ResetShellSurface();
+            PrepareAuthenticatedShellSurface();
             return;
         }
 
@@ -2609,7 +2609,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             if (response.Status == "AUTHENTICATED")
             {
-                ResetShellSurface();
+                PrepareAuthenticatedShellSurface();
             }
             else
             {
@@ -2629,8 +2629,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
+            var previousStatus = SessionStatus;
             var response = await _accountSession.StatusAsync(cancellationToken);
             ApplyStatus(response);
+
+            if (response.Status == "AUTHENTICATED")
+            {
+                if (!string.Equals(
+                        previousStatus,
+                        "AUTHENTICATED",
+                        StringComparison.Ordinal))
+                {
+                    PrepareAuthenticatedShellSurface();
+                }
+
+                return;
+            }
 
             if (response.Status != "AUTHENTICATED")
             {
@@ -6836,6 +6850,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             SessionStatus = "AGENT_UNAVAILABLE";
             Message = "The local session could not be changed because the BKE Licensing Agent is unavailable.";
         }
+    }
+
+    private void PrepareAuthenticatedShellSurface()
+    {
+        ResetShellSurface();
+        ClearCatalog(
+            "IDLE",
+            "Open My Software to load software for this BKE account.");
+        ClearStore(
+            "IDLE",
+            "Open Store to browse software for this BKE account.");
+        ClearNotifications(
+            "IDLE",
+            "Open Notifications to load this BKE account inbox.");
     }
 
     private void ResetShellSurface()
