@@ -389,6 +389,15 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             StoreCheckoutRequestTimeout,
             cancellationToken);
 
+    public Task<StoreTrialStartResponse> StartStoreTrialAsync(
+        StoreTrialStartRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<StoreTrialStartRequest, StoreTrialStartResponse>(
+            AgentLocalContract.StoreTrialStartPath,
+            request,
+            StoreCheckoutRequestTimeout,
+            cancellationToken);
+
     public Task<StoreCheckoutStatusResponse> CheckStoreCheckoutStatusAsync(
         StoreCheckoutStatusRequest request,
         CancellationToken cancellationToken) =>
