@@ -17,6 +17,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherStoreService _store;
     private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
     private readonly LauncherStoreCheckoutStartService _storeCheckoutStart;
+    private readonly LauncherStoreTrialStartService _storeTrialStart;
     private readonly LauncherStoreCheckoutStatusService _storeCheckoutStatus;
     private readonly LauncherStoreGiftClaimRevealService _storeGiftClaimReveal;
     private readonly LauncherNotificationInboxService _notifications;
@@ -162,6 +163,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string? _organizationTaxId;
     private string _storeStatus = "AUTH_REQUIRED";
     private string _storeMessage = "Sign in to browse the BKE Store.";
+    private string _storeTrialStatus = "IDLE";
+    private string _storeTrialMessage =
+        "Choose an edition to start its free 7-day trial.";
+    private bool _storeTrialAttemptLocked;
     private string _notificationStatus = "AUTH_REQUIRED";
     private string _notificationMessage = "Sign in to view BKE notifications.";
     private bool _giftCheckoutEnabled;
@@ -196,6 +201,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherStoreService store,
         LauncherStoreCheckoutReviewService storeCheckoutReview,
         LauncherStoreCheckoutStartService storeCheckoutStart,
+        LauncherStoreTrialStartService storeTrialStart,
         LauncherStoreCheckoutStatusService storeCheckoutStatus,
         LauncherStoreGiftClaimRevealService storeGiftClaimReveal,
         LauncherNotificationInboxService notifications,
@@ -225,6 +231,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _store = store;
         _storeCheckoutReview = storeCheckoutReview;
         _storeCheckoutStart = storeCheckoutStart;
+        _storeTrialStart = storeTrialStart;
         _storeCheckoutStatus = storeCheckoutStatus;
         _storeGiftClaimReveal = storeGiftClaimReveal;
         _notifications = notifications;
@@ -1469,6 +1476,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RaiseAccountLicenseSeatsCapabilities();
             RaiseAccountOrganizationCapabilities();
             Raise(nameof(CanRefreshNotifications));
+            RaiseStoreTrialState();
             Raise(nameof(CanCheckCheckoutStatus));
             Raise(nameof(CanRetryOriginalCheckout));
             Raise(nameof(CanSwitchAccount));
@@ -1548,8 +1556,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string StoreStatus
     {
         get => _storeStatus;
-        private set => SetField(ref _storeStatus, value);
+        private set
+        {
+            SetField(ref _storeStatus, value);
+            RaiseStoreTrialState();
+        }
     }
+
+    public string StoreTrialStatus
+    {
+        get => _storeTrialStatus;
+        private set
+        {
+            SetField(ref _storeTrialStatus, value);
+            RaiseStoreTrialState();
+        }
+    }
+
+    public string StoreTrialMessage
+    {
+        get => _storeTrialMessage;
+        private set => SetField(ref _storeTrialMessage, value);
+    }
+
+    public bool CanStartStoreTrial =>
+        IsAuthenticated &&
+        StoreStatus == "READY" &&
+        !_storeTrialAttemptLocked &&
+        !_purchaseAttemptLocked;
+
+    public bool CanRefreshStoreTrialState =>
+        IsAuthenticated &&
+        _storeTrialAttemptLocked &&
+        StoreTrialStatus is "RESULT_UNKNOWN" or "REFRESH_REQUIRED";
+
+    public bool ShowStoreTrialState =>
+        StoreTrialStatus != "IDLE";
 
     public string StoreMessage
     {
@@ -2630,6 +2672,194 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "AGENT_UNAVAILABLE",
                 "BKE Licensing Agent Store catalog is unavailable or invalid.");
         }
+    }
+
+    public async Task StartStoreTrialAsync(
+        StoreEditionViewModel edition,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            StoreTrialStatus = "AUTH_REQUIRED";
+            StoreTrialMessage =
+                "Sign in with BKE before starting a free trial.";
+            return;
+        }
+
+        if (_storeTrialAttemptLocked)
+        {
+            StoreTrialMessage =
+                "A previous trial-start result is unresolved. Refresh authoritative account and My Software state before another trial request.";
+            return;
+        }
+
+        if (_purchaseAttemptLocked)
+        {
+            StoreTrialStatus = "CHECKOUT_RECOVERY_REQUIRED";
+            StoreTrialMessage =
+                "Resolve the existing checkout attempt before starting a trial.";
+            return;
+        }
+
+        if (StoreStatus != "READY")
+        {
+            StoreTrialStatus = "STORE_REFRESH_REQUIRED";
+            StoreTrialMessage =
+                "Refresh the Store before starting a free trial.";
+            return;
+        }
+
+        _storeTrialAttemptLocked = true;
+        StoreTrialStatus = "STARTING";
+        StoreTrialMessage =
+            $"Starting the free 7-day trial for {edition.Name} through the BKE Licensing Agent…";
+        RaiseStoreTrialState();
+
+        try
+        {
+            var result = await _storeTrialStart.StartAsync(
+                edition.EditionId,
+                cancellationToken);
+
+            switch (result.Status)
+            {
+                case "STARTED":
+                    StoreTrialStatus = "STARTED";
+                    StoreTrialMessage =
+                        $"Trial started for {edition.Name}. Refreshing authoritative purchases and My Software…";
+                    await RefreshAccountPurchasesAsync(
+                        cancellationToken);
+                    await RefreshCatalogAsync(
+                        cancellationToken);
+
+                    if (AccountPurchasesStatus == "READY" &&
+                        CatalogStatus == "READY")
+                    {
+                        _storeTrialAttemptLocked = false;
+                        StoreTrialMessage =
+                            $"Trial started for {edition.Name}. Account purchases and My Software are refreshed. Access is available through {FormatStoreTrialTimestamp(result.GraceEndsAt)}.";
+                    }
+                    else
+                    {
+                        StoreTrialStatus = "REFRESH_REQUIRED";
+                        StoreTrialMessage =
+                            "The trial was confirmed started, but authoritative account/software refresh did not complete. Refresh trial state before another trial request.";
+                    }
+                    RaiseStoreTrialState();
+                    return;
+
+                case "ALREADY_USED":
+                    _storeTrialAttemptLocked = false;
+                    StoreTrialStatus = "ALREADY_USED";
+                    StoreTrialMessage =
+                        result.Message ??
+                        "This account already used its self-service trial for this product during the current calendar year.";
+                    RaiseStoreTrialState();
+                    return;
+
+                case "LEGAL_REACCEPTANCE_REQUIRED":
+                    _storeTrialAttemptLocked = false;
+                    StoreTrialStatus = result.Status;
+                    StoreTrialMessage =
+                        result.Message ??
+                        "Current BKE Legal documents must be accepted before a trial can start.";
+                    RaiseStoreTrialState();
+                    return;
+
+                case "ACCOUNT_FORBIDDEN":
+                case "ACCOUNT_UNAVAILABLE":
+                case "EDITION_NOT_AVAILABLE":
+                    _storeTrialAttemptLocked = false;
+                    StoreTrialStatus = result.Status;
+                    StoreTrialMessage =
+                        result.Message ??
+                        "The selected trial is not available for this account.";
+                    RaiseStoreTrialState();
+                    return;
+
+                case "AUTH_REQUIRED":
+                    _storeTrialAttemptLocked = false;
+                    StoreTrialStatus = "AUTH_REQUIRED";
+                    StoreTrialMessage =
+                        result.Message ??
+                        "The BKE account session is no longer valid. Sign in again.";
+                    RaiseStoreTrialState();
+                    EnterAccountMfaReauthentication(
+                        StoreTrialMessage,
+                        clearRecoveryCodes: true);
+                    return;
+
+                case "RESULT_UNKNOWN":
+                    StoreTrialStatus = "RESULT_UNKNOWN";
+                    StoreTrialMessage =
+                        result.Message ??
+                        "The trial request may have reached Digital Solutions. BKE will not retry it automatically. Refresh authoritative state before another attempt.";
+                    RaiseStoreTrialState();
+                    return;
+
+                default:
+                    _storeTrialAttemptLocked = false;
+                    StoreTrialStatus = "FAILED";
+                    StoreTrialMessage =
+                        result.Message ??
+                        "The free trial could not be started.";
+                    RaiseStoreTrialState();
+                    return;
+            }
+        }
+        catch (ArgumentException error)
+        {
+            _storeTrialAttemptLocked = false;
+            StoreTrialStatus = "INVALID_REQUEST";
+            StoreTrialMessage = error.Message;
+            RaiseStoreTrialState();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            StoreTrialStatus = "RESULT_UNKNOWN";
+            StoreTrialMessage =
+                "The trial-start result could not be confirmed through the Licensing Agent. BKE will not replay the mutation automatically. Refresh authoritative account and My Software state before another attempt.";
+            RaiseStoreTrialState();
+        }
+    }
+
+    public async Task RefreshStoreTrialStateAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!_storeTrialAttemptLocked)
+        {
+            return;
+        }
+
+        StoreTrialStatus = "REFRESHING";
+        StoreTrialMessage =
+            "Refreshing authoritative purchases and My Software before another trial request…";
+
+        await RefreshAccountPurchasesAsync(
+            cancellationToken);
+        await RefreshCatalogAsync(
+            cancellationToken);
+
+        if (IsAuthenticated &&
+            AccountPurchasesStatus == "READY" &&
+            CatalogStatus == "READY")
+        {
+            _storeTrialAttemptLocked = false;
+            StoreTrialStatus = "REFRESHED";
+            StoreTrialMessage =
+                "Authoritative account and My Software state refreshed. Inspect the current entitlement state before starting another trial.";
+        }
+        else
+        {
+            StoreTrialStatus = "REFRESH_REQUIRED";
+            StoreTrialMessage =
+                "Authoritative refresh did not complete. New trial requests remain locked.";
+        }
+
+        RaiseStoreTrialState();
     }
 
     public async Task ReviewPurchaseAsync(
@@ -6836,6 +7066,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void RaiseStoreTrialState()
+    {
+        Raise(nameof(CanStartStoreTrial));
+        Raise(nameof(CanRefreshStoreTrialState));
+        Raise(nameof(ShowStoreTrialState));
+    }
+
+    private static string FormatStoreTrialTimestamp(
+        string? value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString(
+                "g",
+                CultureInfo.CurrentCulture)
+            : "the trial grace deadline";
+
     private void RaisePurchaseActionState()
     {
         Raise(nameof(ShowPurchaseActions));
@@ -7398,6 +7643,7 @@ public sealed record StoreProductViewModel(
 }
 
 public sealed record StoreEditionViewModel(
+    string EditionId,
     string Name,
     string Description,
     string UsageLabel,
@@ -7406,6 +7652,7 @@ public sealed record StoreEditionViewModel(
 {
     public static StoreEditionViewModel From(StoreCatalogEdition edition) =>
         new(
+            edition.EditionId,
             edition.Name,
             edition.Description ?? string.Empty,
             $"Up to {edition.MaxUsers} user(s) · {edition.MaxDevicesPerUser} device(s) per user · updates {edition.UpdatePolicy.Replace("_", " ").ToLowerInvariant()}",
