@@ -1,8 +1,8 @@
 {
-  "schema": "bke.preproduction-release-request.v1",
+  "schema": "bke.preproduction-release-request.v2",
   "status": "PREPRODUCTION",
   "production_ready": false,
-  "tag": "bke-v0.1.0-preproduction.20261002",
+  "tag": "bke-v0.1.0-preproduction.20261002.1",
   "source_sha": "c276c0d692b6c29b7f3a9631d478af3f78eba518",
   "agent_source_sha": "49aac38f7a7312ec19ac60f1158252c7e1945bb2",
   "certification_run_id": 36932481734,
@@ -11,5 +11,6 @@
     "file": "BKE-0.1.0-PREPRODUCTION-Windows.exe",
     "sha256": "77ca9a87ab19e3df493001014da259481f46e12941554bb9e7ffd8e1435fe827",
     "bytes": 250878877
-  }
+  },
+  "merged_sha": "720f8f08394cb411df45c7459a8d3976c789211c"
 }
