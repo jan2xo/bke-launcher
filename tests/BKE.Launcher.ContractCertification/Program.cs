@@ -33,6 +33,7 @@ using (var releaseRequest = JsonDocument.Parse(
     var sourceSha = root.GetProperty("source_sha").GetString() ?? string.Empty;
     var agentSourceSha =
         root.GetProperty("agent_source_sha").GetString() ?? string.Empty;
+    var mergedSha = root.GetProperty("merged_sha").GetString() ?? string.Empty;
     var artifactName =
         root.GetProperty("certification_artifact_name").GetString() ??
         string.Empty;
@@ -56,7 +57,9 @@ using (var releaseRequest = JsonDocument.Parse(
         sourceSha.Length == 40 &&
         sourceSha.All(Uri.IsHexDigit) &&
         agentSourceSha.Length == 40 &&
-        agentSourceSha.All(Uri.IsHexDigit),
+        agentSourceSha.All(Uri.IsHexDigit) &&
+        mergedSha.Length == 40 &&
+        mergedSha.All(Uri.IsHexDigit),
         "BKE preproduction release authority SHA is invalid.");
     Require(
         root.GetProperty("certification_run_id").GetInt64() > 0 &&
@@ -84,7 +87,9 @@ foreach (var requiredMarker in new[]
     "eng/preproduction-parent-release.json",
     "gh run download",
     "bke.parent-package-boundary.v2",
-    "git merge-base --is-ancestor",\n    "git rev-parse \"$SOURCE_SHA^{tree}\"",\n    "git rev-parse \"$MERGED_SHA^{tree}\"",
+    "git merge-base --is-ancestor",
+    "git rev-parse \"$SOURCE_SHA^{tree}\"",
+    "git rev-parse \"$MERGED_SHA^{tree}\"",
     "gh release create",
     "--prerelease",
     "gh release download",
