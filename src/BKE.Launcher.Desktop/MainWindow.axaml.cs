@@ -151,6 +151,52 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void RefreshPersistentGiftClaims(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RefreshPersistentGiftClaimsAsync(
+            CancellationToken.None);
+    }
+
+    private async void RevealPersistentGiftClaim(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: PersistentGiftClaimViewModel claim,
+            })
+        {
+            await ViewModel.RevealPersistentGiftClaimAsync(
+                claim,
+                CancellationToken.None);
+        }
+    }
+
+    private async void StartPersistentGiftClaimRecentAuth(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.StartPersistentGiftClaimRecentAuthAsync(
+            CancellationToken.None);
+    }
+
+    private async void CompletePersistentGiftClaimRecentAuth(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.CompletePersistentGiftClaimRecentAuthAsync(
+            CancellationToken.None);
+    }
+
+    private void CompletePersistentGiftClaimReveal(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        ViewModel.CompletePersistentGiftClaimReveal();
+    }
+
     private async void RefreshAccountBilling(
         object? sender,
         RoutedEventArgs args)
