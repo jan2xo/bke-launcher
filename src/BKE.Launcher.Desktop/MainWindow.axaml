@@ -90,6 +90,21 @@
                        Classes="muted"
                        TextWrapping="Wrap"
                        TextAlignment="Center" />
+            <StackPanel IsVisible="{Binding ShowPasswordResetCompletion}"
+                        Spacing="10">
+              <TextBox Text="{Binding PasswordResetProof, Mode=TwoWay}"
+                       Watermark="Paste reset link or one-time token" />
+              <TextBox Text="{Binding PasswordResetNewPassword, Mode=TwoWay}"
+                       Watermark="New password"
+                       PasswordChar="●" />
+              <TextBox Text="{Binding PasswordResetConfirmPassword, Mode=TwoWay}"
+                       Watermark="Confirm new password"
+                       PasswordChar="●" />
+              <Button Content="Reset password"
+                      Classes="primary"
+                      IsEnabled="{Binding CanCompletePasswordReset}"
+                      Click="CompletePasswordReset" />
+            </StackPanel>
           </StackPanel>
 
           <StackPanel IsVisible="{Binding ShowRegistration}" Spacing="14">

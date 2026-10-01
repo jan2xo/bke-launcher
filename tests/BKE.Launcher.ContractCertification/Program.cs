@@ -1735,6 +1735,49 @@ Require(!nativePasswordResetResponseProperties.Any(name =>
         name.Contains("Recipient", StringComparison.OrdinalIgnoreCase)),
     "Launcher native password-reset response exposes reset material or delivery identity.");
 
+var nativePasswordResetCompletionResponseProperties =
+    typeof(NativeBkePasswordResetCompletionResponse)
+        .GetProperties()
+        .Select(property => property.Name)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+Require(
+    nativePasswordResetCompletionResponseProperties.SetEquals(["Status", "Error"]),
+    "Launcher native password-reset completion response widened beyond generic status/error.");
+Require(
+    !nativePasswordResetCompletionResponseProperties.Any(name =>
+        name.Contains("Token", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Password", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("User", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Account", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Session", StringComparison.OrdinalIgnoreCase)),
+    "Launcher native password-reset completion response exposes reset, identity, or session material.");
+
+var nativePasswordResetCompletionRequestProperties =
+    typeof(NativeBkePasswordResetCompletionRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .ToArray();
+Require(
+    nativePasswordResetCompletionRequestProperties.SequenceEqual([
+        "Token",
+        "Password"
+    ]),
+    "Launcher native password-reset completion request drifted.");
+using (var resetCompletionRequestDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new NativeBkePasswordResetCompletionRequest(
+            "cert-reset-token-12345678901234567890",
+            "cert-new-password"))))
+{
+    var fields = resetCompletionRequestDocument.RootElement
+        .EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual(["token", "password"]),
+        "Launcher native password-reset completion wire request drifted.");
+}
+
 var registrationPreflightProperties = typeof(NativeBkeRegistrationPreflightResponse)
     .GetProperties()
     .Select(property => property.Name)
@@ -1830,13 +1873,15 @@ var identityMethods = typeof(ILauncherIdentityClient)
 Require(identityMethods.SetEquals([
     "LoginAsync",
     "VerifyMfaAsync",
-    "RequestPasswordResetAsync"
+    "RequestPasswordResetAsync",
+    "CompletePasswordResetAsync"
 ]), "Launcher identity client port drifted.");
 Require(!typeof(BkePlatformContract).GetFields(BindingFlags.Public | BindingFlags.Static)
         .Any(field => field.Name.Contains("DefaultBaseAddress", StringComparison.Ordinal)),
     "Launcher platform contract regained an independent default authority.");
 Require(BkePlatformContract.NativeLoginPath == "/api/agent-sessions/native/login", "native login path drifted.");
 Require(BkePlatformContract.NativePasswordResetRequestPath == "/api/agent-sessions/native/password-reset/request", "native password-reset request path drifted.");
+Require(BkePlatformContract.NativePasswordResetCompletionPath == "/api/agent-sessions/native/password-reset/complete", "native password-reset completion path drifted.");
 Require(BkePlatformContract.NativeRegistrationPreflightPath == "/api/agent-sessions/native/registration", "native registration preflight path drifted.");
 Require(BkePlatformContract.NativeRegistrationPath == "/api/agent-sessions/native/register", "native registration path drifted.");
 Require(BkePlatformContract.NativeEmailVerifyPath == "/api/agent-sessions/native/verify-email", "native registration verify path drifted.");
@@ -1875,6 +1920,16 @@ Require(platformIdentitySource.Contains(
         "EnsureNativeProtocol(response);",
         StringComparison.Ordinal),
     "Launcher native password-reset request does not verify the DS protocol response.");
+Require(platformIdentitySource.Contains(
+        "CompletePasswordResetAsync(",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "BkePlatformContract.NativePasswordResetCompletionPath",
+        StringComparison.Ordinal) &&
+    platformIdentitySource.Contains(
+        "FailedResetCompletion",
+        StringComparison.Ordinal),
+    "Launcher platform identity client lacks strict native password-reset completion support.");
 
 Require(platformIdentitySource.Contains(
         "GetRegistrationPreflightAsync(",
@@ -1970,6 +2025,39 @@ Require(!passwordResetControllerSource.Contains(
         "AgentLoopbackClient",
         StringComparison.Ordinal),
     "Launcher password reset incorrectly moved unauthenticated recovery into Agent session custody.");
+
+var passwordResetCompletionControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherPasswordResetCompletionController.cs"));
+Require(
+    passwordResetCompletionControllerSource.Contains(
+        "await _platformAuthority.ResolveAsync(cancellationToken)",
+        StringComparison.Ordinal) &&
+    passwordResetCompletionControllerSource.Contains(
+        "await _identity.CompletePasswordResetAsync(",
+        StringComparison.Ordinal),
+    "Launcher password reset completion does not use the Agent-supplied Digital Solutions authority.");
+Require(
+    passwordResetCompletionControllerSource.Contains(
+        "ResetPagePath = \"/reset-password\"",
+        StringComparison.Ordinal) &&
+    passwordResetCompletionControllerSource.Contains(
+        "resetUri.Scheme != Uri.UriSchemeHttps",
+        StringComparison.Ordinal) &&
+    passwordResetCompletionControllerSource.Contains(
+        "resetUri.Port != platformBaseAddress.Port",
+        StringComparison.Ordinal) &&
+    passwordResetCompletionControllerSource.Contains(
+        "resetUri.Query.Contains(",
+        StringComparison.Ordinal),
+    "Launcher password reset link parsing no longer fails closed to the exact HTTPS DS origin/path/query.");
+Require(
+    !passwordResetCompletionControllerSource.Contains(
+        "AgentLoopbackClient",
+        StringComparison.Ordinal),
+    "Launcher password reset completion incorrectly moved into Agent local API custody.");
 
 var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
@@ -2151,6 +2239,29 @@ Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRequestPasswordReset}
     "Native Forgot Password action is not recovery-state-bound.");
 Require(mainWindowSource.Contains("RequestPasswordReset", StringComparison.Ordinal),
     "Native Forgot Password click handler is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowPasswordResetCompletion}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding PasswordResetProof, Mode=TwoWay}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding PasswordResetNewPassword, Mode=TwoWay}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding PasswordResetConfirmPassword, Mode=TwoWay}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsEnabled=\"{Binding CanCompletePasswordReset}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"CompletePasswordReset\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "CompletePasswordResetAsync",
+        StringComparison.Ordinal),
+    "Native browserless password-reset completion UX is missing.");
 Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Native password field is not masked.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode, Mode=OneWay}\"", StringComparison.Ordinal),
     "Launcher Store does not render the recovered gift Claim Code.");
@@ -3343,6 +3454,7 @@ Require(
     "Launcher safe account-switch desktop handler is missing.");
 
 await CertifyNativePasswordResetRequestAsync();
+await CertifyNativePasswordResetCompletionAsync();
 await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
@@ -3358,6 +3470,7 @@ await CertifyCustomerAcquisitionToMySoftwareAsync();
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
+Console.WriteLine("Native password-reset completion exact-origin, transient-secret, and ambiguity no-replay composition certified");
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
@@ -3525,6 +3638,120 @@ static async Task CertifyNativePasswordResetRequestAsync()
     Require(identity.ResetRequestCount == 1 &&
             viewModel.PasswordResetStatus == "INVALID_INPUT",
         "Launcher submitted password reset without an email.");
+}
+
+static async Task CertifyNativePasswordResetCompletionAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+    };
+    var identity = new CustomerJourneyIdentityClient();
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator(),
+        identity);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    viewModel.Email = "customer@example.test";
+    await viewModel.RequestPasswordResetAsync(CancellationToken.None);
+
+    Require(
+        viewModel.ShowPasswordResetCompletion &&
+        viewModel.PasswordResetStatus == "ACCEPTED",
+        "Launcher did not expose native reset completion after enumeration-safe reset request.");
+
+    viewModel.PasswordResetProof =
+        "https://digital-solutions.example.test/reset-password?token=cert-reset-token-12345678901234567890";
+    viewModel.PasswordResetNewPassword = "new-password-cert";
+    viewModel.PasswordResetConfirmPassword = "new-password-cert";
+
+    Require(
+        viewModel.CanCompletePasswordReset,
+        "Valid password-reset completion input did not become actionable.");
+
+    await viewModel.CompletePasswordResetAsync(CancellationToken.None);
+
+    Require(
+        identity.ResetCompletionCount == 1 &&
+        identity.LastResetCompletionAuthority ==
+            new Uri("https://digital-solutions.example.test/") &&
+        identity.LastResetCompletionRequest is
+            {
+                Token: "cert-reset-token-12345678901234567890",
+                Password: "new-password-cert"
+            },
+        "Launcher did not submit the exact reset token/new password to Digital Solutions.");
+    Require(
+        agent.PlatformAuthorityCount == 2,
+        "Launcher password-reset completion did not independently resolve Agent-supplied DS authority.");
+    Require(
+        viewModel.PasswordResetStatus == "COMPLETED" &&
+        !viewModel.ShowPasswordResetCompletion &&
+        string.IsNullOrEmpty(viewModel.PasswordResetProof) &&
+        string.IsNullOrEmpty(viewModel.PasswordResetNewPassword) &&
+        string.IsNullOrEmpty(viewModel.PasswordResetConfirmPassword) &&
+        viewModel.Email == "customer@example.test" &&
+        viewModel.ShowLoginPage &&
+        !viewModel.IsAuthenticated,
+        "Successful native password reset retained secrets, mutated authentication, or lost sign-in continuity.");
+
+    await viewModel.RequestPasswordResetAsync(CancellationToken.None);
+    viewModel.PasswordResetProof =
+        "https://evil.example.test/reset-password?token=cert-reset-token-12345678901234567890";
+    viewModel.PasswordResetNewPassword = "foreign-origin-password";
+    viewModel.PasswordResetConfirmPassword = "foreign-origin-password";
+
+    await viewModel.CompletePasswordResetAsync(CancellationToken.None);
+
+    Require(
+        identity.ResetCompletionCount == 1 &&
+        viewModel.PasswordResetStatus == "INVALID_TOKEN" &&
+        viewModel.ShowPasswordResetCompletion &&
+        string.IsNullOrEmpty(viewModel.PasswordResetProof) &&
+        string.IsNullOrEmpty(viewModel.PasswordResetNewPassword) &&
+        string.IsNullOrEmpty(viewModel.PasswordResetConfirmPassword),
+        "Launcher accepted a reset link from a foreign origin or retained reset secrets after rejection.");
+
+    viewModel.PasswordResetProof =
+        "https://digital-solutions.example.test/reset-password?token=cert-reset-token-12345678901234567890&next=evil";
+    viewModel.PasswordResetNewPassword = "widened-query-password";
+    viewModel.PasswordResetConfirmPassword = "widened-query-password";
+
+    await viewModel.CompletePasswordResetAsync(CancellationToken.None);
+
+    Require(
+        identity.ResetCompletionCount == 1 &&
+        viewModel.PasswordResetStatus == "INVALID_TOKEN",
+        "Launcher accepted a reset link with widened query semantics.");
+
+    identity.ResetCompletionOutcomeUnknown = true;
+    viewModel.PasswordResetProof =
+        "cert-reset-token-ambiguous-12345678901234567890";
+    viewModel.PasswordResetNewPassword = "ambiguous-password";
+    viewModel.PasswordResetConfirmPassword = "ambiguous-password";
+
+    await viewModel.CompletePasswordResetAsync(CancellationToken.None);
+
+    Require(
+        identity.ResetCompletionCount == 2 &&
+        viewModel.PasswordResetStatus == "RESULT_UNKNOWN" &&
+        !viewModel.ShowPasswordResetCompletion &&
+        string.IsNullOrEmpty(viewModel.PasswordResetProof) &&
+        string.IsNullOrEmpty(viewModel.PasswordResetNewPassword) &&
+        string.IsNullOrEmpty(viewModel.PasswordResetConfirmPassword) &&
+        viewModel.PasswordResetMessage.Contains(
+            "Do not replay",
+            StringComparison.OrdinalIgnoreCase),
+        "Ambiguous reset completion remained replayable or retained transient secrets.");
+
+    await viewModel.CompletePasswordResetAsync(CancellationToken.None);
+    Require(
+        identity.ResetCompletionCount == 2,
+        "Launcher blindly replayed an ambiguous one-time password reset token.");
 }
 
 static async Task CertifyAccountPasswordChangeSettingsAsync()
@@ -5712,6 +5939,9 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherPasswordResetRequestController(
             platformAuthority,
             identity),
+        new LauncherPasswordResetCompletionController(
+            platformAuthority,
+            identity),
         new LauncherCatalogService(catalog),
         new LauncherStoreService(agent),
         new LauncherStoreCheckoutReviewService(agent),
@@ -5812,6 +6042,10 @@ sealed class CustomerJourneyIdentityClient :
     ILauncherRegistrationClient
 {
     public int ResetRequestCount { get; private set; }
+    public int ResetCompletionCount { get; private set; }
+    public bool ResetCompletionOutcomeUnknown { get; set; }
+    public NativeBkePasswordResetCompletionRequest? LastResetCompletionRequest { get; private set; }
+    public Uri? LastResetCompletionAuthority { get; private set; }
     public int RegistrationPreflightCount { get; private set; }
     public int RegistrationCount { get; private set; }
     public int VerificationCount { get; private set; }
@@ -5917,6 +6151,28 @@ sealed class CustomerJourneyIdentityClient :
         LastResetAuthority = platformBaseAddress;
         return Task.FromResult(
             new NativeBkePasswordResetResponse("accepted", null));
+    }
+
+    public Task<NativeBkePasswordResetCompletionResponse> CompletePasswordResetAsync(
+        Uri platformBaseAddress,
+        NativeBkePasswordResetCompletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ResetCompletionCount++;
+        LastResetCompletionAuthority = platformBaseAddress;
+        LastResetCompletionRequest = request;
+
+        if (ResetCompletionOutcomeUnknown)
+        {
+            throw new HttpRequestException(
+                "certified ambiguous password reset completion");
+        }
+
+        return Task.FromResult(
+            new NativeBkePasswordResetCompletionResponse(
+                "completed",
+                null));
     }
 }
 

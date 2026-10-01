@@ -34,6 +34,10 @@ public sealed partial class App : Avalonia.Application
                 new LauncherPasswordResetRequestController(
                     platformAuthority,
                     identityClient);
+            var passwordResetCompletion =
+                new LauncherPasswordResetCompletionController(
+                    platformAuthority,
+                    identityClient);
             var catalogSource = new AgentSoftwareCatalogSource(agentClient);
             var catalog = new LauncherCatalogService(catalogSource);
             var store = new LauncherStoreService(agentClient);
@@ -68,6 +72,7 @@ public sealed partial class App : Avalonia.Application
                 nativeSignIn,
                 nativeRegistration,
                 passwordResetRequest,
+                passwordResetCompletion,
                 catalog,
                 store,
                 storeCheckoutReview,

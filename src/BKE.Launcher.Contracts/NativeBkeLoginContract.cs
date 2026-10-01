@@ -8,6 +8,7 @@ public static class BkePlatformContract
     public const string NativeLoginPath = "/api/agent-sessions/native/login";
     public const string NativeMfaVerifyPath = "/api/agent-sessions/native/mfa/verify";
     public const string NativePasswordResetRequestPath = "/api/agent-sessions/native/password-reset/request";
+    public const string NativePasswordResetCompletionPath = "/api/agent-sessions/native/password-reset/complete";
     public const string NativeRegistrationPreflightPath = "/api/agent-sessions/native/registration";
     public const string NativeRegistrationPath = "/api/agent-sessions/native/register";
     public const string NativeEmailVerifyPath = "/api/agent-sessions/native/verify-email";

@@ -236,6 +236,11 @@ public interface ILauncherIdentityClient
         Uri platformBaseAddress,
         NativeBkePasswordResetRequest request,
         CancellationToken cancellationToken);
+
+    Task<NativeBkePasswordResetCompletionResponse> CompletePasswordResetAsync(
+        Uri platformBaseAddress,
+        NativeBkePasswordResetCompletionRequest request,
+        CancellationToken cancellationToken);
 }
 
 public interface ILauncherRegistrationClient

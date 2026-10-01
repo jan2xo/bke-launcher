@@ -13,6 +13,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherNativeSignInController _nativeSignIn;
     private readonly LauncherNativeRegistrationController _nativeRegistration;
     private readonly LauncherPasswordResetRequestController _passwordResetRequest;
+    private readonly LauncherPasswordResetCompletionController _passwordResetCompletion;
     private readonly LauncherCatalogService _catalog;
     private readonly LauncherStoreService _store;
     private readonly LauncherStoreCheckoutReviewService _storeCheckoutReview;
@@ -45,6 +46,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _passwordResetStatus = "IDLE";
     private string _passwordResetMessage =
         "Forgot your password? Request a one-time reset link by email.";
+    private string _passwordResetProof = string.Empty;
+    private string _passwordResetNewPassword = string.Empty;
+    private string _passwordResetConfirmPassword = string.Empty;
+    private bool _showPasswordResetCompletion;
     private bool _showRegistration;
     private string _registrationName = string.Empty;
     private string _registrationEmail = string.Empty;
@@ -211,6 +216,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherNativeSignInController nativeSignIn,
         LauncherNativeRegistrationController nativeRegistration,
         LauncherPasswordResetRequestController passwordResetRequest,
+        LauncherPasswordResetCompletionController passwordResetCompletion,
         LauncherCatalogService catalog,
         LauncherStoreService store,
         LauncherStoreCheckoutReviewService storeCheckoutReview,
@@ -242,6 +248,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _nativeSignIn = nativeSignIn;
         _nativeRegistration = nativeRegistration;
         _passwordResetRequest = passwordResetRequest;
+        _passwordResetCompletion = passwordResetCompletion;
         _catalog = catalog;
         _store = store;
         _storeCheckoutReview = storeCheckoutReview;
@@ -400,6 +407,46 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _passwordResetMessage;
         private set => SetField(ref _passwordResetMessage, value);
+    }
+
+    public string PasswordResetProof
+    {
+        get => _passwordResetProof;
+        set
+        {
+            SetField(ref _passwordResetProof, value);
+            Raise(nameof(CanCompletePasswordReset));
+        }
+    }
+
+    public string PasswordResetNewPassword
+    {
+        get => _passwordResetNewPassword;
+        set
+        {
+            SetField(ref _passwordResetNewPassword, value);
+            Raise(nameof(CanCompletePasswordReset));
+        }
+    }
+
+    public string PasswordResetConfirmPassword
+    {
+        get => _passwordResetConfirmPassword;
+        set
+        {
+            SetField(ref _passwordResetConfirmPassword, value);
+            Raise(nameof(CanCompletePasswordReset));
+        }
+    }
+
+    public bool ShowPasswordResetCompletion
+    {
+        get => _showPasswordResetCompletion;
+        private set
+        {
+            SetField(ref _showPasswordResetCompletion, value);
+            Raise(nameof(CanCompletePasswordReset));
+        }
     }
 
     public string Password
@@ -1565,8 +1612,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool CanRequestPasswordReset =>
         ShowLoginPage &&
         !ShowNativeMfaChallenge &&
-        PasswordResetStatus != "REQUESTING" &&
+        PasswordResetStatus is not ("REQUESTING" or "COMPLETING") &&
         !string.IsNullOrWhiteSpace(Email);
+
+    public bool CanCompletePasswordReset =>
+        ShowLoginPage &&
+        !ShowNativeMfaChallenge &&
+        ShowPasswordResetCompletion &&
+        PasswordResetStatus != "COMPLETING" &&
+        !string.IsNullOrEmpty(PasswordResetProof) &&
+        !string.IsNullOrEmpty(PasswordResetNewPassword) &&
+        PasswordResetNewPassword == PasswordResetConfirmPassword;
 
     public int SelectedModuleIndex
     {
@@ -1591,6 +1647,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Raise(nameof(ShowAuthenticatedShell));
             RaiseRegistrationCapabilities();
             Raise(nameof(CanRequestPasswordReset));
+            Raise(nameof(CanCompletePasswordReset));
             Raise(nameof(CanRedeemClaimCode));
             Raise(nameof(CanChangePassword));
             Raise(nameof(ShowNativeMfaChallenge));
@@ -2210,6 +2267,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        ClearPasswordResetCompletionSecrets();
+        ShowPasswordResetCompletion = false;
         PasswordResetStatus = "REQUESTING";
         PasswordResetMessage = "Requesting a one-time BKE password reset…";
 
@@ -2224,8 +2283,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (response.Status == "accepted")
             {
                 PasswordResetStatus = "ACCEPTED";
+                ShowPasswordResetCompletion = true;
                 PasswordResetMessage =
-                    "If a BKE account exists for this email, a one-time reset link has been sent. Complete the reset, then return here and sign in with the new password.";
+                    "If a BKE account exists for this email, a one-time reset link has been sent. Paste that exact reset link (or its one-time token) below to set a new password.";
                 return;
             }
 
@@ -2246,6 +2306,96 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PasswordResetStatus = "UNAVAILABLE";
             PasswordResetMessage =
                 "BKE password recovery is temporarily unavailable.";
+        }
+    }
+
+    public async Task CompletePasswordResetAsync(
+        CancellationToken cancellationToken)
+    {
+        if (IsAuthenticated)
+        {
+            ClearPasswordResetCompletionSecrets();
+            ShowPasswordResetCompletion = false;
+            PasswordResetStatus = "AUTHENTICATED";
+            PasswordResetMessage =
+                "Password reset is available from the sign-in screen.";
+            return;
+        }
+
+        if (!ShowPasswordResetCompletion ||
+            string.IsNullOrEmpty(PasswordResetProof) ||
+            string.IsNullOrEmpty(PasswordResetNewPassword) ||
+            PasswordResetNewPassword != PasswordResetConfirmPassword)
+        {
+            PasswordResetStatus = "INVALID_INPUT";
+            PasswordResetMessage =
+                "Paste the exact reset link or token and enter the same new password twice.";
+            return;
+        }
+
+        var resetProof = PasswordResetProof;
+        var newPassword = PasswordResetNewPassword;
+        ClearPasswordResetCompletionSecrets();
+
+        PasswordResetStatus = "COMPLETING";
+        PasswordResetMessage = "Completing your BKE password reset…";
+
+        try
+        {
+            var response = await _passwordResetCompletion.CompleteAsync(
+                resetProof,
+                newPassword,
+                cancellationToken);
+
+            if (response.Status == "completed")
+            {
+                ShowPasswordResetCompletion = false;
+                Password = string.Empty;
+                PasswordResetStatus = "COMPLETED";
+                PasswordResetMessage =
+                    "Password reset complete. Sign in with your new BKE password.";
+                return;
+            }
+
+            ShowPasswordResetCompletion =
+                response.Error is "INVALID_TOKEN" or
+                    "INVALID_INPUT" or
+                    "RATE_LIMITED";
+            PasswordResetStatus = response.Error switch
+            {
+                "INVALID_TOKEN" => "INVALID_TOKEN",
+                "INVALID_INPUT" => "INVALID_INPUT",
+                "RATE_LIMITED" => "RATE_LIMITED",
+                _ => "UNAVAILABLE",
+            };
+            PasswordResetMessage = response.Error switch
+            {
+                "INVALID_TOKEN" =>
+                    "That reset link or token is invalid or expired. Request a new reset link if needed.",
+                "INVALID_INPUT" =>
+                    "The reset request was rejected. Re-enter the reset proof and new password.",
+                "RATE_LIMITED" =>
+                    "Too many reset attempts. Try again later or request a new reset link.",
+                _ =>
+                    "BKE password reset completion is temporarily unavailable.",
+            };
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            ShowPasswordResetCompletion = false;
+            PasswordResetStatus = "RESULT_UNKNOWN";
+            PasswordResetMessage =
+                "The reset result could not be confirmed. Do not replay that one-time token. Try signing in with the new password; if that fails, request a new reset link.";
+        }
+        catch (ArgumentException)
+        {
+            ShowPasswordResetCompletion = false;
+            PasswordResetStatus = "UNAVAILABLE";
+            PasswordResetMessage =
+                "BKE password reset completion is temporarily unavailable.";
         }
     }
 
@@ -7368,9 +7518,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ResetPasswordResetState()
     {
+        ClearPasswordResetCompletionSecrets();
+        ShowPasswordResetCompletion = false;
         PasswordResetStatus = "IDLE";
         PasswordResetMessage =
             "Forgot your password? Request a one-time reset link by email.";
+    }
+
+    private void ClearPasswordResetCompletionSecrets()
+    {
+        PasswordResetProof = string.Empty;
+        PasswordResetNewPassword = string.Empty;
+        PasswordResetConfirmPassword = string.Empty;
     }
 
     private void ResetPasswordChangeState()

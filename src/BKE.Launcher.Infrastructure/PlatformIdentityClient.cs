@@ -315,6 +315,43 @@ public sealed class PlatformIdentityClient :
         return result;
     }
 
+    public async Task<NativeBkePasswordResetCompletionResponse> CompletePasswordResetAsync(
+        Uri platformBaseAddress,
+        NativeBkePasswordResetCompletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidatePlatformBaseAddress(platformBaseAddress);
+        using var response = await SendAsync(
+            new Uri(platformBaseAddress, BkePlatformContract.NativePasswordResetCompletionPath),
+            request,
+            cancellationToken);
+
+        if (IsRedirect(response.StatusCode))
+        {
+            return FailedResetCompletion("PLATFORM_REDIRECT_REJECTED");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return FailedResetCompletion(
+                await ReadErrorAsync(response, cancellationToken));
+        }
+
+        EnsureNativeProtocol(response);
+        var result =
+            await response.Content.ReadFromJsonAsync<NativeBkePasswordResetCompletionResponse>(
+                JsonOptions,
+                cancellationToken);
+        if (result is null ||
+            result.Status != "completed" ||
+            result.Error is not null)
+        {
+            throw new InvalidDataException(
+                "Digital Solutions returned an invalid native password-reset completion response.");
+        }
+
+        return result;
+    }
+
     private async Task<HttpResponseMessage> SendGetAsync(
         Uri endpoint,
         CancellationToken cancellationToken)
@@ -400,6 +437,10 @@ public sealed class PlatformIdentityClient :
         new("failed", Error: error);
 
     private static NativeBkePasswordResetResponse FailedReset(string error) =>
+        new("failed", error);
+
+    private static NativeBkePasswordResetCompletionResponse FailedResetCompletion(
+        string error) =>
         new("failed", error);
 
 
