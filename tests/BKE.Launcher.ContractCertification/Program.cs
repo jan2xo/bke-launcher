@@ -961,7 +961,7 @@ Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
         "7a0dcef180df43401d30190bdc84d94b796c7308",
-    "Launcher is not pinned to the merged Agent authorized-device authority.");
+    "Launcher is not pinned to the merged Agent authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -5816,7 +5816,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 {
     public const string ProductId = "bke-render-dock";
     public const string PurchasePlanId = "plan-cert-render-dock";
-    public const string EditionId = EditionId;
+    public const string EditionId = "edition-cert-render-dock";
     public const string GiftClaimCode = "BKE-CLM-ABCDE-12345-A1B2C-C0FFE-0F0F0-ABCDE";
     public const string OrganizationInvitationHandle =
         "bke-org-invite-v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
