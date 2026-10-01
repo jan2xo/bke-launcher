@@ -156,6 +156,10 @@ public interface ILauncherAgentClient
         StoreCheckoutStartRequest request,
         CancellationToken cancellationToken);
 
+    Task<StoreTrialStartResponse> StartStoreTrialAsync(
+        StoreTrialStartRequest request,
+        CancellationToken cancellationToken);
+
     Task<StoreCheckoutStatusResponse> CheckStoreCheckoutStatusAsync(
         StoreCheckoutStatusRequest request,
         CancellationToken cancellationToken);

@@ -80,6 +80,9 @@ Require(AgentLocalContract.StoreCheckoutReviewContractVersion == 1, "Store check
 Require(AgentLocalContract.StoreCheckoutStartPath == "/v1/store/checkout-start", "Store checkout-start path drifted");
 Require(AgentLocalContract.StoreCheckoutStartCapabilityId == "bke.store-checkout-start", "Store checkout-start capability id drifted");
 Require(AgentLocalContract.StoreCheckoutStartContractVersion == 1, "Store checkout-start contract version drifted");
+Require(AgentLocalContract.StoreTrialStartPath == "/v1/store/trials/start", "Store trial-start path drifted");
+Require(AgentLocalContract.StoreTrialStartCapabilityId == "bke.store-trial-start", "Store trial-start capability id drifted");
+Require(AgentLocalContract.StoreTrialStartContractVersion == 1, "Store trial-start contract version drifted");
 Require(AgentLocalContract.StoreCheckoutStatusPath == "/v1/store/checkout-status", "Store checkout-status path drifted");
 Require(AgentLocalContract.StoreCheckoutStatusCapabilityId == "bke.store-checkout-status", "Store checkout-status capability id drifted");
 Require(AgentLocalContract.StoreCheckoutStatusContractVersion == 1, "Store checkout-status contract version drifted");
@@ -162,6 +165,8 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(StoreCheckoutReviewError).GetProperties())
     .Concat(typeof(StoreCheckoutStartResponse).GetProperties())
     .Concat(typeof(StoreCheckoutStartError).GetProperties())
+    .Concat(typeof(StoreTrialStartResponse).GetProperties())
+    .Concat(typeof(StoreTrialStartError).GetProperties())
     .Concat(typeof(StoreCheckoutStatusResponse).GetProperties())
     .Concat(typeof(StoreCheckoutStatusError).GetProperties())
     .Concat(typeof(AccountPendingOrderContinueResponse).GetProperties())
@@ -227,6 +232,7 @@ Require(agentMethods.SetEquals([
     "GetStoreCatalogAsync",
     "ReviewStoreCheckoutAsync",
     "StartStoreCheckoutAsync",
+    "StartStoreTrialAsync",
     "CheckStoreCheckoutStatusAsync",
     "RevealStoreGiftClaimCodeAsync",
     "GetSoftwareCatalogAsync",
@@ -954,8 +960,8 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "24cad67ad70648de3b09991f1e04f4b591233fe0",
-    "Launcher is not pinned to the merged Agent authorized-device authority.");
+        "7a0dcef180df43401d30190bdc84d94b796c7308",
+    "Launcher is not pinned to the merged Agent authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -2137,6 +2143,12 @@ Require(mainWindowMarkup.Contains("Header=\"Store\"", StringComparison.Ordinal),
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
 Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
+Require(mainWindowMarkup.Contains("Content=\"Start free 7-day trial\"", StringComparison.Ordinal), "BKE Store trial action is missing.");
+Require(mainWindowMarkup.Contains("Text=\"{Binding StoreTrialStatus}\"", StringComparison.Ordinal), "BKE Store trial status is not presentation-bound.");
+Require(mainWindowMarkup.Contains("Content=\"Refresh trial state\"", StringComparison.Ordinal), "BKE Store trial ambiguity refresh action is missing.");
+Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanRefreshStoreTrialState}\"", StringComparison.Ordinal), "BKE Store trial ambiguity refresh is not lock-state-bound.");
+Require(mainWindowSource.Contains("StartStoreTrial", StringComparison.Ordinal), "BKE Store trial-start handler is missing.");
+Require(mainWindowSource.Contains("RefreshStoreTrialState", StringComparison.Ordinal), "BKE Store trial-state refresh handler is missing.");
 Require(mainWindowMarkup.Contains("Content=\"Review purchase\"", StringComparison.Ordinal), "BKE Store purchase review action is missing.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewPriceLabel}\"", StringComparison.Ordinal), "BKE Store canonical review price is not presentation-bound.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewModesLabel}\"", StringComparison.Ordinal), "BKE Store purchase modes are not presentation-bound.");
@@ -2488,6 +2500,22 @@ Require(!checkoutReviewServiceSource.Contains("amount_minor =", StringComparison
     "Launcher Store checkout review hardcoded authoritative pricing.");
 
 Require(normalizedViewModelSource.Contains(
+    "await _storeTrialStart.StartAsync(",
+    StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "_storeTrialAttemptLocked = true;",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "await RefreshAccountPurchasesAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "await RefreshCatalogAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "BKE will not replay the mutation automatically",
+        StringComparison.Ordinal),
+    "Launcher Store trial UX lost Agent delegation or ambiguity-safe authoritative refresh.");
+Require(normalizedViewModelSource.Contains(
     "await _storeCheckoutReview.ReviewAsync(",
     StringComparison.Ordinal),
     "Launcher Store UX does not delegate purchase review to the Agent.");
@@ -2512,6 +2540,37 @@ Require(!checkoutStartServiceSource.Contains("account_id", StringComparison.Ordi
 Require(!checkoutStartServiceSource.Contains("recipient", StringComparison.OrdinalIgnoreCase),
     "Launcher Store checkout start introduced gift recipient identity.");
 
+
+Require(
+    typeof(StoreTrialStartRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId", "EditionId"]),
+    "Launcher widened the Agent Store trial-start request.");
+Require(
+    typeof(StoreTrialStartResponse)
+        .GetProperties()
+        .Concat(typeof(StoreTrialStartError).GetProperties())
+        .All(property =>
+            !property.Name.Equals("TrialId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("LicenseId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("OrderId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("AccountId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals("UserId", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("AccessToken", StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains("RefreshToken", StringComparison.OrdinalIgnoreCase)),
+    "Launcher Store trial-start contract exposes cloud/session authority.");
+
+var trialStartServiceSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreTrialStartService.cs"));
+Require(
+    trialStartServiceSource.Contains("StartStoreTrialAsync", StringComparison.Ordinal) &&
+    !trialStartServiceSource.Contains("/api/agent-sessions/", StringComparison.OrdinalIgnoreCase) &&
+    !trialStartServiceSource.Contains("account_id", StringComparison.OrdinalIgnoreCase) &&
+    !trialStartServiceSource.Contains("trial_id", StringComparison.OrdinalIgnoreCase) &&
+    !trialStartServiceSource.Contains("license_id", StringComparison.OrdinalIgnoreCase) &&
+    !trialStartServiceSource.Contains("order_id", StringComparison.OrdinalIgnoreCase),
+    "Launcher Store trial-start bypassed Agent or widened cloud authority.");
 
 var checkoutStatusServiceSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Application", "LauncherStoreCheckoutStatusService.cs"));
@@ -3205,6 +3264,7 @@ Console.WriteLine("Agent-mediated selected-account Notifications presentation bo
 Console.WriteLine("Agent-owned Claim Code redemption intent and transient-code boundary certified");
 Console.WriteLine("Agent-owned Store catalog presentation boundary certified");
 Console.WriteLine("Agent-owned Store checkout-review presentation boundary certified");
+Console.WriteLine("Agent-mediated self-service trial start, authoritative refresh, and ambiguity replay prevention certified");
 Console.WriteLine("Customer acquisition -> entitlement -> My Software composition certified");
 Console.WriteLine("Agent-owned platform authority for native login and Legal navigation certified");
 Console.WriteLine("Native Launcher credential -> Agent-owned authority -> DS -> one-time Agent handoff boundary certified");
@@ -5193,9 +5253,95 @@ static async Task CertifySafeAccountSwitchingAsync()
 
 static async Task CertifyCustomerAcquisitionToMySoftwareAsync()
 {
+    await CertifySelfServiceTrialRefreshesMySoftwareAsync();
     await CertifySelfPurchaseRefreshesMySoftwareAsync();
     await CertifyGiftPurchaseStaysUnboundAsync();
     await CertifyClaimCodeRedemptionRefreshesMySoftwareAsync();
+}
+
+static async Task CertifySelfServiceTrialRefreshesMySoftwareAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    await viewModel.OpenModuleAsync(0, CancellationToken.None);
+    Require(
+        viewModel.Products.Single().StateLabel == "Not entitled",
+        "Trial journey did not begin without entitlement.");
+
+    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    var edition = viewModel.StoreProducts.Single().Editions.Single();
+    Require(
+        edition.EditionId == CustomerJourneyAgentClient.EditionId &&
+        viewModel.CanStartStoreTrial,
+        "Launcher did not preserve Agent Store edition identity for trial intent.");
+
+    await viewModel.StartStoreTrialAsync(
+        edition,
+        CancellationToken.None);
+
+    Require(
+        agent.TrialStartCount == 1 &&
+        agent.LastStoreTrialStartRequest?.EditionId ==
+            CustomerJourneyAgentClient.EditionId &&
+        agent.PurchasesReadCount >= 1 &&
+        catalog.Owned &&
+        viewModel.StoreTrialStatus == "STARTED" &&
+        viewModel.Products.Single().StateLabel == "Installable",
+        "Confirmed trial start did not refresh authoritative purchases/My Software exactly through Agent.");
+
+    var uncertainCatalog = new CustomerJourneyCatalogSource();
+    var uncertainAgent = new CustomerJourneyAgentClient(
+        uncertainCatalog)
+    {
+        TrialStartOutcome = "RESULT_UNKNOWN",
+    };
+    var uncertainViewModel = BuildCustomerJourneyViewModel(
+        uncertainAgent,
+        uncertainCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await uncertainViewModel.InitializeAsync(
+        CancellationToken.None);
+    await uncertainViewModel.OpenModuleAsync(
+        2,
+        CancellationToken.None);
+    var uncertainEdition =
+        uncertainViewModel.StoreProducts.Single().Editions.Single();
+
+    await uncertainViewModel.StartStoreTrialAsync(
+        uncertainEdition,
+        CancellationToken.None);
+    await uncertainViewModel.StartStoreTrialAsync(
+        uncertainEdition,
+        CancellationToken.None);
+
+    Require(
+        uncertainAgent.TrialStartCount == 1 &&
+        uncertainViewModel.StoreTrialStatus == "RESULT_UNKNOWN" &&
+        !uncertainViewModel.CanStartStoreTrial &&
+        uncertainViewModel.CanRefreshStoreTrialState,
+        "Unknown trial mutation was replayed or failed to lock new trial requests.");
+
+    var purchasesBeforeRefresh =
+        uncertainAgent.PurchasesReadCount;
+    await uncertainViewModel.RefreshStoreTrialStateAsync(
+        CancellationToken.None);
+
+    Require(
+        uncertainAgent.PurchasesReadCount >
+            purchasesBeforeRefresh &&
+        uncertainViewModel.StoreTrialStatus == "REFRESHED" &&
+        uncertainViewModel.CanStartStoreTrial &&
+        !uncertainViewModel.CanRefreshStoreTrialState,
+        "Trial ambiguity lock did not require authoritative account/software refresh before retry eligibility.");
 }
 
 static async Task CertifySelfPurchaseRefreshesMySoftwareAsync()
@@ -5463,6 +5609,7 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherStoreService(agent),
         new LauncherStoreCheckoutReviewService(agent),
         new LauncherStoreCheckoutStartService(agent),
+        new LauncherStoreTrialStartService(agent),
         new LauncherStoreCheckoutStatusService(agent),
         new LauncherStoreGiftClaimRevealService(agent),
         new LauncherNotificationInboxService(agent),
@@ -5669,6 +5816,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 {
     public const string ProductId = "bke-render-dock";
     public const string PurchasePlanId = "plan-cert-render-dock";
+    public const string EditionId = "edition-cert-render-dock";
     public const string GiftClaimCode = "BKE-CLM-ABCDE-12345-A1B2C-C0FFE-0F0F0-ABCDE";
     public const string OrganizationInvitationHandle =
         "bke-org-invite-v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -5705,9 +5853,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     }
 
     public int CheckoutStartCount { get; private set; }
+    public int TrialStartCount { get; private set; }
     public int LogoutCount { get; private set; }
     public int RedeemCount { get; private set; }
     public string ClaimRedemptionOutcome { get; set; } = "CLAIMED";
+    public string TrialStartOutcome { get; set; } = "STARTED";
+    public StoreTrialStartRequest? LastStoreTrialStartRequest { get; private set; }
     public int PasswordChangeCount { get; private set; }
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
@@ -5877,7 +6028,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                     new[]
                     {
                         new StoreCatalogEdition(
-                            "edition-cert-render-dock",
+                            EditionId,
                             "standard",
                             "Standard",
                             "Certification edition",
@@ -5936,7 +6087,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 "Render Dock",
                 "Certification product"),
             new StoreCheckoutReviewEdition(
-                "edition-cert-render-dock",
+                EditionId,
                 "standard",
                 "Standard",
                 1,
@@ -5982,6 +6133,61 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             _purchaseMode == "GIFT" ? "order-gift-cert" : "order-self-cert",
             "https://checkout.example.test/existing",
             false,
+            null));
+    }
+
+    public Task<StoreTrialStartResponse> StartStoreTrialAsync(
+        StoreTrialStartRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        TrialStartCount++;
+        LastStoreTrialStartRequest = request;
+
+        if (request.EditionId != EditionId)
+        {
+            throw new InvalidOperationException(
+                "Unexpected certification trial edition.");
+        }
+
+        if (TrialStartOutcome == "RESULT_UNKNOWN")
+        {
+            return Task.FromResult(new StoreTrialStartResponse(
+                AgentLocalContract.StoreTrialStartCapabilityId,
+                AgentLocalContract.StoreTrialStartContractVersion,
+                "RESULT_UNKNOWN",
+                request.CorrelationId,
+                null,
+                null,
+                new StoreTrialStartError(
+                    "TRIAL_START_RESULT_UNKNOWN",
+                    "The result could not be confirmed.",
+                    false)));
+        }
+
+        if (TrialStartOutcome == "ALREADY_USED")
+        {
+            return Task.FromResult(new StoreTrialStartResponse(
+                AgentLocalContract.StoreTrialStartCapabilityId,
+                AgentLocalContract.StoreTrialStartContractVersion,
+                "ALREADY_USED",
+                request.CorrelationId,
+                null,
+                null,
+                new StoreTrialStartError(
+                    "TRIAL_ALREADY_USED_THIS_YEAR",
+                    "This account already used its annual trial.",
+                    false)));
+        }
+
+        _catalog.Owned = true;
+        return Task.FromResult(new StoreTrialStartResponse(
+            AgentLocalContract.StoreTrialStartCapabilityId,
+            AgentLocalContract.StoreTrialStartContractVersion,
+            "STARTED",
+            request.CorrelationId,
+            "2026-10-08T00:00:00.000Z",
+            "2026-10-08T00:00:00.000Z",
             null));
     }
 
