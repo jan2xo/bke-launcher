@@ -13,6 +13,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
     internal static readonly TimeSpan AccountMfaRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountPrivacyRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountPurchasesRequestTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan AccountLicenseSeatsRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountOrganizationRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan InstallRequestTimeout = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan UpdateRequestTimeout = TimeSpan.FromMinutes(10);
@@ -190,6 +191,24 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AgentLocalContract.AccountPurchasesPath,
             request,
             AccountPurchasesRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountLicenseSeatsResponse> GetAccountLicenseSeatsAsync(
+        AccountLicenseSeatsRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountLicenseSeatsRequest, AccountLicenseSeatsResponse>(
+            AgentLocalContract.AccountLicenseSeatsPath,
+            request,
+            AccountLicenseSeatsRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountLicenseSeatsManageResponse> ManageAccountLicenseSeatsAsync(
+        AccountLicenseSeatsManageRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountLicenseSeatsManageRequest, AccountLicenseSeatsManageResponse>(
+            AgentLocalContract.AccountLicenseSeatsManagePath,
+            request,
+            AccountLicenseSeatsRequestTimeout,
             cancellationToken);
 
     public Task<AccountOrganizationOverviewResponse> GetAccountOrganizationAsync(

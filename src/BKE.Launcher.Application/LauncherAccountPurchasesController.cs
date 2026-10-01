@@ -100,11 +100,25 @@ public sealed class LauncherAccountPurchasesController
                 !ValidOptionalTimestamp(license.ExpiresAt) ||
                 license.MaxDevices < 0 ||
                 license.ActiveDevices < 0 ||
-                license.ActiveDevices > license.MaxDevices)
+                license.ActiveDevices > license.MaxDevices ||
+                license.MaxSeats < 0 ||
+                license.AssignedSeats < 0 ||
+                license.AssignedSeats > license.MaxSeats ||
+                license.SeatManagementHandle is not null &&
+                    !LauncherAccountLicenseSeatsController.ValidLicenseHandle(
+                        license.SeatManagementHandle))
             {
                 throw new InvalidDataException(
                     "BKE Licensing Agent account license item drifted.");
             }
+        }
+
+        if (!response.Permissions.ManageLicenseSeats &&
+            response.Licenses.Any(license =>
+                license.SeatManagementHandle is not null))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent exposed seat-management handles without permission.");
         }
 
         foreach (var subscription in response.Subscriptions)
