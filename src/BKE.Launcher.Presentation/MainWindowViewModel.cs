@@ -33,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountMfaController _accountMfa;
     private readonly LauncherAccountPrivacyController _accountPrivacy;
     private readonly LauncherAccountPurchasesController _accountPurchases;
+    private readonly LauncherPersistentGiftClaimsController _persistentGiftClaims;
     private readonly LauncherAccountBillingController _accountBilling;
     private readonly LauncherAccountPendingOrdersController _accountPendingOrders;
     private readonly LauncherAccountLicenseSeatsController _accountLicenseSeats;
@@ -94,6 +95,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Refresh purchases and licenses to load the Agent-authoritative selected-account history.";
     private AccountPurchasesAccount? _accountPurchasesAccount;
     private AccountPurchasesPermissions? _accountPurchasesPermissions;
+    private string _giftClaimsStatus = "UNKNOWN";
+    private string _giftClaimsMessage =
+        "Refresh Gift Claim Codes to recover previously purchased codes.";
+    private string _giftClaimRevealStatus = "IDLE";
+    private string _giftClaimRevealMessage =
+        "Choose an available Gift Claim Code to reveal it.";
+    private string _giftClaimRecentPassword = string.Empty;
+    private string _giftClaimMfaCode = string.Empty;
+    private string _giftClaimMfaReference = string.Empty;
+    private string? _giftClaimRecentAuthChallengeToken;
+    private string? _selectedGiftClaimHandle;
+    private string _revealedPersistentGiftClaimCode = string.Empty;
+    private bool _giftClaimRevealLocked;
     private string _accountBillingStatus = "UNKNOWN";
     private string _accountBillingMessage =
         "Refresh billing history to load Agent-authoritative invoices and payments.";
@@ -217,6 +231,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountMfaController accountMfa,
         LauncherAccountPrivacyController accountPrivacy,
         LauncherAccountPurchasesController accountPurchases,
+        LauncherPersistentGiftClaimsController persistentGiftClaims,
         LauncherAccountBillingController accountBilling,
         LauncherAccountPendingOrdersController accountPendingOrders,
         LauncherAccountLicenseSeatsController accountLicenseSeats,
@@ -247,6 +262,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountMfa = accountMfa;
         _accountPrivacy = accountPrivacy;
         _accountPurchases = accountPurchases;
+        _persistentGiftClaims = persistentGiftClaims;
         _accountBilling = accountBilling;
         _accountPendingOrders = accountPendingOrders;
         _accountLicenseSeats = accountLicenseSeats;
@@ -263,6 +279,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
     public ObservableCollection<AccountLicenseViewModel> AccountLicenses { get; } = [];
+    public ObservableCollection<PersistentGiftClaimViewModel> PersistentGiftClaims { get; } = [];
     public ObservableCollection<AccountLicenseSeatTargetViewModel> AccountLicenseSeatTargets { get; } = [];
     public ObservableCollection<AccountAuthorizedDeviceViewModel> AccountAuthorizedDevices { get; } = [];
     public ObservableCollection<AccountSubscriptionViewModel> AccountSubscriptions { get; } = [];
