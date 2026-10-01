@@ -30,6 +30,8 @@ public static class AgentLocalContract
     public const int AccountPrivacyContractVersion = 1;
     public const string AccountPurchasesCapabilityId = "bke.account-purchases";
     public const int AccountPurchasesContractVersion = 1;
+    public const string AccountBillingCapabilityId = "bke.account-billing";
+    public const int AccountBillingContractVersion = 1;
     public const string AccountPendingOrdersCapabilityId = "bke.account-pending-orders";
     public const int AccountPendingOrdersContractVersion = 1;
     public const string AccountLicenseSeatsCapabilityId = "bke.account-license-seats";
@@ -67,6 +69,7 @@ public static class AgentLocalContract
     public const string AccountPrivacyListPath = "/v1/account/privacy/requests/list";
     public const string AccountPrivacyCreatePath = "/v1/account/privacy/requests/create";
     public const string AccountPurchasesPath = "/v1/account/purchases";
+    public const string AccountBillingPath = "/v1/account/billing";
     public const string AccountPendingOrderContinuePath = "/v1/account/orders/continue";
     public const string AccountPendingOrderCancelPath = "/v1/account/orders/cancel";
     public const string AccountLicenseSeatsPath = "/v1/account/license-seats";
