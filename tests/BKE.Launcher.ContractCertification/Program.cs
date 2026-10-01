@@ -3645,6 +3645,37 @@ static async Task CertifyAccountPendingOrderManagementAsync()
         pending.ContinueHandle is null &&
         pending.CancelHandle is null,
         "Launcher invented pending-order actions when Agent permissions removed their handles.");
+
+    var inactiveCatalog = new CustomerJourneyCatalogSource();
+    var inactiveAgent = new CustomerJourneyAgentClient(
+        inactiveCatalog)
+    {
+        PurchasesLifecycleState = "SUSPENDED",
+    };
+    var inactiveViewModel = BuildCustomerJourneyViewModel(
+        inactiveAgent,
+        inactiveCatalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await inactiveViewModel.InitializeAsync(
+        CancellationToken.None);
+    inactiveViewModel.OpenAccountSurface();
+    await inactiveViewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+    pending = inactiveViewModel.AccountOrders.Single(order =>
+        order.Status == "PENDING");
+
+    Require(
+        inactiveViewModel.AccountPurchasesStatus == "READY" &&
+        inactiveViewModel.AccountPurchasesAccountSummary.Contains(
+            "SUSPENDED",
+            StringComparison.Ordinal) &&
+        !pending.CanContinuePayment &&
+        !pending.CanCancelOrder &&
+        pending.ContinueHandle is null &&
+        pending.CancelHandle is null,
+        "Launcher rejected or made actionable the valid inactive-account pending-order projection.");
 }
 
 static async Task CertifyAccountLicenseSeatManagementAsync()
@@ -5538,6 +5569,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public string AccountType { get; set; } = "INDIVIDUAL";
     public string OrganizationRole { get; set; } = "OWNER";
     public string PurchasesRole { get; set; } = "OWNER";
+    public string PurchasesLifecycleState { get; set; } = "ACTIVE";
     public bool PurchasesViewOrders { get; set; } = true;
     public bool PurchasesViewSubscriptions { get; set; } = true;
     public bool PurchasesViewAllLicenses { get; set; } = true;
@@ -6146,7 +6178,7 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 new AccountPurchasesAccount(
                     AccountType,
                     accountName,
-                    "ACTIVE",
+                    PurchasesLifecycleState,
                     PurchasesRole),
                 new AccountPurchasesPermissions(
                     PurchasesViewOrders,
@@ -6215,9 +6247,11 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                                 "PHP",
                                 "2026-10-01T00:00:00.000Z",
                                 false,
+                                PurchasesLifecycleState == "ACTIVE" &&
                                 PurchasesContinuePendingOrders
                                     ? PendingOrderContinueHandle
                                     : null,
+                                PurchasesLifecycleState == "ACTIVE" &&
                                 PurchasesCancelPendingOrders
                                     ? PendingOrderCancelHandle
                                     : null,
