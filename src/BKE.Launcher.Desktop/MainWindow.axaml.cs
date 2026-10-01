@@ -43,12 +43,16 @@ public sealed partial class MainWindow : Window
 
     private async void ModuleChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (sender is TabControl { SelectedIndex: >= 0 } tabs)
+        if (!_startupInitialized ||
+            DataContext is not MainWindowViewModel viewModel ||
+            sender is not TabControl { SelectedIndex: >= 0 } tabs)
         {
-            await ViewModel.OpenModuleAsync(
-                tabs.SelectedIndex,
-                CancellationToken.None);
+            return;
         }
+
+        await viewModel.OpenModuleAsync(
+            tabs.SelectedIndex,
+            CancellationToken.None);
     }
 
     private async void OpenRegistration(object? sender, RoutedEventArgs args)
