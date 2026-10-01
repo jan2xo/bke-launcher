@@ -68,6 +68,14 @@ public interface ILauncherAgentClient
         AccountPurchasesRequest request,
         CancellationToken cancellationToken);
 
+    Task<AccountPendingOrderContinueResponse> ContinueAccountPendingOrderAsync(
+        AccountPendingOrderContinueRequest request,
+        CancellationToken cancellationToken);
+
+    Task<AccountPendingOrderCancelResponse> CancelAccountPendingOrderAsync(
+        AccountPendingOrderCancelRequest request,
+        CancellationToken cancellationToken);
+
     Task<AccountLicenseSeatsResponse> GetAccountLicenseSeatsAsync(
         AccountLicenseSeatsRequest request,
         CancellationToken cancellationToken);
