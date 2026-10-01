@@ -579,6 +579,127 @@
                 </StackPanel>
               </Border>
 
+              <Border Classes="content-card"
+                      Padding="14"
+                      Margin="0,8,0,0">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Billing history"
+                             FontSize="18"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="Commercial invoices and payment history from BKE Digital Solutions through the Licensing Agent. Provider IDs, raw payment payloads, and cloud billing identifiers are not stored or displayed by Launcher."
+                             TextWrapping="Wrap"
+                             Opacity="0.72" />
+                  <TextBlock Text="{Binding AccountBillingStatus}"
+                             FontSize="11"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding AccountBillingMessage}"
+                             TextWrapping="Wrap"
+                             Opacity="0.72" />
+                  <Button Content="Refresh billing history"
+                          IsEnabled="{Binding CanRefreshAccountBilling}"
+                          Click="RefreshAccountBilling" />
+
+                  <StackPanel IsVisible="{Binding AccountBillingReady}"
+                              Spacing="8">
+                    <TextBlock Text="{Binding AccountBillingAccountSummary}"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock Text="Billing history is not visible to this selected-account role."
+                               IsVisible="{Binding ShowAccountBillingUnavailable}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Opacity="0.68" />
+
+                    <StackPanel IsVisible="{Binding ShowAccountInvoices}"
+                                Spacing="5">
+                      <TextBlock Text="Commercial invoices"
+                                 FontWeight="SemiBold"
+                                 Margin="0,4,0,0" />
+                      <ItemsControl ItemsSource="{Binding AccountInvoices}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:AccountInvoiceViewModel">
+                            <Border Classes="content-card"
+                                    Padding="10"
+                                    Margin="0,0,0,5">
+                              <StackPanel Spacing="3">
+                                <Grid ColumnDefinitions="*,Auto">
+                                  <TextBlock Text="{Binding Number}"
+                                             FontWeight="SemiBold"
+                                             TextWrapping="Wrap" />
+                                  <TextBlock Grid.Column="1"
+                                             Text="{Binding Status}"
+                                             FontSize="11"
+                                             FontWeight="SemiBold" />
+                                </Grid>
+                                <TextBlock Text="{Binding OrderLabel}"
+                                           FontSize="11"
+                                           Opacity="0.72" />
+                                <TextBlock Text="{Binding TotalLabel}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding TaxLabel}"
+                                           FontSize="11"
+                                           Opacity="0.72" />
+                                <TextBlock Text="{Binding IssuedLabel}"
+                                           FontSize="11"
+                                           Opacity="0.72" />
+                                <TextBlock Text="{Binding LinesLabel}"
+                                           TextWrapping="Wrap"
+                                           FontSize="11"
+                                           Opacity="0.72" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock Text="No commercial invoices are recorded for the selected account."
+                                 IsVisible="{Binding ShowEmptyAccountInvoices}"
+                                 FontSize="11"
+                                 TextWrapping="Wrap"
+                                 Opacity="0.68" />
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowAccountPayments}"
+                                Spacing="5">
+                      <TextBlock Text="Payments"
+                                 FontWeight="SemiBold"
+                                 Margin="0,4,0,0" />
+                      <ItemsControl ItemsSource="{Binding AccountPayments}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:AccountPaymentViewModel">
+                            <Border Classes="content-card"
+                                    Padding="10"
+                                    Margin="0,0,0,5">
+                              <StackPanel Spacing="3">
+                                <Grid ColumnDefinitions="*,Auto">
+                                  <TextBlock Text="{Binding OrderLabel}"
+                                             FontWeight="SemiBold"
+                                             TextWrapping="Wrap" />
+                                  <TextBlock Grid.Column="1"
+                                             Text="{Binding Status}"
+                                             FontSize="11"
+                                             FontWeight="SemiBold" />
+                                </Grid>
+                                <TextBlock Text="{Binding AmountLabel}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding PaidLabel}"
+                                           FontSize="11"
+                                           Opacity="0.72" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock Text="No payments are recorded for the selected account."
+                                 IsVisible="{Binding ShowEmptyAccountPayments}"
+                                 FontSize="11"
+                                 TextWrapping="Wrap"
+                                 Opacity="0.68" />
+                    </StackPanel>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
               <Border IsVisible="{Binding ShowOrganizationInvitationAcceptanceSection}"
                       Classes="content-card"
                       Padding="14"
