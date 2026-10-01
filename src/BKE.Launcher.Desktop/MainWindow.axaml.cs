@@ -151,6 +151,104 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void ContinueAccountPendingOrder(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: AccountOrderViewModel order,
+            } &&
+            order.CanContinuePayment)
+        {
+            await ViewModel.ContinueAccountPendingOrderAsync(
+                order,
+                CancellationToken.None);
+        }
+    }
+
+    private async void CancelAccountPendingOrder(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is not Button
+            {
+                DataContext: AccountOrderViewModel order,
+            } ||
+            !order.CanCancelOrder)
+        {
+            return;
+        }
+
+        if (!await ConfirmPendingOrderCancellationAsync(order))
+        {
+            return;
+        }
+
+        await ViewModel.CancelAccountPendingOrderAsync(
+            order,
+            CancellationToken.None);
+    }
+
+    private async Task<bool> ConfirmPendingOrderCancellationAsync(
+        AccountOrderViewModel order)
+    {
+        var dialog = new Window
+        {
+            Title = "Cancel pending order",
+            Width = 480,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var cancelOrder = new Button
+        {
+            Content = "Cancel order",
+        };
+        var keepOrder = new Button
+        {
+            Content = "Keep order",
+        };
+
+        cancelOrder.Click += (_, _) => dialog.Close(true);
+        keepOrder.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(24),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"Cancel order {order.Number}?",
+                    FontSize = 20,
+                    FontWeight = Avalonia.Media.FontWeight.SemiBold,
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new TextBlock
+                {
+                    Text = "BKE Digital Solutions will cancel this pending order and any pending payment attempt attached to it. BKE will refresh authoritative purchases before allowing another order action.",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 10,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children =
+                    {
+                        keepOrder,
+                        cancelOrder,
+                    },
+                },
+            },
+        };
+
+        return await dialog.ShowDialog<bool>(this);
+    }
+
     private async void OpenAccountLicenseSeats(
         object? sender,
         RoutedEventArgs args)
