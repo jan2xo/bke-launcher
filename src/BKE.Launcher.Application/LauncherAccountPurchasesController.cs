@@ -106,7 +106,10 @@ public sealed class LauncherAccountPurchasesController
                 license.AssignedSeats > license.MaxSeats ||
                 license.SeatManagementHandle is not null &&
                     !LauncherAccountLicenseSeatsController.ValidLicenseHandle(
-                        license.SeatManagementHandle))
+                        license.SeatManagementHandle) ||
+                license.DeviceManagementHandle is not null &&
+                    !LauncherAccountLicenseDevicesController.ValidLicenseHandle(
+                        license.DeviceManagementHandle))
             {
                 throw new InvalidDataException(
                     "BKE Licensing Agent account license item drifted.");
@@ -119,6 +122,14 @@ public sealed class LauncherAccountPurchasesController
         {
             throw new InvalidDataException(
                 "BKE Licensing Agent exposed seat-management handles without permission.");
+        }
+
+        if (!response.Permissions.ManageDevices &&
+            response.Licenses.Any(license =>
+                license.DeviceManagementHandle is not null))
+        {
+            throw new InvalidDataException(
+                "BKE Licensing Agent exposed device-management handles without permission.");
         }
 
         foreach (var subscription in response.Subscriptions)

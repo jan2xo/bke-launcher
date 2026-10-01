@@ -189,6 +189,111 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void OpenAccountLicenseDevices(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: AccountLicenseViewModel license,
+            })
+        {
+            await ViewModel.OpenAccountLicenseDevicesAsync(
+                license,
+                CancellationToken.None);
+        }
+    }
+
+    private async void RefreshAccountLicenseDevices(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RefreshAccountLicenseDevicesAsync(
+            CancellationToken.None);
+    }
+
+    private async void DeactivateAccountLicenseDevice(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is not Button
+            {
+                DataContext: AccountAuthorizedDeviceViewModel device,
+            } ||
+            !device.CanDeactivate)
+        {
+            return;
+        }
+
+        if (!await ConfirmDeviceDeactivationAsync(device))
+        {
+            return;
+        }
+
+        await ViewModel.DeactivateAccountLicenseDeviceAsync(
+            device,
+            CancellationToken.None);
+    }
+
+    private async Task<bool> ConfirmDeviceDeactivationAsync(
+        AccountAuthorizedDeviceViewModel device)
+    {
+        var dialog = new Window
+        {
+            Title = "Deactivate authorized device",
+            Width = 480,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var deactivate = new Button
+        {
+            Content = "Deactivate device",
+        };
+        var cancel = new Button
+        {
+            Content = "Cancel",
+        };
+
+        deactivate.Click += (_, _) => dialog.Close(true);
+        cancel.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(24),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"Deactivate {device.DisplayLabel}?",
+                    FontSize = 20,
+                    FontWeight = Avalonia.Media.FontWeight.SemiBold,
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new TextBlock
+                {
+                    Text = "BKE Digital Solutions will deactivate this license authorization. The application on that device may lose authorization the next time it checks with BKE. This action does not uninstall software from the remote device.",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 10,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children =
+                    {
+                        cancel,
+                        deactivate,
+                    },
+                },
+            },
+        };
+
+        return await dialog.ShowDialog<bool>(this);
+    }
+
     private async void AcceptAccountOrganizationInvitation(
         object? sender,
         RoutedEventArgs args)

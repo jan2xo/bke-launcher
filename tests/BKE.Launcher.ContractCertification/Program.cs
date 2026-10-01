@@ -41,6 +41,10 @@ Require(AgentLocalContract.AccountLicenseSeatsPath == "/v1/account/license-seats
 Require(AgentLocalContract.AccountLicenseSeatsManagePath == "/v1/account/license-seats/manage", "account license seats manage path drifted");
 Require(AgentLocalContract.AccountLicenseSeatsCapabilityId == "bke.account-license-seats", "account license seats capability id drifted");
 Require(AgentLocalContract.AccountLicenseSeatsContractVersion == 1, "account license seats contract version drifted");
+Require(AgentLocalContract.AccountLicenseDevicesPath == "/v1/account/license-devices", "account license devices path drifted");
+Require(AgentLocalContract.AccountLicenseDevicesManagePath == "/v1/account/license-devices/manage", "account license devices manage path drifted");
+Require(AgentLocalContract.AccountLicenseDevicesCapabilityId == "bke.account-license-devices", "account license devices capability id drifted");
+Require(AgentLocalContract.AccountLicenseDevicesContractVersion == 1, "account license devices contract version drifted");
 Require(BkePlatformContract.NativeMfaVerifyPath == "/api/agent-sessions/native/mfa/verify", "native MFA verify path drifted");
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
 Require(AgentLocalContract.SoftwareCatalogCapabilityId == "bke.software-catalog", "software catalog capability id drifted");
@@ -106,6 +110,11 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountLicenseSeatInfo).GetProperties())
     .Concat(typeof(AccountLicenseSeatTarget).GetProperties())
     .Concat(typeof(AccountLicenseSeatsError).GetProperties())
+    .Concat(typeof(AccountLicenseDevicesResponse).GetProperties())
+    .Concat(typeof(AccountLicenseDeviceDeactivateResponse).GetProperties())
+    .Concat(typeof(AccountLicenseDeviceInfo).GetProperties())
+    .Concat(typeof(AccountAuthorizedDevice).GetProperties())
+    .Concat(typeof(AccountLicenseDevicesError).GetProperties())
     .Concat(typeof(AccountOrganizationOverviewResponse).GetProperties())
     .Concat(typeof(AccountOrganizationCreateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationProfileUpdateResponse).GetProperties())
@@ -188,6 +197,8 @@ Require(agentMethods.SetEquals([
     "GetAccountPurchasesAsync",
     "GetAccountLicenseSeatsAsync",
     "ManageAccountLicenseSeatsAsync",
+    "GetAccountLicenseDevicesAsync",
+    "DeactivateAccountLicenseDeviceAsync",
     "GetAccountOrganizationAsync",
     "CreateAccountOrganizationAsync",
     "UpdateAccountOrganizationProfileAsync",
@@ -601,10 +612,148 @@ Require(
     "Launcher bypassed the local Agent license-seat authority.");
 
 Require(
+    typeof(AccountLicenseDevicesRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "LicenseManagementHandle",
+        ]),
+    "Launcher widened the Agent authorized-device read request.");
+
+Require(
+    typeof(AccountLicenseDeviceDeactivateRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "LicenseManagementHandle",
+            "DeviceManagementHandle",
+        ]),
+    "Launcher widened the Agent authorized-device deactivate request.");
+
+using (var deviceReadDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountLicenseDevicesRequest(
+            "device-read-cert",
+            CustomerJourneyAgentClient.LicenseDeviceHandle))))
+{
+    var root = deviceReadDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "license_management_handle",
+        ]) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("license_id", out _) &&
+        !root.TryGetProperty("device_id", out _) &&
+        !root.TryGetProperty("product_id", out _),
+        "Launcher authorized-device read request exposed raw authority identifiers.");
+}
+
+using (var deviceDeactivateDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountLicenseDeviceDeactivateRequest(
+            "device-deactivate-cert",
+            CustomerJourneyAgentClient.LicenseDeviceHandle,
+            CustomerJourneyAgentClient.AuthorizedDeviceHandle))))
+{
+    var root = deviceDeactivateDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "license_management_handle",
+            "device_management_handle",
+        ]) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("license_id", out _) &&
+        !root.TryGetProperty("device_id", out _) &&
+        !root.TryGetProperty("product_id", out _) &&
+        !root.TryGetProperty("device_hash", out _) &&
+        !root.TryGetProperty("machine_id", out _),
+        "Launcher authorized-device deactivate request exposed raw authority or machine identifiers.");
+}
+
+foreach (var type in new[]
+{
+    typeof(AccountLicenseDevicesResponse),
+    typeof(AccountLicenseDeviceDeactivateResponse),
+    typeof(AccountLicenseDeviceInfo),
+    typeof(AccountAuthorizedDevice),
+    typeof(AccountLicenseDevicesError),
+})
+{
+    Require(
+        type.GetProperties().All(property =>
+            !property.Name.Contains(
+                "AccessToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "RefreshToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Handoff",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "AccountId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "UserId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "LicenseId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "DeviceId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "ProductId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "DeviceHash",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "MachineId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "LicenseKey",
+                StringComparison.OrdinalIgnoreCase)),
+        $"Launcher authorized-device contract {type.Name} exposes raw authority, machine, or secret material.");
+}
+
+var deviceControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherAccountLicenseDevicesController.cs"));
+Require(
+    !deviceControllerSource.Contains(
+        "/api/agent-sessions/account/license-devices",
+        StringComparison.OrdinalIgnoreCase) &&
+    !purchasesClientSource.Contains(
+        "/api/agent-sessions/account/license-devices",
+        StringComparison.OrdinalIgnoreCase) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountLicenseDevicesPath",
+        StringComparison.Ordinal) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountLicenseDevicesManagePath",
+        StringComparison.Ordinal),
+    "Launcher bypassed the local Agent authorized-device authority.");
+
+Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "a07a337816c4917452f3b58741f195b8d23bc562",
-    "Launcher is not pinned to the merged Agent license-seat authority.");
+        "e93bc84fca2d854f724f8637dc8951324b880d0c",
+    "Launcher is not pinned to the merged Agent authorized-device authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -2720,6 +2869,30 @@ Require(
 
 Require(
     mainWindowMarkup.Contains(
+        "Content=\"Manage devices\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenAccountLicenseDevices\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"RefreshAccountLicenseDevices\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"DeactivateAccountLicenseDevice\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ConfirmDeviceDeactivationAsync",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "does not uninstall software from the remote device",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "DeviceManagementHandle",
+        StringComparison.Ordinal),
+    "Launcher authorized-device UX/confirmation boundary drifted.");
+
+Require(
+    mainWindowMarkup.Contains(
         "Content=\"Switch BKE account\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
@@ -2741,6 +2914,7 @@ await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
 await CertifyAccountPurchasesSettingsAsync();
 await CertifyAccountLicenseSeatManagementAsync();
+await CertifyAccountLicenseDeviceManagementAsync();
 await CertifyAccountOrganizationSettingsAsync();
 await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
@@ -2752,6 +2926,7 @@ Console.WriteLine("Native Create Account legal acceptance and email verification
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
 Console.WriteLine("Agent-mediated license seat assignment, authoritative refresh, and ambiguous-outcome replay prevention certified");
+Console.WriteLine("Agent-mediated authorized-device deactivation, authoritative refresh, confirmation, and ambiguous-outcome replay prevention certified");
 Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/ownership-transfer/self-leave presentation and reauthentication boundaries certified");
 Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
@@ -3108,6 +3283,9 @@ static async Task CertifyAccountPurchasesSettingsAsync()
             "ABCD",
             StringComparison.Ordinal) &&
         viewModel.AccountLicenses[0].CanManageSeats &&
+        viewModel.AccountLicenses[0].CanManageDevices &&
+        viewModel.AccountLicenses[0].DeviceManagementHandle ==
+            CustomerJourneyAgentClient.LicenseDeviceHandle &&
         viewModel.AccountLicenses[0].SeatLabel.Contains(
             "1 of 2",
             StringComparison.Ordinal) &&
@@ -3122,6 +3300,7 @@ static async Task CertifyAccountPurchasesSettingsAsync()
     agent.PurchasesViewSubscriptions = false;
     agent.PurchasesViewAllLicenses = false;
     agent.PurchasesManageLicenseSeats = false;
+    agent.PurchasesManageDevices = false;
 
     await viewModel.RefreshAccountPurchasesAsync(
         CancellationToken.None);
@@ -3135,6 +3314,7 @@ static async Task CertifyAccountPurchasesSettingsAsync()
         viewModel.ShowAccountSubscriptionsUnavailable &&
         viewModel.ShowAccountOrdersUnavailable &&
         !viewModel.AccountLicenses[0].CanManageSeats &&
+        !viewModel.AccountLicenses[0].CanManageDevices &&
         viewModel.AccountLicenseScopeLabel.Contains(
             "assigned",
             StringComparison.OrdinalIgnoreCase),
@@ -3254,6 +3434,102 @@ static async Task CertifyAccountLicenseSeatManagementAsync()
         !viewModel.AccountLicenses.Single().CanManageSeats &&
         !viewModel.ShowAccountLicenseSeatManagement,
         "Launcher exposed seat-management UX after the authoritative permission/handle was removed.");
+}
+
+static async Task CertifyAccountLicenseDeviceManagementAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    viewModel.OpenAccountSurface();
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    var license = viewModel.AccountLicenses.Single();
+    Require(
+        license.CanManageDevices &&
+        license.DeviceManagementHandle ==
+            CustomerJourneyAgentClient.LicenseDeviceHandle,
+        "Launcher did not retain the Agent-authoritative opaque device-management handle.");
+
+    await viewModel.OpenAccountLicenseDevicesAsync(
+        license,
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseDeviceReadCount == 1 &&
+        agent.LastLicenseDeviceReadRequest?.LicenseManagementHandle ==
+            CustomerJourneyAgentClient.LicenseDeviceHandle &&
+        viewModel.AccountLicenseDevicesStatus == "READY" &&
+        viewModel.AccountLicenseDevicesReady &&
+        viewModel.CanMutateAccountLicenseDevices &&
+        viewModel.AccountAuthorizedDevices.Count == 1 &&
+        viewModel.AccountAuthorizedDevices[0].CanDeactivate,
+        "Launcher did not load the Agent-authoritative authorized-device state.");
+
+    var device = viewModel.AccountAuthorizedDevices.Single();
+    await viewModel.DeactivateAccountLicenseDeviceAsync(
+        device,
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseDeviceDeactivateCount == 1 &&
+        agent.LicenseDeviceReadCount == 2 &&
+        agent.LastLicenseDeviceDeactivateRequest?.LicenseManagementHandle ==
+            CustomerJourneyAgentClient.LicenseDeviceHandle &&
+        agent.LastLicenseDeviceDeactivateRequest.DeviceManagementHandle ==
+            CustomerJourneyAgentClient.AuthorizedDeviceHandle &&
+        viewModel.AccountLicenseDevicesStatus == "READY" &&
+        !viewModel.AccountAuthorizedDevices.Single().CanDeactivate,
+        "Launcher did not refresh authoritative device state after confirmed deactivation.");
+
+    agent.AuthorizedDeviceActive = true;
+    await viewModel.RefreshAccountLicenseDevicesAsync(
+        CancellationToken.None);
+    agent.LicenseDeviceDeactivateOutcomeUnknown = true;
+    agent.LicenseDeviceReadFailsOnce = true;
+    device = viewModel.AccountAuthorizedDevices.Single();
+
+    await viewModel.DeactivateAccountLicenseDeviceAsync(
+        device,
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseDeviceDeactivateCount == 2 &&
+        agent.LicenseDeviceReadCount == 4 &&
+        viewModel.AccountLicenseDevicesStatus == "AGENT_UNAVAILABLE" &&
+        !viewModel.CanMutateAccountLicenseDevices &&
+        viewModel.AccountAuthorizedDevices.Count == 0 &&
+        viewModel.AccountLicenseDevicesMessage.Contains(
+            "refresh",
+            StringComparison.OrdinalIgnoreCase),
+        "Launcher ambiguous device deactivation did not lock replay when authoritative refresh failed.");
+
+    await viewModel.RefreshAccountLicenseDevicesAsync(
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseDeviceDeactivateCount == 2 &&
+        agent.LicenseDeviceReadCount == 5 &&
+        viewModel.AccountLicenseDevicesStatus == "READY" &&
+        viewModel.CanMutateAccountLicenseDevices &&
+        !viewModel.AccountAuthorizedDevices.Single().CanDeactivate,
+        "Launcher did not require and complete an authoritative device read before re-enabling mutation.");
+
+    agent.PurchasesManageDevices = false;
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    Require(
+        !viewModel.AccountLicenses.Single().CanManageDevices &&
+        !viewModel.ShowAccountLicenseDeviceManagement,
+        "Launcher exposed authorized-device UX after the authoritative permission/handle was removed.");
 }
 
 static async Task CertifyAccountOrganizationSettingsAsync()
@@ -4695,6 +4971,7 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountPrivacyController(agent),
         new LauncherAccountPurchasesController(agent),
         new LauncherAccountLicenseSeatsController(agent),
+        new LauncherAccountLicenseDevicesController(agent),
         new LauncherAccountOrganizationController(agent));
 }
 
@@ -4897,6 +5174,10 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         "bke-license-seat-user-v1_ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
     public const string LicenseSeatCandidateHandle =
         "bke-license-seat-user-v1_1111111111111111111111111111111111111111111111111111111111111111";
+    public const string LicenseDeviceHandle =
+        "bke-license-device-v1_2222222222222222222222222222222222222222222222222222222222222222";
+    public const string AuthorizedDeviceHandle =
+        "bke-license-device-target-v1_3333333333333333333333333333333333333333333333333333333333333333";
 
     private const string AccountId = "acct-cert-recipient";
     private readonly CustomerJourneyCatalogSource _catalog;
@@ -4917,6 +5198,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PurchasesReadCount { get; private set; }
     public int LicenseSeatReadCount { get; private set; }
     public int LicenseSeatManageCount { get; private set; }
+    public int LicenseDeviceReadCount { get; private set; }
+    public int LicenseDeviceDeactivateCount { get; private set; }
     public int OrganizationReadCount { get; private set; }
     public int OrganizationCreateCount { get; private set; }
     public int OrganizationProfileUpdateCount { get; private set; }
@@ -4935,12 +5218,20 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public bool PurchasesViewSubscriptions { get; set; } = true;
     public bool PurchasesViewAllLicenses { get; set; } = true;
     public bool PurchasesManageLicenseSeats { get; set; } = true;
+    public bool PurchasesManageDevices { get; set; } = true;
+    public bool AuthorizedDeviceActive { get; set; } = true;
+    public bool LicenseDeviceDeactivateOutcomeUnknown { get; set; }
+    public bool LicenseDeviceReadFailsOnce { get; set; }
     public bool LicenseSeatCandidateAssigned { get; set; }
     public bool LicenseSeatManageOutcomeUnknown { get; set; }
     public bool LicenseSeatReadFailsOnce { get; set; }
     public AccountLicenseSeatsRequest? LastLicenseSeatReadRequest
         { get; private set; }
     public AccountLicenseSeatsManageRequest? LastLicenseSeatManageRequest
+        { get; private set; }
+    public AccountLicenseDevicesRequest? LastLicenseDeviceReadRequest
+        { get; private set; }
+    public AccountLicenseDeviceDeactivateRequest? LastLicenseDeviceDeactivateRequest
         { get; private set; }
     public AccountPurchasesRequest? LastAccountPurchasesRequest
         { get; private set; }
@@ -5518,7 +5809,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                     PurchasesViewOrders,
                     PurchasesViewSubscriptions,
                     PurchasesViewAllLicenses,
-                    PurchasesManageLicenseSeats),
+                    PurchasesManageLicenseSeats,
+                    PurchasesManageDevices),
                 new[]
                 {
                     new AccountPurchasesLicense(
@@ -5534,6 +5826,9 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                         1,
                         PurchasesManageLicenseSeats
                             ? LicenseSeatHandle
+                            : null,
+                        PurchasesManageDevices
+                            ? LicenseDeviceHandle
                             : null),
                 },
                 PurchasesViewSubscriptions
@@ -5685,6 +5980,108 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 request.Action == "ASSIGN"
                     ? "ASSIGNED"
                     : "REMOVED",
+                null));
+    }
+
+    public Task<AccountLicenseDevicesResponse> GetAccountLicenseDevicesAsync(
+        AccountLicenseDevicesRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LicenseDeviceReadCount++;
+        LastLicenseDeviceReadRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountLicenseDevicesResponse(
+                    AgentLocalContract.AccountLicenseDevicesCapabilityId,
+                    AgentLocalContract.AccountLicenseDevicesContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    Array.Empty<AccountAuthorizedDevice>(),
+                    new AccountLicenseDevicesError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (LicenseDeviceReadFailsOnce)
+        {
+            LicenseDeviceReadFailsOnce = false;
+            throw new HttpRequestException(
+                "Certified local Agent device-read transport failure.");
+        }
+
+        return Task.FromResult(
+            new AccountLicenseDevicesResponse(
+                AgentLocalContract.AccountLicenseDevicesCapabilityId,
+                AgentLocalContract.AccountLicenseDevicesContractVersion,
+                "READY",
+                new AccountLicenseDeviceInfo(
+                    "Render Dock",
+                    "Pro",
+                    "ABCD",
+                    4,
+                    AuthorizedDeviceActive ? 1 : 0),
+                new[]
+                {
+                    new AccountAuthorizedDevice(
+                        "Studio workstation",
+                        "Windows 11",
+                        "ARM64",
+                        "2026-09-30T12:00:00.000Z",
+                        "2026-09-29T12:00:00.000Z",
+                        AuthorizedDeviceActive,
+                        AuthorizedDeviceActive
+                            ? AuthorizedDeviceHandle
+                            : null),
+                },
+                null));
+    }
+
+    public Task<AccountLicenseDeviceDeactivateResponse> DeactivateAccountLicenseDeviceAsync(
+        AccountLicenseDeviceDeactivateRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LicenseDeviceDeactivateCount++;
+        LastLicenseDeviceDeactivateRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountLicenseDeviceDeactivateResponse(
+                    AgentLocalContract.AccountLicenseDevicesCapabilityId,
+                    AgentLocalContract.AccountLicenseDevicesContractVersion,
+                    "AUTH_REQUIRED",
+                    new AccountLicenseDevicesError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        AuthorizedDeviceActive = false;
+
+        if (LicenseDeviceDeactivateOutcomeUnknown)
+        {
+            LicenseDeviceDeactivateOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountLicenseDeviceDeactivateResponse(
+                    AgentLocalContract.AccountLicenseDevicesCapabilityId,
+                    AgentLocalContract.AccountLicenseDevicesContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    new AccountLicenseDevicesError(
+                        "LICENSE_DEVICE_DEACTIVATE_OUTCOME_UNKNOWN",
+                        "The deactivation could not be confirmed.",
+                        false)));
+        }
+
+        return Task.FromResult(
+            new AccountLicenseDeviceDeactivateResponse(
+                AgentLocalContract.AccountLicenseDevicesCapabilityId,
+                AgentLocalContract.AccountLicenseDevicesContractVersion,
+                "DEACTIVATED",
                 null));
     }
 
