@@ -5204,6 +5204,325 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task RefreshPersistentGiftClaimsAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ResetPersistentGiftClaimsState();
+            GiftClaimsStatus = "AUTH_REQUIRED";
+            GiftClaimsMessage =
+                "Sign in with BKE before viewing purchased Gift Claim Codes.";
+            return;
+        }
+
+        ClearPersistentGiftClaimSecret();
+        _giftClaimRevealLocked = false;
+        _selectedGiftClaimHandle = null;
+        GiftClaimRevealStatus = "IDLE";
+        GiftClaimRevealMessage =
+            "Choose an available Gift Claim Code to reveal it.";
+        GiftClaimsStatus = "LOADING";
+        GiftClaimsMessage =
+            "Loading purchased Gift Claim Codes through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _persistentGiftClaims.GetAsync(
+                cancellationToken);
+
+            PersistentGiftClaims.Clear();
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status != "READY")
+            {
+                GiftClaimsStatus = response.Status;
+                GiftClaimsMessage =
+                    response.Error?.Message ??
+                    "Gift Claim Code history is temporarily unavailable.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            foreach (var claim in response.Claims)
+            {
+                PersistentGiftClaims.Add(
+                    PersistentGiftClaimViewModel.From(claim));
+            }
+
+            GiftClaimsStatus = "READY";
+            GiftClaimsMessage =
+                response.Claims.Count == 0
+                    ? "No purchased Gift Claim Codes are recorded for the selected account."
+                    : "Gift Claim Code metadata loaded. Reveal remains protected by recent authentication.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            PersistentGiftClaims.Clear();
+            GiftClaimsStatus = "FAILED";
+            GiftClaimsMessage =
+                "Gift Claim Code history could not be loaded safely. No secret material was retained.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public async Task RevealPersistentGiftClaimAsync(
+        PersistentGiftClaimViewModel claim,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated ||
+            GiftClaimsStatus != "READY" ||
+            _giftClaimRevealLocked ||
+            !claim.CanReveal)
+        {
+            return;
+        }
+
+        ClearPersistentGiftClaimSecret();
+        _selectedGiftClaimHandle = claim.GiftClaimHandle;
+        GiftClaimRevealStatus = "REVEALING";
+        GiftClaimRevealMessage =
+            $"Requesting protected reveal for {claim.ProductLabel}…";
+
+        await ContinuePersistentGiftClaimRevealAsync(
+            claim.GiftClaimHandle,
+            cancellationToken);
+    }
+
+    public async Task StartPersistentGiftClaimRecentAuthAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanStartGiftClaimRecentAuth ||
+            _selectedGiftClaimHandle is null)
+        {
+            return;
+        }
+
+        var password = GiftClaimRecentPassword;
+        GiftClaimRecentPassword = string.Empty;
+        GiftClaimRevealStatus = "VERIFYING";
+        GiftClaimRevealMessage =
+            "Confirming recent authentication through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _persistentGiftClaims.StartRecentAuthAsync(
+                password,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "VERIFIED")
+            {
+                GiftClaimRevealStatus = "REVEALING";
+                GiftClaimRevealMessage =
+                    "Recent authentication confirmed. Revealing the selected Gift Claim Code…";
+                await ContinuePersistentGiftClaimRevealAsync(
+                    _selectedGiftClaimHandle,
+                    cancellationToken);
+                return;
+            }
+
+            if (response.Status == "MFA_CHALLENGE_ISSUED")
+            {
+                _giftClaimRecentAuthChallengeToken =
+                    response.ChallengeToken;
+                GiftClaimMfaReference =
+                    response.MfaReference ?? string.Empty;
+                GiftClaimMfaCode = string.Empty;
+                GiftClaimRevealStatus = "MFA_REQUIRED";
+                GiftClaimRevealMessage =
+                    response.EmailSent == true
+                        ? "Enter the MFA code sent to your account email."
+                        : "Enter an MFA recovery code to continue.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            if (response.Status == "RESULT_UNKNOWN")
+            {
+                LockPersistentGiftClaimReveal(
+                    "Recent authentication may have reached BKE Digital Solutions, but the result could not be confirmed. BKE will not replay the credential proof automatically. Refresh Gift Claim Codes before trying again.");
+                return;
+            }
+
+            GiftClaimRevealStatus = response.Status;
+            GiftClaimRevealMessage =
+                response.Error?.Message ??
+                "Recent authentication could not be completed.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            LockPersistentGiftClaimReveal(
+                "Recent authentication could not be confirmed. BKE will not replay the credential proof automatically. Refresh Gift Claim Codes before trying again.");
+        }
+    }
+
+    public async Task CompletePersistentGiftClaimRecentAuthAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!CanCompleteGiftClaimRecentAuth ||
+            _selectedGiftClaimHandle is null ||
+            _giftClaimRecentAuthChallengeToken is null)
+        {
+            return;
+        }
+
+        var challengeToken =
+            _giftClaimRecentAuthChallengeToken;
+        var code = GiftClaimMfaCode;
+        GiftClaimMfaCode = string.Empty;
+        GiftClaimRevealStatus = "VERIFYING";
+        GiftClaimRevealMessage =
+            "Verifying MFA proof through the BKE Licensing Agent…";
+
+        try
+        {
+            var response =
+                await _persistentGiftClaims.CompleteRecentAuthAsync(
+                    challengeToken,
+                    code,
+                    cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "VERIFIED")
+            {
+                _giftClaimRecentAuthChallengeToken = null;
+                GiftClaimMfaReference = string.Empty;
+                GiftClaimRevealStatus = "REVEALING";
+                GiftClaimRevealMessage =
+                    "MFA verified. Revealing the selected Gift Claim Code…";
+                await ContinuePersistentGiftClaimRevealAsync(
+                    _selectedGiftClaimHandle,
+                    cancellationToken);
+                return;
+            }
+
+            if (response.Status == "RESULT_UNKNOWN")
+            {
+                LockPersistentGiftClaimReveal(
+                    "MFA verification may have completed remotely, but the result could not be confirmed. BKE will not replay the proof automatically. Refresh Gift Claim Codes before trying again.");
+                return;
+            }
+
+            GiftClaimRevealStatus = response.Status;
+            GiftClaimRevealMessage =
+                response.Error?.Message ??
+                "The MFA proof was not accepted.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            LockPersistentGiftClaimReveal(
+                "MFA verification could not be confirmed. BKE will not replay the proof automatically. Refresh Gift Claim Codes before trying again.");
+        }
+    }
+
+    public void CompletePersistentGiftClaimReveal()
+    {
+        ClearPersistentGiftClaimSecret();
+        _selectedGiftClaimHandle = null;
+        _giftClaimRecentAuthChallengeToken = null;
+        GiftClaimMfaReference = string.Empty;
+        GiftClaimRevealStatus = "IDLE";
+        GiftClaimRevealMessage =
+            "Claim Code cleared from Launcher memory. Refresh metadata if you need to reveal it again.";
+        RaisePersistentGiftClaimCapabilities();
+    }
+
+    private async Task ContinuePersistentGiftClaimRevealAsync(
+        string giftClaimHandle,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _persistentGiftClaims.RevealAsync(
+                giftClaimHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "AVAILABLE")
+            {
+                _giftClaimRecentAuthChallengeToken = null;
+                GiftClaimMfaReference = string.Empty;
+                GiftClaimRecentPassword = string.Empty;
+                GiftClaimMfaCode = string.Empty;
+                RevealedPersistentGiftClaimCode =
+                    response.ClaimCode ?? string.Empty;
+                GiftClaimRevealStatus = "AVAILABLE";
+                GiftClaimRevealMessage =
+                    "Gift Claim Code revealed in memory only. Save it securely, then clear it from Launcher.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            if (response.Status == "RECENT_AUTH_REQUIRED")
+            {
+                GiftClaimRevealStatus =
+                    "RECENT_AUTH_REQUIRED";
+                GiftClaimRevealMessage =
+                    "Enter your current BKE password to authorize this secret reveal.";
+                RaisePersistentGiftClaimCapabilities();
+                return;
+            }
+
+            if (response.Status == "RESULT_UNKNOWN")
+            {
+                LockPersistentGiftClaimReveal(
+                    "The secret reveal result could not be confirmed. BKE will not replay it automatically. Refresh Gift Claim Codes before deciding whether to reveal again.");
+                return;
+            }
+
+            GiftClaimRevealStatus = response.Status;
+            GiftClaimRevealMessage =
+                response.Error?.Message ??
+                "The Gift Claim Code could not be revealed.";
+            RaisePersistentGiftClaimCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            LockPersistentGiftClaimReveal(
+                "The secret reveal could not be confirmed. BKE will not replay it automatically. Refresh Gift Claim Codes before deciding whether to reveal again.");
+        }
+    }
+
     public async Task RefreshAccountPurchasesAsync(
         CancellationToken cancellationToken)
     {
