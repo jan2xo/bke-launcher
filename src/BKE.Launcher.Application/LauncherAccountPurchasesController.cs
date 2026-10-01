@@ -169,14 +169,19 @@ public sealed class LauncherAccountPurchasesController
                 order.Status != "PENDING" &&
                     (order.ContinueHandle is not null ||
                      order.CancelHandle is not null) ||
+                response.Account.LifecycleState != "ACTIVE" &&
+                    (order.ContinueHandle is not null ||
+                     order.CancelHandle is not null) ||
                 !response.Permissions.ContinuePendingOrders &&
                     order.ContinueHandle is not null ||
                 !response.Permissions.CancelPendingOrders &&
                     order.CancelHandle is not null ||
-                order.Status == "PENDING" &&
+                response.Account.LifecycleState == "ACTIVE" &&
+                    order.Status == "PENDING" &&
                     response.Permissions.ContinuePendingOrders &&
                     order.ContinueHandle is null ||
-                order.Status == "PENDING" &&
+                response.Account.LifecycleState == "ACTIVE" &&
+                    order.Status == "PENDING" &&
                     response.Permissions.CancelPendingOrders &&
                     order.CancelHandle is null ||
                 order.Items is null ||
