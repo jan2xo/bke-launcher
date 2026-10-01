@@ -32,6 +32,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountMfaController _accountMfa;
     private readonly LauncherAccountPrivacyController _accountPrivacy;
     private readonly LauncherAccountPurchasesController _accountPurchases;
+    private readonly LauncherAccountPendingOrdersController _accountPendingOrders;
     private readonly LauncherAccountLicenseSeatsController _accountLicenseSeats;
     private readonly LauncherAccountLicenseDevicesController _accountLicenseDevices;
     private readonly LauncherAccountOrganizationController _accountOrganization;
@@ -91,6 +92,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "Refresh purchases and licenses to load the Agent-authoritative selected-account history.";
     private AccountPurchasesAccount? _accountPurchasesAccount;
     private AccountPurchasesPermissions? _accountPurchasesPermissions;
+    private string _accountPendingOrderStatus = "IDLE";
+    private string _accountPendingOrderMessage =
+        "Pending-order actions are available only when BKE Digital Solutions authorizes them for the selected account role.";
+    private bool _accountPendingOrderMutationLocked;
     private AccountLicenseViewModel? _selectedAccountLicenseForSeats;
     private AccountLicenseSeatInfo? _accountLicenseSeatInfo;
     private string _accountLicenseSeatsStatus = "IDLE";
@@ -200,6 +205,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountMfaController accountMfa,
         LauncherAccountPrivacyController accountPrivacy,
         LauncherAccountPurchasesController accountPurchases,
+        LauncherAccountPendingOrdersController accountPendingOrders,
         LauncherAccountLicenseSeatsController accountLicenseSeats,
         LauncherAccountLicenseDevicesController accountLicenseDevices,
         LauncherAccountOrganizationController accountOrganization)
@@ -227,6 +233,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountMfa = accountMfa;
         _accountPrivacy = accountPrivacy;
         _accountPurchases = accountPurchases;
+        _accountPendingOrders = accountPendingOrders;
         _accountLicenseSeats = accountLicenseSeats;
         _accountLicenseDevices = accountLicenseDevices;
         _accountOrganization = accountOrganization;
@@ -710,6 +717,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowEmptyAccountOrders =>
         ShowAccountOrders &&
         AccountOrders.Count == 0;
+
+    public string AccountPendingOrderStatus
+    {
+        get => _accountPendingOrderStatus;
+        private set
+        {
+            SetField(ref _accountPendingOrderStatus, value);
+            RaiseAccountPurchasesCapabilities();
+        }
+    }
+
+    public string AccountPendingOrderMessage
+    {
+        get => _accountPendingOrderMessage;
+        private set => SetField(ref _accountPendingOrderMessage, value);
+    }
+
+    public bool CanMutateAccountPendingOrders =>
+        AccountPurchasesReady &&
+        !_accountPendingOrderMutationLocked;
 
     public string AccountLicenseSeatsStatus
     {
@@ -4772,6 +4799,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        var recoveringPendingOrderMutation =
+            _accountPendingOrderMutationLocked;
+        if (!recoveringPendingOrderMutation)
+        {
+            ResetAccountPendingOrderMutationState();
+        }
+
         AccountPurchasesStatus = "LOADING";
         AccountPurchasesMessage =
             "Loading purchases and licenses through the BKE Licensing Agent…";
@@ -4832,6 +4866,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             AccountPurchasesStatus = "READY";
             AccountPurchasesMessage =
                 "Purchases and licenses loaded from BKE Digital Solutions for the selected account.";
+            if (recoveringPendingOrderMutation)
+            {
+                _accountPendingOrderMutationLocked = false;
+                AccountPendingOrderStatus = "REFRESHED";
+                AccountPendingOrderMessage =
+                    "Authoritative purchases refreshed. Pending-order actions are available again.";
+            }
             RaiseAccountPurchasesCapabilities();
         }
         catch (Exception error) when (
@@ -4841,8 +4882,198 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             ClearAccountPurchases(
                 "AGENT_UNAVAILABLE",
-                "Purchases and licenses are unavailable or the Licensing Agent returned an invalid response.");
+                "Purchases and licenses are unavailable or the Licensing Agent returned an invalid response.",
+                preservePendingOrderMutation:
+                    recoveringPendingOrderMutation);
         }
+    }
+
+    public async Task ContinueAccountPendingOrderAsync(
+        AccountOrderViewModel order,
+        CancellationToken cancellationToken)
+    {
+        if (!CanMutateAccountPendingOrders ||
+            !AccountOrders.Contains(order) ||
+            !order.CanContinuePayment ||
+            string.IsNullOrWhiteSpace(order.ContinueHandle))
+        {
+            return;
+        }
+
+        _accountPendingOrderMutationLocked = true;
+        AccountPendingOrderStatus = "CONTINUING";
+        AccountPendingOrderMessage =
+            $"Continuing payment for order {order.Number} through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountPendingOrders.ContinueAsync(
+                order.ContinueHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status == "OUTCOME_UNKNOWN")
+            {
+                AccountPendingOrderStatus = "OUTCOME_UNKNOWN";
+                AccountPendingOrderMessage =
+                    "The continuation outcome could not be confirmed. BKE will not replay it; refreshing authoritative purchases now.";
+                await RefreshAccountPurchasesAfterPendingOrderMutationAsync(
+                    "OUTCOME_UNKNOWN",
+                    "The continuation outcome could not be confirmed. BKE did not replay it and refreshed authoritative purchases before enabling another order action.",
+                    cancellationToken);
+                return;
+            }
+
+            if (response.Status == "CONTINUED" &&
+                !string.IsNullOrWhiteSpace(response.CheckoutUrl))
+            {
+                _accountPendingOrderMutationLocked = false;
+                AccountPendingOrderStatus = "CONTINUED";
+                AccountPendingOrderMessage =
+                    $"Order {order.Number} has an existing secure checkout. Opening it now; no new order was created.";
+                RaiseAccountPurchasesCapabilities();
+
+                try
+                {
+                    _externalNavigator.OpenCheckout(
+                        response.CheckoutUrl);
+                }
+                catch (Exception navigationError) when (
+                    navigationError is InvalidDataException or
+                    System.ComponentModel.Win32Exception or
+                    InvalidOperationException)
+                {
+                    AccountPendingOrderStatus =
+                        "NAVIGATION_FAILED";
+                    AccountPendingOrderMessage =
+                        "The existing checkout was confirmed, but its secure payment page could not be opened. Use Continue payment again to reopen the same pending checkout.";
+                }
+
+                return;
+            }
+
+            _accountPendingOrderMutationLocked = false;
+            AccountPendingOrderStatus = response.Status;
+            AccountPendingOrderMessage =
+                response.Error?.Message ??
+                "The pending order was not continued.";
+            RaiseAccountPurchasesCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            AccountPendingOrderStatus = "OUTCOME_UNKNOWN";
+            AccountPendingOrderMessage =
+                "The continuation outcome could not be confirmed. BKE will not replay it; refreshing authoritative purchases now.";
+            await RefreshAccountPurchasesAfterPendingOrderMutationAsync(
+                "OUTCOME_UNKNOWN",
+                "The continuation outcome could not be confirmed. BKE did not replay it and refreshed authoritative purchases before enabling another order action.",
+                cancellationToken);
+        }
+    }
+
+    public async Task CancelAccountPendingOrderAsync(
+        AccountOrderViewModel order,
+        CancellationToken cancellationToken)
+    {
+        if (!CanMutateAccountPendingOrders ||
+            !AccountOrders.Contains(order) ||
+            !order.CanCancelOrder ||
+            string.IsNullOrWhiteSpace(order.CancelHandle))
+        {
+            return;
+        }
+
+        _accountPendingOrderMutationLocked = true;
+        AccountPendingOrderStatus = "CANCELLING";
+        AccountPendingOrderMessage =
+            $"Cancelling order {order.Number} through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountPendingOrders.CancelAsync(
+                order.CancelHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status is
+                "CANCELLED" or
+                "OUTCOME_UNKNOWN")
+            {
+                var outcomeUnknown =
+                    response.Status == "OUTCOME_UNKNOWN";
+                AccountPendingOrderStatus = response.Status;
+                AccountPendingOrderMessage = outcomeUnknown
+                    ? "The cancellation outcome could not be confirmed. BKE will not replay it; refreshing authoritative purchases now."
+                    : $"Order {order.Number} was cancelled. Refreshing authoritative purchases before another order action.";
+
+                await RefreshAccountPurchasesAfterPendingOrderMutationAsync(
+                    response.Status,
+                    outcomeUnknown
+                        ? "The cancellation outcome could not be confirmed. BKE did not replay it and refreshed authoritative purchases before enabling another order action."
+                        : $"Order {order.Number} was cancelled and authoritative purchases were refreshed.",
+                    cancellationToken);
+                return;
+            }
+
+            _accountPendingOrderMutationLocked = false;
+            AccountPendingOrderStatus = response.Status;
+            AccountPendingOrderMessage =
+                response.Error?.Message ??
+                "The pending order was not cancelled.";
+            RaiseAccountPurchasesCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            AccountPendingOrderStatus = "OUTCOME_UNKNOWN";
+            AccountPendingOrderMessage =
+                "The cancellation outcome could not be confirmed. BKE will not replay it; refreshing authoritative purchases now.";
+            await RefreshAccountPurchasesAfterPendingOrderMutationAsync(
+                "OUTCOME_UNKNOWN",
+                "The cancellation outcome could not be confirmed. BKE did not replay it and refreshed authoritative purchases before enabling another order action.",
+                cancellationToken);
+        }
+    }
+
+    private async Task RefreshAccountPurchasesAfterPendingOrderMutationAsync(
+        string resolvedStatus,
+        string resolvedMessage,
+        CancellationToken cancellationToken)
+    {
+        await RefreshAccountPurchasesAsync(cancellationToken);
+
+        if (AccountPurchasesStatus == "READY")
+        {
+            _accountPendingOrderMutationLocked = false;
+            AccountPendingOrderStatus = resolvedStatus;
+            AccountPendingOrderMessage = resolvedMessage;
+        }
+        else
+        {
+            _accountPendingOrderMutationLocked = true;
+            AccountPendingOrderStatus = "REFRESH_REQUIRED";
+            AccountPendingOrderMessage =
+                "BKE cannot safely enable another pending-order action until authoritative purchases are refreshed. Use Refresh purchases & licenses and do not replay the previous mutation.";
+        }
+
+        RaiseAccountPurchasesCapabilities();
     }
 
     public async Task OpenAccountLicenseSeatsAsync(
@@ -6012,6 +6243,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ResetAccountPurchasesState()
     {
+        ResetAccountPendingOrderMutationState();
         ResetAccountLicenseSeatsState();
         ResetAccountLicenseDevicesState();
         _accountPurchasesAccount = null;
@@ -6027,8 +6259,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ClearAccountPurchases(
         string status,
-        string message)
+        string message,
+        bool preservePendingOrderMutation = false)
     {
+        if (!preservePendingOrderMutation)
+        {
+            ResetAccountPendingOrderMutationState();
+        }
         ResetAccountLicenseSeatsState();
         ResetAccountLicenseDevicesState();
         _accountPurchasesAccount = null;
@@ -6062,8 +6299,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowAccountOrders));
         Raise(nameof(ShowAccountOrdersUnavailable));
         Raise(nameof(ShowEmptyAccountOrders));
+        Raise(nameof(AccountPendingOrderStatus));
+        Raise(nameof(AccountPendingOrderMessage));
+        Raise(nameof(CanMutateAccountPendingOrders));
         RaiseAccountLicenseSeatsCapabilities();
         RaiseAccountLicenseDevicesCapabilities();
+    }
+
+    private void ResetAccountPendingOrderMutationState()
+    {
+        _accountPendingOrderMutationLocked = false;
+        AccountPendingOrderStatus = "IDLE";
+        AccountPendingOrderMessage =
+            "Pending-order actions are available only when BKE Digital Solutions authorizes them for the selected account role.";
     }
 
     private void ResetAccountLicenseSeatsState()
@@ -6656,7 +6904,11 @@ public sealed record AccountOrderViewModel(
     string TotalLabel,
     string CreatedLabel,
     string InvoiceLabel,
-    string ItemsLabel)
+    string ItemsLabel,
+    bool CanContinuePayment,
+    bool CanCancelOrder,
+    string? ContinueHandle,
+    string? CancelHandle)
 {
     public static AccountOrderViewModel From(
         AccountPurchasesOrder item)
@@ -6684,7 +6936,13 @@ public sealed record AccountOrderViewModel(
             item.InvoiceAvailable
                 ? "Invoice available"
                 : "No invoice returned",
-            string.Join(", ", itemLabels));
+            string.Join(", ", itemLabels),
+            item.Status == "PENDING" &&
+                !string.IsNullOrWhiteSpace(item.ContinueHandle),
+            item.Status == "PENDING" &&
+                !string.IsNullOrWhiteSpace(item.CancelHandle),
+            item.ContinueHandle,
+            item.CancelHandle);
     }
 
     private static string FormatTimestamp(string value) =>

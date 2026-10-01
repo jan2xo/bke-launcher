@@ -13,6 +13,7 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
     internal static readonly TimeSpan AccountMfaRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountPrivacyRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountPurchasesRequestTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan AccountPendingOrderRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountLicenseSeatsRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountLicenseDevicesRequestTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AccountOrganizationRequestTimeout = TimeSpan.FromSeconds(30);
@@ -192,6 +193,24 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             AgentLocalContract.AccountPurchasesPath,
             request,
             AccountPurchasesRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountPendingOrderContinueResponse> ContinueAccountPendingOrderAsync(
+        AccountPendingOrderContinueRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountPendingOrderContinueRequest, AccountPendingOrderContinueResponse>(
+            AgentLocalContract.AccountPendingOrderContinuePath,
+            request,
+            AccountPendingOrderRequestTimeout,
+            cancellationToken);
+
+    public Task<AccountPendingOrderCancelResponse> CancelAccountPendingOrderAsync(
+        AccountPendingOrderCancelRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<AccountPendingOrderCancelRequest, AccountPendingOrderCancelResponse>(
+            AgentLocalContract.AccountPendingOrderCancelPath,
+            request,
+            AccountPendingOrderRequestTimeout,
             cancellationToken);
 
     public Task<AccountLicenseSeatsResponse> GetAccountLicenseSeatsAsync(
