@@ -7054,6 +7054,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void ResetAccountPurchasesState()
     {
         ResetAccountBillingState();
+        ResetPersistentGiftClaimsState();
         ResetAccountPendingOrderMutationState();
         ResetAccountLicenseSeatsState();
         ResetAccountLicenseDevicesState();
@@ -7073,6 +7074,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string message,
         bool preservePendingOrderMutation = false)
     {
+        ResetPersistentGiftClaimsState();
         if (!preservePendingOrderMutation)
         {
             ResetAccountPendingOrderMutationState();
@@ -7115,6 +7117,54 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanMutateAccountPendingOrders));
         RaiseAccountLicenseSeatsCapabilities();
         RaiseAccountLicenseDevicesCapabilities();
+    }
+
+    private void ResetPersistentGiftClaimsState()
+    {
+        PersistentGiftClaims.Clear();
+        GiftClaimsStatus = "UNKNOWN";
+        GiftClaimsMessage =
+            "Refresh Gift Claim Codes to recover previously purchased codes.";
+        _selectedGiftClaimHandle = null;
+        _giftClaimRecentAuthChallengeToken = null;
+        _giftClaimRevealLocked = false;
+        GiftClaimMfaReference = string.Empty;
+        ClearPersistentGiftClaimSecret();
+        GiftClaimRevealStatus = "IDLE";
+        GiftClaimRevealMessage =
+            "Choose an available Gift Claim Code to reveal it.";
+        RaisePersistentGiftClaimCapabilities();
+    }
+
+    private void ClearPersistentGiftClaimSecret()
+    {
+        GiftClaimRecentPassword = string.Empty;
+        GiftClaimMfaCode = string.Empty;
+        RevealedPersistentGiftClaimCode = string.Empty;
+    }
+
+    private void LockPersistentGiftClaimReveal(string message)
+    {
+        ClearPersistentGiftClaimSecret();
+        _giftClaimRecentAuthChallengeToken = null;
+        GiftClaimMfaReference = string.Empty;
+        _giftClaimRevealLocked = true;
+        GiftClaimRevealStatus = "RESULT_UNKNOWN";
+        GiftClaimRevealMessage = message;
+        RaisePersistentGiftClaimCapabilities();
+    }
+
+    private void RaisePersistentGiftClaimCapabilities()
+    {
+        Raise(nameof(CanRefreshGiftClaims));
+        Raise(nameof(GiftClaimsReady));
+        Raise(nameof(ShowEmptyGiftClaims));
+        Raise(nameof(ShowGiftClaimRecentAuth));
+        Raise(nameof(CanStartGiftClaimRecentAuth));
+        Raise(nameof(ShowGiftClaimMfaChallenge));
+        Raise(nameof(CanCompleteGiftClaimRecentAuth));
+        Raise(nameof(HasRevealedPersistentGiftClaimCode));
+        Raise(nameof(GiftClaimRevealLocked));
     }
 
     private void ResetAccountBillingState()
@@ -8218,5 +8268,54 @@ public sealed record SoftwareProductViewModel(
                 or LauncherProductState.UpdateAvailable
                 or LauncherProductState.InstalledNotEntitled
                 or LauncherProductState.RepairRequired);
+    }
+}
+
+
+public sealed record PersistentGiftClaimViewModel(
+    string GiftClaimHandle,
+    string OrderNumber,
+    string ProductLabel,
+    string Status,
+    string LastFourLabel,
+    string CreatedLabel,
+    string ExpiryLabel,
+    bool CanReveal)
+{
+    public static PersistentGiftClaimViewModel From(
+        StoreGiftClaimItem item)
+    {
+        var product = string.Join(
+            " · ",
+            new[]
+            {
+                item.ProductName,
+                item.EditionName,
+                item.PlanName,
+            }.Where(value =>
+                !string.IsNullOrWhiteSpace(value)));
+
+        var created = DateTimeOffset.TryParse(
+            item.CreatedAt,
+            out var createdAt)
+            ? $"Purchased {createdAt.ToLocalTime():g}"
+            : "Purchase date unavailable";
+
+        var expiry = item.ExpiresAt is not null &&
+                     DateTimeOffset.TryParse(
+                         item.ExpiresAt,
+                         out var expiresAt)
+            ? $"Expires {expiresAt.ToLocalTime():g}"
+            : "No expiry recorded";
+
+        return new PersistentGiftClaimViewModel(
+            item.GiftClaimHandle,
+            item.OrderNumber,
+            product,
+            item.Status,
+            $"Code ending · {item.LastFour}",
+            created,
+            expiry,
+            item.Status == "AVAILABLE");
     }
 }
