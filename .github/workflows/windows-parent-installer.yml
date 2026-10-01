@@ -364,6 +364,16 @@ jobs:
           $smoke=Start-Process -FilePath $bke -ArgumentList "--smoke" -Wait -PassThru
           if ($smoke.ExitCode -ne 0) { throw "Installed BKE smoke failed: $($smoke.ExitCode)" }
 
+          $uiSmoke=Start-Process -FilePath $bke -ArgumentList "--ui-smoke" -PassThru
+          if (!$uiSmoke.WaitForExit(15000)) {
+            Stop-Process -Id $uiSmoke.Id -Force -ErrorAction SilentlyContinue
+            throw "Installed BKE Avalonia UI smoke timed out."
+          }
+          if ($uiSmoke.ExitCode -ne 0) {
+            throw "Installed BKE Avalonia UI smoke failed: $($uiSmoke.ExitCode)"
+          }
+          Write-Host "Installed BKE Avalonia UI startup smoke: PASS"
+
           $service=Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue
           if ($null -eq $service) { throw "Bundled Licensing Agent service is missing." }
           $service.WaitForStatus("Running",[TimeSpan]::FromSeconds(30))
