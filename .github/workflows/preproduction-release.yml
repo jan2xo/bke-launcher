@@ -38,7 +38,7 @@ jobs:
           test "$TAG" != "$GITHUB_REF_NAME"
           test -f "$REQUEST_PATH"
 
-          test "$(jq -r '.schema' "$REQUEST_PATH")" = "bke.preproduction-release-request.v1"
+          test "$(jq -r '.schema' "$REQUEST_PATH")" = "bke.preproduction-release-request.v2"
           test "$(jq -r '.status' "$REQUEST_PATH")" = "PREPRODUCTION"
           test "$(jq -r '.production_ready' "$REQUEST_PATH")" = "false"
           test "$(jq -r '.tag' "$REQUEST_PATH")" = "$TAG"
@@ -46,6 +46,7 @@ jobs:
 
           SOURCE_SHA="$(jq -r '.source_sha' "$REQUEST_PATH")"
           AGENT_SOURCE_SHA="$(jq -r '.agent_source_sha' "$REQUEST_PATH")"
+          MERGED_SHA="$(jq -r '.merged_sha' "$REQUEST_PATH")"
           RUN_ID="$(jq -r '.certification_run_id' "$REQUEST_PATH")"
           ARTIFACT_NAME="$(jq -r '.certification_artifact_name' "$REQUEST_PATH")"
           INSTALLER_FILE="$(jq -r '.installer.file' "$REQUEST_PATH")"
@@ -54,6 +55,7 @@ jobs:
 
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$AGENT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$RUN_ID" =~ ^[0-9]+$ ]]
           test "$ARTIFACT_NAME" = "BKE-Windows-Parent-Installer-PREPRODUCTION"
           [[ "$INSTALLER_FILE" =~ ^BKE-[^/]+-PREPRODUCTION-Windows\.exe$ ]]
@@ -62,13 +64,17 @@ jobs:
 
           git fetch --no-tags origin main
           git cat-file -e "$SOURCE_SHA^{commit}"
-          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          git cat-file -e "$MERGED_SHA^{commit}"
+          git merge-base --is-ancestor "$MERGED_SHA" origin/main
+          test "$(git rev-parse "$SOURCE_SHA^{tree}")" = "$(git rev-parse "$MERGED_SHA^{tree}")"
           test "$(git show "$SOURCE_SHA:eng/licensing-agent-source.sha" | tr -d '\r\n')" = "$AGENT_SOURCE_SHA"
+          test "$(git show "$MERGED_SHA:eng/licensing-agent-source.sha" | tr -d '\r\n')" = "$AGENT_SOURCE_SHA"
 
           {
             echo "tag=$TAG"
             echo "source_sha=$SOURCE_SHA"
             echo "agent_source_sha=$AGENT_SOURCE_SHA"
+            echo "merged_sha=$MERGED_SHA"
             echo "run_id=$RUN_ID"
             echo "artifact_name=$ARTIFACT_NAME"
             echo "installer_file=$INSTALLER_FILE"
@@ -191,7 +197,8 @@ jobs:
           This BKE Windows parent installer is an exact certified artifact.
           It is not production-ready and is published only for disposable/UTM certification.
 
-          BKE source SHA: $SOURCE_SHA
+          Certified BKE source SHA: $SOURCE_SHA
+          Canonical merged SHA: ${{ steps.request.outputs.merged_sha }}
           Certification run: ${{ steps.request.outputs.run_id }}
           Licensing Agent SHA: ${{ steps.request.outputs.agent_source_sha }}
           EOF
