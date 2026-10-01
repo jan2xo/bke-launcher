@@ -88,9 +88,7 @@ public sealed class LauncherPasswordResetCompletionController
                 "?token=",
                 StringComparison.Ordinal) ||
             resetUri.Query.Length <= "?token=".Length ||
-            resetUri.Query.Contains(
-                '&',
-                StringComparison.Ordinal))
+            resetUri.Query.Contains('&'))
         {
             return false;
         }
