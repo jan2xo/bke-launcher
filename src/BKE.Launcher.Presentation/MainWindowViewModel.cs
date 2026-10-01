@@ -752,6 +752,114 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ShowAccountOrders &&
         AccountOrders.Count == 0;
 
+    public string GiftClaimsStatus
+    {
+        get => _giftClaimsStatus;
+        private set
+        {
+            SetField(ref _giftClaimsStatus, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimsMessage
+    {
+        get => _giftClaimsMessage;
+        private set => SetField(ref _giftClaimsMessage, value);
+    }
+
+    public string GiftClaimRevealStatus
+    {
+        get => _giftClaimRevealStatus;
+        private set
+        {
+            SetField(ref _giftClaimRevealStatus, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimRevealMessage
+    {
+        get => _giftClaimRevealMessage;
+        private set => SetField(ref _giftClaimRevealMessage, value);
+    }
+
+    public string GiftClaimRecentPassword
+    {
+        get => _giftClaimRecentPassword;
+        set
+        {
+            SetField(ref _giftClaimRecentPassword, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimMfaCode
+    {
+        get => _giftClaimMfaCode;
+        set
+        {
+            SetField(ref _giftClaimMfaCode, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public string GiftClaimMfaReference
+    {
+        get => _giftClaimMfaReference;
+        private set => SetField(ref _giftClaimMfaReference, value);
+    }
+
+    public string RevealedPersistentGiftClaimCode
+    {
+        get => _revealedPersistentGiftClaimCode;
+        private set
+        {
+            SetField(ref _revealedPersistentGiftClaimCode, value);
+            RaisePersistentGiftClaimCapabilities();
+        }
+    }
+
+    public bool CanRefreshGiftClaims =>
+        IsAuthenticated &&
+        GiftClaimsStatus != "LOADING" &&
+        !_giftClaimRevealLocked;
+
+    public bool GiftClaimsReady => GiftClaimsStatus == "READY";
+
+    public bool ShowEmptyGiftClaims =>
+        GiftClaimsReady &&
+        PersistentGiftClaims.Count == 0;
+
+    public bool ShowGiftClaimRecentAuth =>
+        IsAuthenticated &&
+        GiftClaimRevealStatus == "RECENT_AUTH_REQUIRED" &&
+        _selectedGiftClaimHandle is not null &&
+        _giftClaimRecentAuthChallengeToken is null &&
+        !_giftClaimRevealLocked;
+
+    public bool CanStartGiftClaimRecentAuth =>
+        ShowGiftClaimRecentAuth &&
+        !string.IsNullOrEmpty(GiftClaimRecentPassword);
+
+    public bool ShowGiftClaimMfaChallenge =>
+        IsAuthenticated &&
+        _selectedGiftClaimHandle is not null &&
+        !string.IsNullOrWhiteSpace(
+            _giftClaimRecentAuthChallengeToken) &&
+        !_giftClaimRevealLocked;
+
+    public bool CanCompleteGiftClaimRecentAuth =>
+        ShowGiftClaimMfaChallenge &&
+        GiftClaimMfaCode.Length is >= 6 and <= 32;
+
+    public bool HasRevealedPersistentGiftClaimCode =>
+        !string.IsNullOrWhiteSpace(
+            RevealedPersistentGiftClaimCode);
+
+    public bool GiftClaimRevealLocked =>
+        _giftClaimRevealLocked;
+
     public string AccountBillingStatus
     {
         get => _accountBillingStatus;
