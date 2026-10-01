@@ -151,6 +151,44 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void OpenAccountLicenseSeats(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: AccountLicenseViewModel license,
+            })
+        {
+            await ViewModel.OpenAccountLicenseSeatsAsync(
+                license,
+                CancellationToken.None);
+        }
+    }
+
+    private async void RefreshAccountLicenseSeats(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        await ViewModel.RefreshAccountLicenseSeatsAsync(
+            CancellationToken.None);
+    }
+
+    private async void ChangeAccountLicenseSeat(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button
+            {
+                DataContext: AccountLicenseSeatTargetViewModel target,
+            })
+        {
+            await ViewModel.ChangeAccountLicenseSeatAsync(
+                target,
+                CancellationToken.None);
+        }
+    }
+
     private async void AcceptAccountOrganizationInvitation(
         object? sender,
         RoutedEventArgs args)
