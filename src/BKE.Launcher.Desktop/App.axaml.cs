@@ -56,6 +56,7 @@ public sealed partial class App : Avalonia.Application
             var accountPrivacy = new LauncherAccountPrivacyController(agentClient);
             var accountPurchases = new LauncherAccountPurchasesController(agentClient);
             var accountLicenseSeats = new LauncherAccountLicenseSeatsController(agentClient);
+            var accountLicenseDevices = new LauncherAccountLicenseDevicesController(agentClient);
             var accountOrganization = new LauncherAccountOrganizationController(agentClient);
             var viewModel = new MainWindowViewModel(
                 accountSession,
@@ -82,6 +83,7 @@ public sealed partial class App : Avalonia.Application
                 accountPrivacy,
                 accountPurchases,
                 accountLicenseSeats,
+                accountLicenseDevices,
                 accountOrganization);
 
             desktop.MainWindow = new MainWindow
