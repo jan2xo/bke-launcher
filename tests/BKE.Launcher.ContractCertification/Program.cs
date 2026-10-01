@@ -5596,17 +5596,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         if (LicenseSeatReadFailsOnce)
         {
             LicenseSeatReadFailsOnce = false;
-            return Task.FromResult(
-                new AccountLicenseSeatsResponse(
-                    AgentLocalContract.AccountLicenseSeatsCapabilityId,
-                    AgentLocalContract.AccountLicenseSeatsContractVersion,
-                    "FAILED",
-                    null,
-                    Array.Empty<AccountLicenseSeatTarget>(),
-                    new AccountLicenseSeatsError(
-                        "LICENSE_SEATS_UNAVAILABLE",
-                        "Certified temporary seat read failure.",
-                        true)));
+            throw new HttpRequestException(
+                "Certified local Agent seat-read transport failure.");
         }
 
         var assignedSeats =
