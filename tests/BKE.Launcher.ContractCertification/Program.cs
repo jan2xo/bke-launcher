@@ -37,6 +37,10 @@ Require(AgentLocalContract.AccountPrivacyContractVersion == 1, "account privacy 
 Require(AgentLocalContract.AccountPurchasesPath == "/v1/account/purchases", "account purchases path drifted");
 Require(AgentLocalContract.AccountPurchasesCapabilityId == "bke.account-purchases", "account purchases capability id drifted");
 Require(AgentLocalContract.AccountPurchasesContractVersion == 1, "account purchases contract version drifted");
+Require(AgentLocalContract.AccountLicenseSeatsPath == "/v1/account/license-seats", "account license seats path drifted");
+Require(AgentLocalContract.AccountLicenseSeatsManagePath == "/v1/account/license-seats/manage", "account license seats manage path drifted");
+Require(AgentLocalContract.AccountLicenseSeatsCapabilityId == "bke.account-license-seats", "account license seats capability id drifted");
+Require(AgentLocalContract.AccountLicenseSeatsContractVersion == 1, "account license seats contract version drifted");
 Require(BkePlatformContract.NativeMfaVerifyPath == "/api/agent-sessions/native/mfa/verify", "native MFA verify path drifted");
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
 Require(AgentLocalContract.SoftwareCatalogCapabilityId == "bke.software-catalog", "software catalog capability id drifted");
@@ -97,6 +101,11 @@ var localResponseProperties = typeof(PlatformAuthorityResponse).GetProperties()
     .Concat(typeof(AccountPurchasesOrder).GetProperties())
     .Concat(typeof(AccountPurchasesOrderItem).GetProperties())
     .Concat(typeof(AccountPurchasesError).GetProperties())
+    .Concat(typeof(AccountLicenseSeatsResponse).GetProperties())
+    .Concat(typeof(AccountLicenseSeatsManageResponse).GetProperties())
+    .Concat(typeof(AccountLicenseSeatInfo).GetProperties())
+    .Concat(typeof(AccountLicenseSeatTarget).GetProperties())
+    .Concat(typeof(AccountLicenseSeatsError).GetProperties())
     .Concat(typeof(AccountOrganizationOverviewResponse).GetProperties())
     .Concat(typeof(AccountOrganizationCreateResponse).GetProperties())
     .Concat(typeof(AccountOrganizationProfileUpdateResponse).GetProperties())
@@ -177,6 +186,8 @@ Require(agentMethods.SetEquals([
     "GetAccountPrivacyRequestsAsync",
     "CreateAccountPrivacyRequestAsync",
     "GetAccountPurchasesAsync",
+    "GetAccountLicenseSeatsAsync",
+    "ManageAccountLicenseSeatsAsync",
     "GetAccountOrganizationAsync",
     "CreateAccountOrganizationAsync",
     "UpdateAccountOrganizationProfileAsync",
@@ -457,10 +468,143 @@ Require(
     "Launcher bypassed the local Agent purchases authority.");
 
 Require(
+    typeof(AccountLicenseSeatsRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "LicenseManagementHandle",
+        ]),
+    "Launcher widened the Agent license-seat read request.");
+
+Require(
+    typeof(AccountLicenseSeatsManageRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual([
+            "CorrelationId",
+            "Action",
+            "LicenseManagementHandle",
+            "TargetManagementHandle",
+        ]),
+    "Launcher widened the Agent license-seat mutation request.");
+
+using (var seatReadDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountLicenseSeatsRequest(
+            "seat-read-cert",
+            CustomerJourneyAgentClient.LicenseSeatHandle))))
+{
+    var root = seatReadDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "license_management_handle",
+        ]) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("license_id", out _) &&
+        !root.TryGetProperty("assignment_id", out _) &&
+        !root.TryGetProperty("product_id", out _),
+        "Launcher license-seat read request exposed raw authority identifiers.");
+}
+
+using (var seatManageDocument = JsonDocument.Parse(
+    JsonSerializer.Serialize(
+        new AccountLicenseSeatsManageRequest(
+            "seat-manage-cert",
+            "ASSIGN",
+            CustomerJourneyAgentClient.LicenseSeatHandle,
+            CustomerJourneyAgentClient.LicenseSeatCandidateHandle))))
+{
+    var root = seatManageDocument.RootElement;
+    var fields = root.EnumerateObject()
+        .Select(property => property.Name)
+        .ToArray();
+    Require(
+        fields.SequenceEqual([
+            "correlation_id",
+            "action",
+            "license_management_handle",
+            "target_management_handle",
+        ]) &&
+        !root.TryGetProperty("account_id", out _) &&
+        !root.TryGetProperty("user_id", out _) &&
+        !root.TryGetProperty("license_id", out _) &&
+        !root.TryGetProperty("assignment_id", out _) &&
+        !root.TryGetProperty("product_id", out _),
+        "Launcher license-seat mutation request exposed raw authority identifiers.");
+}
+
+foreach (var type in new[]
+{
+    typeof(AccountLicenseSeatsResponse),
+    typeof(AccountLicenseSeatsManageResponse),
+    typeof(AccountLicenseSeatInfo),
+    typeof(AccountLicenseSeatTarget),
+    typeof(AccountLicenseSeatsError),
+})
+{
+    Require(
+        type.GetProperties().All(property =>
+            !property.Name.Contains(
+                "AccessToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "RefreshToken",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Contains(
+                "Handoff",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "AccountId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "UserId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "LicenseId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "AssignmentId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "ProductId",
+                StringComparison.OrdinalIgnoreCase) &&
+            !property.Name.Equals(
+                "LicenseKey",
+                StringComparison.OrdinalIgnoreCase)),
+        $"Launcher license-seat contract {type.Name} exposes raw authority or secret material.");
+}
+
+var seatControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherAccountLicenseSeatsController.cs"));
+Require(
+    !seatControllerSource.Contains(
+        "/api/agent-sessions/account/license-seats",
+        StringComparison.OrdinalIgnoreCase) &&
+    !purchasesClientSource.Contains(
+        "/api/agent-sessions/account/license-seats",
+        StringComparison.OrdinalIgnoreCase) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountLicenseSeatsPath",
+        StringComparison.Ordinal) &&
+    purchasesClientSource.Contains(
+        "AgentLocalContract.AccountLicenseSeatsManagePath",
+        StringComparison.Ordinal),
+    "Launcher bypassed the local Agent license-seat authority.");
+
+Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "f4ddf4b09a40d9a6806560060bfd7af2dec13ab8",
-    "Launcher is not pinned to the merged Agent account-purchases authority.");
+        "a07a337816c4917452f3b58741f195b8d23bc562",
+    "Launcher is not pinned to the merged Agent license-seat authority.");
 
 Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
@@ -2555,6 +2699,27 @@ Require(
 
 Require(
     mainWindowMarkup.Contains(
+        "Content=\"Manage seats\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenAccountLicenseSeats\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"RefreshAccountLicenseSeats\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"ChangeAccountLicenseSeat\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "SeatManagementHandle",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "ManagementHandle",
+        StringComparison.Ordinal),
+    "Launcher license-seat UI is missing or exposes opaque handles as presentation data.");
+
+Require(
+    mainWindowMarkup.Contains(
         "Content=\"Switch BKE account\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
@@ -2575,6 +2740,7 @@ await CertifyNativeRegistrationJourneyAsync();
 await CertifyAccountPasswordChangeSettingsAsync();
 await CertifyAccountPrivacySettingsAsync();
 await CertifyAccountPurchasesSettingsAsync();
+await CertifyAccountLicenseSeatManagementAsync();
 await CertifyAccountOrganizationSettingsAsync();
 await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
@@ -2585,6 +2751,7 @@ Console.WriteLine("Native Forgot Password enumeration-safe recovery composition 
 Console.WriteLine("Native Create Account legal acceptance and email verification composition certified");
 Console.WriteLine("Native Account Security password-change composition certified");
 Console.WriteLine("Agent-mediated selected-account Privacy Requests composition certified");
+Console.WriteLine("Agent-mediated license seat assignment, authoritative refresh, and ambiguous-outcome replay prevention certified");
 Console.WriteLine("Agent-mediated Organization Overview/Create/member-management/ownership-transfer/self-leave presentation and reauthentication boundaries certified");
 Console.WriteLine("Safe Personal/Organization account switching with checkout-lock protection certified");
 Console.WriteLine("Agent-mediated selected-account Notifications presentation boundary certified");
@@ -2940,6 +3107,10 @@ static async Task CertifyAccountPurchasesSettingsAsync()
         viewModel.AccountLicenses[0].LicenseKeyLabel.Contains(
             "ABCD",
             StringComparison.Ordinal) &&
+        viewModel.AccountLicenses[0].CanManageSeats &&
+        viewModel.AccountLicenses[0].SeatLabel.Contains(
+            "1 of 2",
+            StringComparison.Ordinal) &&
         viewModel.ShowAccountSubscriptions &&
         viewModel.ShowAccountOrders &&
         !viewModel.ShowAccountSubscriptionsUnavailable &&
@@ -2950,6 +3121,7 @@ static async Task CertifyAccountPurchasesSettingsAsync()
     agent.PurchasesViewOrders = false;
     agent.PurchasesViewSubscriptions = false;
     agent.PurchasesViewAllLicenses = false;
+    agent.PurchasesManageLicenseSeats = false;
 
     await viewModel.RefreshAccountPurchasesAsync(
         CancellationToken.None);
@@ -2962,6 +3134,7 @@ static async Task CertifyAccountPurchasesSettingsAsync()
         viewModel.AccountOrders.Count == 0 &&
         viewModel.ShowAccountSubscriptionsUnavailable &&
         viewModel.ShowAccountOrdersUnavailable &&
+        !viewModel.AccountLicenses[0].CanManageSeats &&
         viewModel.AccountLicenseScopeLabel.Contains(
             "assigned",
             StringComparison.OrdinalIgnoreCase),
@@ -2977,6 +3150,110 @@ static async Task CertifyAccountPurchasesSettingsAsync()
         viewModel.AccountSubscriptions.Count == 0 &&
         viewModel.AccountOrders.Count == 0,
         "Launcher retained purchases state after Agent session invalidation.");
+}
+
+static async Task CertifyAccountLicenseSeatManagementAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog);
+    var viewModel = BuildCustomerJourneyViewModel(
+        agent,
+        catalog,
+        new CustomerJourneyRecoveryStore(),
+        new CustomerJourneyNavigator());
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    viewModel.OpenAccountSurface();
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    var license = viewModel.AccountLicenses.Single();
+    Require(
+        license.CanManageSeats &&
+        license.SeatManagementHandle ==
+            CustomerJourneyAgentClient.LicenseSeatHandle,
+        "Launcher did not retain the Agent-authoritative opaque seat-management handle.");
+
+    await viewModel.OpenAccountLicenseSeatsAsync(
+        license,
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseSeatReadCount == 1 &&
+        agent.LastLicenseSeatReadRequest?.LicenseManagementHandle ==
+            CustomerJourneyAgentClient.LicenseSeatHandle &&
+        viewModel.AccountLicenseSeatsStatus == "READY" &&
+        viewModel.AccountLicenseSeatsReady &&
+        viewModel.CanMutateAccountLicenseSeats &&
+        viewModel.AccountLicenseSeatTargets.Count == 2 &&
+        viewModel.AccountLicenseSeatTargets.Any(target =>
+            target.Email == "candidate@example.test" &&
+            !target.Assigned &&
+            target.Eligible &&
+            target.CanChange),
+        "Launcher did not load the Agent-authoritative license seat state.");
+
+    var candidate = viewModel.AccountLicenseSeatTargets.Single(
+        target => target.Email == "candidate@example.test");
+
+    await viewModel.ChangeAccountLicenseSeatAsync(
+        candidate,
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseSeatManageCount == 1 &&
+        agent.LicenseSeatReadCount == 2 &&
+        agent.LastLicenseSeatManageRequest?.Action == "ASSIGN" &&
+        agent.LastLicenseSeatManageRequest.LicenseManagementHandle ==
+            CustomerJourneyAgentClient.LicenseSeatHandle &&
+        agent.LastLicenseSeatManageRequest.TargetManagementHandle ==
+            CustomerJourneyAgentClient.LicenseSeatCandidateHandle &&
+        viewModel.AccountLicenseSeatsStatus == "READY" &&
+        viewModel.CanMutateAccountLicenseSeats &&
+        viewModel.AccountLicenseSeatTargets.Single(
+            target => target.Email == "candidate@example.test").Assigned,
+        "Launcher did not refresh authoritative seat state after a confirmed mutation.");
+
+    agent.LicenseSeatManageOutcomeUnknown = true;
+    agent.LicenseSeatReadFailsOnce = true;
+    candidate = viewModel.AccountLicenseSeatTargets.Single(
+        target => target.Email == "candidate@example.test");
+
+    await viewModel.ChangeAccountLicenseSeatAsync(
+        candidate,
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseSeatManageCount == 2 &&
+        agent.LicenseSeatReadCount == 3 &&
+        viewModel.AccountLicenseSeatsStatus == "AGENT_UNAVAILABLE" &&
+        !viewModel.CanMutateAccountLicenseSeats &&
+        viewModel.AccountLicenseSeatTargets.Count == 0 &&
+        viewModel.AccountLicenseSeatsMessage.Contains(
+            "refresh",
+            StringComparison.OrdinalIgnoreCase),
+        "Launcher ambiguous seat mutation did not lock replay when authoritative refresh failed.");
+
+    await viewModel.RefreshAccountLicenseSeatsAsync(
+        CancellationToken.None);
+
+    Require(
+        agent.LicenseSeatManageCount == 2 &&
+        agent.LicenseSeatReadCount == 4 &&
+        viewModel.AccountLicenseSeatsStatus == "READY" &&
+        viewModel.CanMutateAccountLicenseSeats &&
+        !viewModel.AccountLicenseSeatTargets.Single(
+            target => target.Email == "candidate@example.test").Assigned,
+        "Launcher did not require and complete an authoritative read before re-enabling seat mutation.");
+
+    agent.PurchasesManageLicenseSeats = false;
+    await viewModel.RefreshAccountPurchasesAsync(
+        CancellationToken.None);
+
+    Require(
+        !viewModel.AccountLicenses.Single().CanManageSeats &&
+        !viewModel.ShowAccountLicenseSeatManagement,
+        "Launcher exposed seat-management UX after the authoritative permission/handle was removed.");
 }
 
 static async Task CertifyAccountOrganizationSettingsAsync()
@@ -4417,6 +4694,7 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountMfaController(agent),
         new LauncherAccountPrivacyController(agent),
         new LauncherAccountPurchasesController(agent),
+        new LauncherAccountLicenseSeatsController(agent),
         new LauncherAccountOrganizationController(agent));
 }
 
@@ -4613,6 +4891,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
         "bke-org-member-v1_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
     public const string OrganizationManagedMemberHandle =
         "bke-org-member-v1_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    public const string LicenseSeatHandle =
+        "bke-license-seat-v1_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    public const string LicenseSeatAssignedHandle =
+        "bke-license-seat-user-v1_ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    public const string LicenseSeatCandidateHandle =
+        "bke-license-seat-user-v1_1111111111111111111111111111111111111111111111111111111111111111";
 
     private const string AccountId = "acct-cert-recipient";
     private readonly CustomerJourneyCatalogSource _catalog;
@@ -4631,6 +4915,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public int PrivacyListCount { get; private set; }
     public int PrivacyCreateCount { get; private set; }
     public int PurchasesReadCount { get; private set; }
+    public int LicenseSeatReadCount { get; private set; }
+    public int LicenseSeatManageCount { get; private set; }
     public int OrganizationReadCount { get; private set; }
     public int OrganizationCreateCount { get; private set; }
     public int OrganizationProfileUpdateCount { get; private set; }
@@ -4648,6 +4934,14 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public bool PurchasesViewOrders { get; set; } = true;
     public bool PurchasesViewSubscriptions { get; set; } = true;
     public bool PurchasesViewAllLicenses { get; set; } = true;
+    public bool PurchasesManageLicenseSeats { get; set; } = true;
+    public bool LicenseSeatCandidateAssigned { get; set; }
+    public bool LicenseSeatManageOutcomeUnknown { get; set; }
+    public bool LicenseSeatReadFailsOnce { get; set; }
+    public AccountLicenseSeatsRequest? LastLicenseSeatReadRequest
+        { get; private set; }
+    public AccountLicenseSeatsManageRequest? LastLicenseSeatManageRequest
+        { get; private set; }
     public AccountPurchasesRequest? LastAccountPurchasesRequest
         { get; private set; }
     public string OrganizationDisplayName { get; set; } =
@@ -5223,7 +5517,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                 new AccountPurchasesPermissions(
                     PurchasesViewOrders,
                     PurchasesViewSubscriptions,
-                    PurchasesViewAllLicenses),
+                    PurchasesViewAllLicenses,
+                    PurchasesManageLicenseSeats),
                 new[]
                 {
                     new AccountPurchasesLicense(
@@ -5234,7 +5529,12 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                         "ABCD",
                         "2027-09-30T00:00:00.000Z",
                         4,
-                        1),
+                        1,
+                        2,
+                        1,
+                        PurchasesManageLicenseSeats
+                            ? LicenseSeatHandle
+                            : null),
                 },
                 PurchasesViewSubscriptions
                     ? new[]
@@ -5267,6 +5567,133 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
                             }),
                     }
                     : Array.Empty<AccountPurchasesOrder>(),
+                null));
+    }
+
+    public Task<AccountLicenseSeatsResponse> GetAccountLicenseSeatsAsync(
+        AccountLicenseSeatsRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LicenseSeatReadCount++;
+        LastLicenseSeatReadRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountLicenseSeatsResponse(
+                    AgentLocalContract.AccountLicenseSeatsCapabilityId,
+                    AgentLocalContract.AccountLicenseSeatsContractVersion,
+                    "AUTH_REQUIRED",
+                    null,
+                    Array.Empty<AccountLicenseSeatTarget>(),
+                    new AccountLicenseSeatsError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (LicenseSeatReadFailsOnce)
+        {
+            LicenseSeatReadFailsOnce = false;
+            return Task.FromResult(
+                new AccountLicenseSeatsResponse(
+                    AgentLocalContract.AccountLicenseSeatsCapabilityId,
+                    AgentLocalContract.AccountLicenseSeatsContractVersion,
+                    "FAILED",
+                    null,
+                    Array.Empty<AccountLicenseSeatTarget>(),
+                    new AccountLicenseSeatsError(
+                        "LICENSE_SEATS_UNAVAILABLE",
+                        "Certified temporary seat read failure.",
+                        true)));
+        }
+
+        var assignedSeats =
+            1 + (LicenseSeatCandidateAssigned ? 1 : 0);
+        var availableSeats = Math.Max(
+            0,
+            2 - assignedSeats);
+
+        return Task.FromResult(
+            new AccountLicenseSeatsResponse(
+                AgentLocalContract.AccountLicenseSeatsCapabilityId,
+                AgentLocalContract.AccountLicenseSeatsContractVersion,
+                "READY",
+                new AccountLicenseSeatInfo(
+                    "Render Dock",
+                    "Pro",
+                    "ABCD",
+                    2,
+                    assignedSeats,
+                    availableSeats),
+                new[]
+                {
+                    new AccountLicenseSeatTarget(
+                        "assigned@example.test",
+                        "Assigned Member",
+                        true,
+                        true,
+                        LicenseSeatAssignedHandle),
+                    new AccountLicenseSeatTarget(
+                        "candidate@example.test",
+                        "Candidate Member",
+                        LicenseSeatCandidateAssigned,
+                        true,
+                        LicenseSeatCandidateHandle),
+                },
+                null));
+    }
+
+    public Task<AccountLicenseSeatsManageResponse> ManageAccountLicenseSeatsAsync(
+        AccountLicenseSeatsManageRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LicenseSeatManageCount++;
+        LastLicenseSeatManageRequest = request;
+
+        if (!Authenticated)
+        {
+            return Task.FromResult(
+                new AccountLicenseSeatsManageResponse(
+                    AgentLocalContract.AccountLicenseSeatsCapabilityId,
+                    AgentLocalContract.AccountLicenseSeatsContractVersion,
+                    "AUTH_REQUIRED",
+                    new AccountLicenseSeatsError(
+                        "SESSION_INVALID",
+                        "Sign in again.",
+                        false)));
+        }
+
+        if (request.TargetManagementHandle ==
+                LicenseSeatCandidateHandle)
+        {
+            LicenseSeatCandidateAssigned =
+                request.Action == "ASSIGN";
+        }
+
+        if (LicenseSeatManageOutcomeUnknown)
+        {
+            LicenseSeatManageOutcomeUnknown = false;
+            return Task.FromResult(
+                new AccountLicenseSeatsManageResponse(
+                    AgentLocalContract.AccountLicenseSeatsCapabilityId,
+                    AgentLocalContract.AccountLicenseSeatsContractVersion,
+                    "OUTCOME_UNKNOWN",
+                    new AccountLicenseSeatsError(
+                        "LICENSE_SEAT_MANAGE_OUTCOME_UNKNOWN",
+                        "The seat change could not be confirmed.",
+                        false)));
+        }
+
+        return Task.FromResult(
+            new AccountLicenseSeatsManageResponse(
+                AgentLocalContract.AccountLicenseSeatsCapabilityId,
+                AgentLocalContract.AccountLicenseSeatsContractVersion,
+                request.Action == "ASSIGN"
+                    ? "ASSIGNED"
+                    : "REMOVED",
                 null));
     }
 
