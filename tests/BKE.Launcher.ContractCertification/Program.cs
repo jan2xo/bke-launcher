@@ -3284,6 +3284,45 @@ Require(
     !mainWindowMarkup.Contains(
         "ExternalId",
         StringComparison.OrdinalIgnoreCase),
+Require(
+    mainWindowMarkup.Contains(
+        "Text=\"Gift Claim Codes\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"Refresh Gift Claim Codes\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"Reveal Claim Code\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "GiftClaimRecentPassword",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "GiftClaimMfaCode",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Content=\"I've saved this Claim Code\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "RefreshPersistentGiftClaims",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "RevealPersistentGiftClaim",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "StartPersistentGiftClaimRecentAuth",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "CompletePersistentGiftClaimRecentAuth",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "ClaimCodeId",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "OrderId",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher persistent Gift Claim Code UX/recent-auth/identifier boundary drifted.");
+
     "Launcher billing history UX/identifier boundary drifted.");
 
 Require(
