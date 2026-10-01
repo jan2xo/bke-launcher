@@ -885,7 +885,7 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "faf88ad65c1c8a2d792fa0f30922d1461b0600b1",
+        "b5045510cfa4adfc48af43ce9a50023744c01644",
     "Launcher is not pinned to the merged Agent authorized-device authority.");
 
 Require(
