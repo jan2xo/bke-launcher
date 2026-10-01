@@ -38,14 +38,14 @@ jobs:
           test "$TAG" != "$GITHUB_REF_NAME"
           test -f "$REQUEST_PATH"
 
-          test "$(jq -r '.schema' "$REQUEST_PATH")" = "bke.preproduction-release-request.v1"
+          test "$(jq -r '.schema' "$REQUEST_PATH")" = "bke.preproduction-release-request.v2"
           test "$(jq -r '.status' "$REQUEST_PATH")" = "PREPRODUCTION"
           test "$(jq -r '.production_ready' "$REQUEST_PATH")" = "false"
           test "$(jq -r '.tag' "$REQUEST_PATH")" = "$TAG"
           [[ "$TAG" =~ ^bke-v[0-9A-Za-z.+-]+-preproduction\.[0-9A-Za-z.+-]+$ ]]
 
           SOURCE_SHA="$(jq -r '.source_sha' "$REQUEST_PATH")"
-          AGENT_SOURCE_SHA="$(jq -r '.agent_source_sha' "$REQUEST_PATH")"
+          AGENT_SOURCE_SHA="$(jq -r '.agent_source_sha' "$REQUEST_PATH")"\n          MERGED_SHA="$(jq -r '.merged_sha' "$REQUEST_PATH")"
           RUN_ID="$(jq -r '.certification_run_id' "$REQUEST_PATH")"
           ARTIFACT_NAME="$(jq -r '.certification_artifact_name' "$REQUEST_PATH")"
           INSTALLER_FILE="$(jq -r '.installer.file' "$REQUEST_PATH")"
@@ -53,7 +53,7 @@ jobs:
           EXPECTED_BYTES="$(jq -r '.installer.bytes' "$REQUEST_PATH")"
 
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$AGENT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AGENT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]\n          [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$RUN_ID" =~ ^[0-9]+$ ]]
           test "$ARTIFACT_NAME" = "BKE-Windows-Parent-Installer-PREPRODUCTION"
           [[ "$INSTALLER_FILE" =~ ^BKE-[^/]+-PREPRODUCTION-Windows\.exe$ ]]
@@ -68,7 +68,7 @@ jobs:
           {
             echo "tag=$TAG"
             echo "source_sha=$SOURCE_SHA"
-            echo "agent_source_sha=$AGENT_SOURCE_SHA"
+            echo "agent_source_sha=$AGENT_SOURCE_SHA"\n            echo "merged_sha=$MERGED_SHA"
             echo "run_id=$RUN_ID"
             echo "artifact_name=$ARTIFACT_NAME"
             echo "installer_file=$INSTALLER_FILE"
