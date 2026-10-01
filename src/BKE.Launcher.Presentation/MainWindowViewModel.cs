@@ -33,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountPrivacyController _accountPrivacy;
     private readonly LauncherAccountPurchasesController _accountPurchases;
     private readonly LauncherAccountLicenseSeatsController _accountLicenseSeats;
+    private readonly LauncherAccountLicenseDevicesController _accountLicenseDevices;
     private readonly LauncherAccountOrganizationController _accountOrganization;
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
@@ -96,6 +97,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _accountLicenseSeatsMessage =
         "Choose a manageable license to load its authoritative seat assignments.";
     private bool _accountLicenseSeatMutationLocked;
+    private AccountLicenseViewModel? _selectedAccountLicenseForDevices;
+    private AccountLicenseDeviceInfo? _accountLicenseDeviceInfo;
+    private string _accountLicenseDevicesStatus = "IDLE";
+    private string _accountLicenseDevicesMessage =
+        "Choose a manageable license to load its authorized devices.";
+    private bool _accountLicenseDeviceMutationLocked;
     private string _accountOrganizationStatus = "UNKNOWN";
     private string _accountOrganizationMessage =
         "Refresh organization details to load the Agent-authoritative selected-account overview.";
@@ -194,6 +201,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountPrivacyController accountPrivacy,
         LauncherAccountPurchasesController accountPurchases,
         LauncherAccountLicenseSeatsController accountLicenseSeats,
+        LauncherAccountLicenseDevicesController accountLicenseDevices,
         LauncherAccountOrganizationController accountOrganization)
     {
         _accountSession = accountSession;
@@ -220,6 +228,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountPrivacy = accountPrivacy;
         _accountPurchases = accountPurchases;
         _accountLicenseSeats = accountLicenseSeats;
+        _accountLicenseDevices = accountLicenseDevices;
         _accountOrganization = accountOrganization;
         RestoreCheckoutRecoveryState();
     }
@@ -233,6 +242,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
     public ObservableCollection<AccountLicenseViewModel> AccountLicenses { get; } = [];
     public ObservableCollection<AccountLicenseSeatTargetViewModel> AccountLicenseSeatTargets { get; } = [];
+    public ObservableCollection<AccountAuthorizedDeviceViewModel> AccountAuthorizedDevices { get; } = [];
     public ObservableCollection<AccountSubscriptionViewModel> AccountSubscriptions { get; } = [];
     public ObservableCollection<AccountOrderViewModel> AccountOrders { get; } = [];
     public ObservableCollection<AccountOrganizationMember> OrganizationMembers { get; } = [];
@@ -653,7 +663,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool CanRefreshAccountPurchases =>
         IsAuthenticated &&
         AccountPurchasesStatus != "LOADING" &&
-        AccountLicenseSeatsStatus != "CHANGING";
+        AccountLicenseSeatsStatus != "CHANGING" &&
+        AccountLicenseDevicesStatus != "CHANGING";
 
     public bool AccountPurchasesReady =>
         AccountPurchasesStatus == "READY" &&
@@ -735,16 +746,66 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool CanRefreshAccountLicenseSeats =>
         IsAuthenticated &&
         ShowAccountLicenseSeatManagement &&
-        AccountLicenseSeatsStatus is not ("LOADING" or "CHANGING");
+        AccountLicenseSeatsStatus is not ("LOADING" or "CHANGING") &&
+        AccountLicenseDevicesStatus != "CHANGING";
 
     public bool CanMutateAccountLicenseSeats =>
         IsAuthenticated &&
         AccountLicenseSeatsReady &&
-        !_accountLicenseSeatMutationLocked;
+        !_accountLicenseSeatMutationLocked &&
+        AccountLicenseDevicesStatus != "CHANGING";
 
     public bool ShowEmptyAccountLicenseSeatTargets =>
         AccountLicenseSeatsReady &&
         AccountLicenseSeatTargets.Count == 0;
+
+    public string AccountLicenseDevicesStatus
+    {
+        get => _accountLicenseDevicesStatus;
+        private set
+        {
+            SetField(ref _accountLicenseDevicesStatus, value);
+            RaiseAccountLicenseDevicesCapabilities();
+        }
+    }
+
+    public string AccountLicenseDevicesMessage
+    {
+        get => _accountLicenseDevicesMessage;
+        private set => SetField(ref _accountLicenseDevicesMessage, value);
+    }
+
+    public bool ShowAccountLicenseDeviceManagement =>
+        _selectedAccountLicenseForDevices is not null;
+
+    public bool AccountLicenseDevicesReady =>
+        AccountLicenseDevicesStatus == "READY" &&
+        _accountLicenseDeviceInfo is not null;
+
+    public string AccountLicenseDeviceProductLabel =>
+        _selectedAccountLicenseForDevices?.ProductLabel ??
+        string.Empty;
+
+    public string AccountLicenseDeviceSummary =>
+        _accountLicenseDeviceInfo is null
+            ? string.Empty
+            : $"{_accountLicenseDeviceInfo.ActiveDevices} of {_accountLicenseDeviceInfo.MaxDevices} device slots active";
+
+    public bool CanRefreshAccountLicenseDevices =>
+        IsAuthenticated &&
+        ShowAccountLicenseDeviceManagement &&
+        AccountLicenseDevicesStatus is not ("LOADING" or "CHANGING") &&
+        AccountLicenseSeatsStatus != "CHANGING";
+
+    public bool CanMutateAccountLicenseDevices =>
+        IsAuthenticated &&
+        AccountLicenseDevicesReady &&
+        !_accountLicenseDeviceMutationLocked &&
+        AccountLicenseSeatsStatus != "CHANGING";
+
+    public bool ShowEmptyAccountAuthorizedDevices =>
+        AccountLicenseDevicesReady &&
+        AccountAuthorizedDevices.Count == 0;
 
     public string AccountOrganizationStatus
     {
@@ -4728,6 +4789,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
 
             ResetAccountLicenseSeatsState();
+            ResetAccountLicenseDevicesState();
             AccountLicenses.Clear();
             AccountSubscriptions.Clear();
             AccountOrders.Clear();
@@ -4973,6 +5035,191 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RaiseAccountLicenseSeatsCapabilities();
 
             await RefreshAccountLicenseSeatsAsync(
+                cancellationToken);
+        }
+    }
+
+    public async Task OpenAccountLicenseDevicesAsync(
+        AccountLicenseViewModel license,
+        CancellationToken cancellationToken)
+    {
+        if (!license.CanManageDevices ||
+            string.IsNullOrWhiteSpace(
+                license.DeviceManagementHandle))
+        {
+            ResetAccountLicenseDevicesState();
+            AccountLicenseDevicesStatus = "NOT_AVAILABLE";
+            AccountLicenseDevicesMessage =
+                "Authorized-device management is not available for this license and selected BKE account role.";
+            return;
+        }
+
+        _selectedAccountLicenseForDevices = license;
+        _accountLicenseDeviceInfo = null;
+        AccountAuthorizedDevices.Clear();
+        _accountLicenseDeviceMutationLocked = false;
+        RaiseAccountLicenseDevicesCapabilities();
+
+        await RefreshAccountLicenseDevicesAsync(
+            cancellationToken);
+    }
+
+    public async Task RefreshAccountLicenseDevicesAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticated)
+        {
+            ResetAccountLicenseDevicesState();
+            AccountLicenseDevicesStatus = "AUTH_REQUIRED";
+            AccountLicenseDevicesMessage =
+                "Sign in with BKE before managing authorized devices.";
+            return;
+        }
+
+        var license = _selectedAccountLicenseForDevices;
+        if (license is null ||
+            string.IsNullOrWhiteSpace(
+                license.DeviceManagementHandle))
+        {
+            ResetAccountLicenseDevicesState();
+            return;
+        }
+
+        var recoveringMutation =
+            _accountLicenseDeviceMutationLocked;
+        AccountLicenseDevicesStatus = "LOADING";
+        AccountLicenseDevicesMessage = recoveringMutation
+            ? "Refreshing authoritative device state before another deactivation is allowed…"
+            : "Loading authorized devices through the BKE Licensing Agent…";
+
+        try
+        {
+            var response = await _accountLicenseDevices.GetAsync(
+                license.DeviceManagementHandle,
+                cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            _accountLicenseDeviceInfo = null;
+            AccountAuthorizedDevices.Clear();
+
+            if (response.Status != "READY" ||
+                response.License is null)
+            {
+                AccountLicenseDevicesStatus = response.Status;
+                AccountLicenseDevicesMessage =
+                    response.Error?.Message ??
+                    "BKE authorized-device state is temporarily unavailable.";
+                RaiseAccountLicenseDevicesCapabilities();
+                return;
+            }
+
+            _accountLicenseDeviceInfo = response.License;
+
+            foreach (var device in response.Devices)
+            {
+                AccountAuthorizedDevices.Add(
+                    AccountAuthorizedDeviceViewModel.From(device));
+            }
+
+            _accountLicenseDeviceMutationLocked = false;
+            AccountLicenseDevicesStatus = "READY";
+            AccountLicenseDevicesMessage = recoveringMutation
+                ? "Authoritative device state refreshed. Another deactivation may now be made."
+                : "Authorized devices loaded from BKE Digital Solutions.";
+            RaiseAccountLicenseDevicesCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            _accountLicenseDeviceInfo = null;
+            AccountAuthorizedDevices.Clear();
+            AccountLicenseDevicesStatus = "AGENT_UNAVAILABLE";
+            AccountLicenseDevicesMessage = recoveringMutation
+                ? "The previous device deactivation could not be confirmed and the authoritative refresh also failed. Use Refresh devices before attempting another deactivation."
+                : "Authorized-device state is unavailable or the Licensing Agent returned an invalid response.";
+            RaiseAccountLicenseDevicesCapabilities();
+        }
+    }
+
+    public async Task DeactivateAccountLicenseDeviceAsync(
+        AccountAuthorizedDeviceViewModel device,
+        CancellationToken cancellationToken)
+    {
+        var license = _selectedAccountLicenseForDevices;
+        if (!CanMutateAccountLicenseDevices ||
+            license is null ||
+            string.IsNullOrWhiteSpace(
+                license.DeviceManagementHandle) ||
+            !AccountAuthorizedDevices.Contains(device) ||
+            !device.CanDeactivate ||
+            string.IsNullOrWhiteSpace(device.ManagementHandle))
+        {
+            return;
+        }
+
+        _accountLicenseDeviceMutationLocked = true;
+        AccountLicenseDevicesStatus = "CHANGING";
+        AccountLicenseDevicesMessage =
+            $"Deactivating {device.DisplayLabel}…";
+        RaiseAccountLicenseDevicesCapabilities();
+
+        try
+        {
+            var response =
+                await _accountLicenseDevices.DeactivateAsync(
+                    license.DeviceManagementHandle,
+                    device.ManagementHandle,
+                    cancellationToken);
+
+            if (response.Status == "AUTH_REQUIRED")
+            {
+                EnterAccountPurchasesReauthentication(
+                    "Your BKE account session is no longer valid. Sign in again.");
+                return;
+            }
+
+            if (response.Status is
+                "DEACTIVATED" or
+                "OUTCOME_UNKNOWN")
+            {
+                AccountLicenseDevicesMessage =
+                    response.Status == "OUTCOME_UNKNOWN"
+                        ? "The device deactivation outcome could not be confirmed. BKE will not replay it; refreshing authoritative state now."
+                        : "Device deactivation accepted. Refreshing authoritative state before another deactivation is allowed.";
+
+                await RefreshAccountLicenseDevicesAsync(
+                    cancellationToken);
+                return;
+            }
+
+            _accountLicenseDeviceMutationLocked = false;
+            AccountLicenseDevicesStatus = response.Status;
+            AccountLicenseDevicesMessage =
+                response.Error?.Message ??
+                "The authorized device was not changed.";
+            RaiseAccountLicenseDevicesCapabilities();
+        }
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            InvalidDataException)
+        {
+            // The local Agent may have received the deactivation even when
+            // Launcher did not receive a valid response. Never replay it.
+            AccountLicenseDevicesStatus = "OUTCOME_UNKNOWN";
+            AccountLicenseDevicesMessage =
+                "The device deactivation outcome could not be confirmed. BKE will not replay it; refreshing authoritative state now.";
+            RaiseAccountLicenseDevicesCapabilities();
+
+            await RefreshAccountLicenseDevicesAsync(
                 cancellationToken);
         }
     }
@@ -5766,6 +6013,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void ResetAccountPurchasesState()
     {
         ResetAccountLicenseSeatsState();
+        ResetAccountLicenseDevicesState();
         _accountPurchasesAccount = null;
         _accountPurchasesPermissions = null;
         AccountLicenses.Clear();
@@ -5782,6 +6030,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string message)
     {
         ResetAccountLicenseSeatsState();
+        ResetAccountLicenseDevicesState();
         _accountPurchasesAccount = null;
         _accountPurchasesPermissions = null;
         AccountLicenses.Clear();
@@ -5814,6 +6063,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(ShowAccountOrdersUnavailable));
         Raise(nameof(ShowEmptyAccountOrders));
         RaiseAccountLicenseSeatsCapabilities();
+        RaiseAccountLicenseDevicesCapabilities();
     }
 
     private void ResetAccountLicenseSeatsState()
@@ -5838,6 +6088,34 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Raise(nameof(CanRefreshAccountLicenseSeats));
         Raise(nameof(CanMutateAccountLicenseSeats));
         Raise(nameof(ShowEmptyAccountLicenseSeatTargets));
+        Raise(nameof(CanRefreshAccountLicenseDevices));
+        Raise(nameof(CanMutateAccountLicenseDevices));
+    }
+
+    private void ResetAccountLicenseDevicesState()
+    {
+        _selectedAccountLicenseForDevices = null;
+        _accountLicenseDeviceInfo = null;
+        _accountLicenseDeviceMutationLocked = false;
+        AccountAuthorizedDevices.Clear();
+        AccountLicenseDevicesStatus = "IDLE";
+        AccountLicenseDevicesMessage =
+            "Choose a manageable license to load its authorized devices.";
+        RaiseAccountLicenseDevicesCapabilities();
+    }
+
+    private void RaiseAccountLicenseDevicesCapabilities()
+    {
+        Raise(nameof(CanRefreshAccountPurchases));
+        Raise(nameof(ShowAccountLicenseDeviceManagement));
+        Raise(nameof(AccountLicenseDevicesReady));
+        Raise(nameof(AccountLicenseDeviceProductLabel));
+        Raise(nameof(AccountLicenseDeviceSummary));
+        Raise(nameof(CanRefreshAccountLicenseDevices));
+        Raise(nameof(CanMutateAccountLicenseDevices));
+        Raise(nameof(ShowEmptyAccountAuthorizedDevices));
+        Raise(nameof(CanRefreshAccountLicenseSeats));
+        Raise(nameof(CanMutateAccountLicenseSeats));
     }
 
     private void ResetAccountPrivacyState()
@@ -6207,10 +6485,14 @@ public sealed record AccountLicenseViewModel(
     string DeviceLabel,
     string SeatLabel,
     string ExpiryLabel,
-    string? SeatManagementHandle)
+    string? SeatManagementHandle,
+    string? DeviceManagementHandle)
 {
     public bool CanManageSeats =>
         !string.IsNullOrWhiteSpace(SeatManagementHandle);
+
+    public bool CanManageDevices =>
+        !string.IsNullOrWhiteSpace(DeviceManagementHandle);
 
     public static AccountLicenseViewModel From(
         AccountPurchasesLicense item) =>
@@ -6226,7 +6508,8 @@ public sealed record AccountLicenseViewModel(
             string.IsNullOrWhiteSpace(item.ExpiresAt)
                 ? "No expiry returned"
                 : $"Expires {FormatTimestamp(item.ExpiresAt)}",
-            item.SeatManagementHandle);
+            item.SeatManagementHandle,
+            item.DeviceManagementHandle);
 
     private static string ProductLabelFor(
         string product,
@@ -6293,6 +6576,50 @@ public sealed record AccountLicenseSeatTargetViewModel(
             canChange,
             item.ManagementHandle);
     }
+}
+
+public sealed record AccountAuthorizedDeviceViewModel(
+    string DisplayLabel,
+    string PlatformLabel,
+    string ActivityLabel,
+    string ActivatedLabel,
+    string StatusLabel,
+    bool CanDeactivate,
+    string? ManagementHandle)
+{
+    public static AccountAuthorizedDeviceViewModel From(
+        AccountAuthorizedDevice item)
+    {
+        var displayLabel = string.IsNullOrWhiteSpace(item.Label)
+            ? "Authorized device"
+            : item.Label;
+
+        var platformParts = new[]
+        {
+            item.OperatingSystem,
+            item.Architecture,
+        }
+        .Where(value => !string.IsNullOrWhiteSpace(value));
+
+        return new AccountAuthorizedDeviceViewModel(
+            displayLabel,
+            string.Join(" · ", platformParts!),
+            $"Last seen {FormatTimestamp(item.LastSeenAt)}",
+            $"Activated {FormatTimestamp(item.ActivatedAt)}",
+            item.Active
+                ? "Active"
+                : "Inactive",
+            item.Active &&
+                !string.IsNullOrWhiteSpace(item.ManagementHandle),
+            item.ManagementHandle);
+    }
+
+    private static string FormatTimestamp(string value) =>
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed.ToLocalTime().ToString(
+                "g",
+                CultureInfo.CurrentCulture)
+            : value;
 }
 
 public sealed record AccountSubscriptionViewModel(
