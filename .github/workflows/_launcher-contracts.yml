@@ -36,3 +36,5 @@ jobs:
         run: dotnet run --project tests/BKE.Launcher.ContractCertification/BKE.Launcher.ContractCertification.csproj -c Release --no-build
       - name: Certify plugin contract
         run: dotnet run --project tests/BKE.Launcher.PluginCertification/BKE.Launcher.PluginCertification.csproj -c Release --no-build
+      - name: Certify preproduction release publication guard
+        run: python3 eng/certify_preproduction_release.py
