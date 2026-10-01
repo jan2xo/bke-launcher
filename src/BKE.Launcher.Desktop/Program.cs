@@ -4,6 +4,8 @@ namespace BKE.Launcher.Desktop;
 
 internal static class Program
 {
+    internal static bool IsUiSmoke { get; private set; }
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -12,6 +14,10 @@ internal static class Program
         {
             return;
         }
+
+        IsUiSmoke =
+            args.Length == 1 &&
+            string.Equals(args[0], "--ui-smoke", StringComparison.Ordinal);
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
