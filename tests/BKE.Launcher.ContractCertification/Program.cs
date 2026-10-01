@@ -973,6 +973,65 @@ Require(
     "Launcher is not pinned to the merged Agent authority.");
 
 Require(
+    AgentLocalContract.AccountRecentAuthStartPath ==
+        "/v1/account/recent-auth/start" &&
+    AgentLocalContract.AccountRecentAuthCompletePath ==
+        "/v1/account/recent-auth/complete" &&
+    AgentLocalContract.AccountRecentAuthCapabilityId ==
+        "bke.account-recent-auth" &&
+    AgentLocalContract.StoreGiftClaimsPath ==
+        "/v1/store/gift-claim-codes" &&
+    AgentLocalContract.StoreGiftClaimPersistentRevealPath ==
+        "/v1/store/gift-claim-codes/reveal" &&
+    AgentLocalContract.StoreGiftClaimsCapabilityId ==
+        "bke.store-gift-claims" &&
+    AgentLocalContract.StoreGiftClaimPersistentRevealCapabilityId ==
+        "bke.store-gift-claim-persistent-reveal",
+    "Launcher persistent Gift Claim Code capability identity drifted.");
+
+Require(
+    typeof(AccountRecentAuthStartRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId", "CurrentPassword"]) &&
+    typeof(AccountRecentAuthCompleteRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId", "ChallengeToken", "Code"]) &&
+    typeof(StoreGiftClaimsRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId"]) &&
+    typeof(StoreGiftClaimPersistentRevealRequest)
+        .GetProperties()
+        .Select(property => property.Name)
+        .SequenceEqual(["CorrelationId", "GiftClaimHandle"]),
+    "Launcher widened the persistent Gift Claim Code/recent-auth request boundary.");
+
+var persistentGiftControllerSource = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Application",
+        "LauncherPersistentGiftClaimsController.cs"));
+Require(
+    !persistentGiftControllerSource.Contains(
+        "/api/agent-sessions/",
+        StringComparison.OrdinalIgnoreCase) &&
+    !persistentGiftControllerSource.Contains(
+        "File.",
+        StringComparison.Ordinal) &&
+    !persistentGiftControllerSource.Contains(
+        "account_id",
+        StringComparison.OrdinalIgnoreCase) &&
+    !persistentGiftControllerSource.Contains(
+        "claim_code_id",
+        StringComparison.OrdinalIgnoreCase) &&
+    !persistentGiftControllerSource.Contains(
+        "order_id",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher persistent Gift Claim Code controller bypassed Agent or widened cloud authority.");
+
+Require(
     AgentLocalContract.AccountOrganizationOverviewPath ==
         "/v1/account/organization" &&
     AgentLocalContract.AccountOrganizationCreatePath ==
