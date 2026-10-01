@@ -43,7 +43,7 @@ using (var releaseRequest = JsonDocument.Parse(
 
     Require(
         root.GetProperty("schema").GetString() ==
-            "bke.preproduction-release-request.v1" &&
+            "bke.preproduction-release-request.v2" &&
         root.GetProperty("status").GetString() == "PREPRODUCTION" &&
         root.GetProperty("production_ready").GetBoolean() == false,
         "BKE preproduction release request crossed the production boundary.");
@@ -84,7 +84,7 @@ foreach (var requiredMarker in new[]
     "eng/preproduction-parent-release.json",
     "gh run download",
     "bke.parent-package-boundary.v2",
-    "git merge-base --is-ancestor",
+    "git merge-base --is-ancestor",\n    "git rev-parse \"$SOURCE_SHA^{tree}\"",\n    "git rev-parse \"$MERGED_SHA^{tree}\"",
     "gh release create",
     "--prerelease",
     "gh release download",
