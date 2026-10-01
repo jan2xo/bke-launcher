@@ -2394,6 +2394,57 @@ Require(!nativeSignInSource.Contains(
     "await RefreshNotificationsAsync(cancellationToken);",
     StringComparison.Ordinal),
     "Launcher native sign-in still auto-opens/loads Notifications.");
+Require(nativeSignInSource.Contains(
+    "PrepareAuthenticatedShellSurface();",
+    StringComparison.Ordinal),
+    "Launcher native sign-in does not converge stale pre-auth module presentation into the authenticated shell.");
+Require(
+    normalizedViewModelSource.Contains(
+        "private void PrepareAuthenticatedShellSurface()",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "Open My Software to load software for this BKE account.",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "Open Store to browse software for this BKE account.",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "Open Notifications to load this BKE account inbox.",
+        StringComparison.Ordinal),
+    "Launcher authenticated shell convergence state is incomplete.");
+Require(
+    normalizedViewModelSource.Contains(
+        "ClearCatalog(\n            \"IDLE\"",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "ClearStore(\n            \"IDLE\"",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "ClearNotifications(\n            \"IDLE\"",
+        StringComparison.Ordinal),
+    "Launcher authenticated shell still presents stale AUTH_REQUIRED module states.");
+
+var openModuleStart = normalizedViewModelSource.IndexOf(
+    "public async Task OpenModuleAsync(",
+    StringComparison.Ordinal);
+var openRegistrationStart = normalizedViewModelSource.IndexOf(
+    "public async Task OpenRegistrationAsync(",
+    StringComparison.Ordinal);
+Require(openModuleStart >= 0 && openRegistrationStart > openModuleStart,
+    "Launcher module-open method boundaries are unavailable for lazy-load certification.");
+var openModuleSource = normalizedViewModelSource[
+    openModuleStart..openRegistrationStart];
+Require(
+    openModuleSource.Contains(
+        "await RefreshCatalogAsync(cancellationToken);",
+        StringComparison.Ordinal) &&
+    openModuleSource.Contains(
+        "await RefreshNotificationsAsync(cancellationToken);",
+        StringComparison.Ordinal) &&
+    openModuleSource.Contains(
+        "await RefreshStoreAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "Launcher explicit module navigation no longer loads the selected authoritative module.");
 
 var refreshStatusStart = normalizedViewModelSource.IndexOf(
     "public async Task RefreshStatusAsync(",
