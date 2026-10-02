@@ -285,6 +285,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
+    public SystemTelemetryViewModel Telemetry { get; } = new();
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
@@ -3884,8 +3885,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 case "IN_PROGRESS":
                     CatalogStatus = "INSTALLING";
                     CatalogMessage = response.Status == "STARTED"
-                        ? $"Verified installation started for {previous.DisplayName}. Refresh software after the elevation step completes."
-                        : $"Installation is already in progress for {previous.DisplayName}.";
+                        ? $"Verified installation started for {previous.DisplayName}. BKE is watching the Agent for completion."
+                        : $"Installation is already in progress for {previous.DisplayName}. BKE is watching the Agent for completion.";
+                    await WaitForProductConvergenceAsync(
+                        productId,
+                        "INSTALLING",
+                        product => product.CanOpen && !product.CanInstall,
+                        $"{previous.DisplayName} is installed and ready.",
+                        cancellationToken);
                     break;
 
                 case "ALREADY_INSTALLED":
@@ -3983,8 +3990,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 case "IN_PROGRESS":
                     CatalogStatus = "UPDATING";
                     CatalogMessage = response.Status == "STARTED"
-                        ? $"Verified update started for {previous.DisplayName}. Refresh software after the elevation step completes."
-                        : $"An update is already in progress for {previous.DisplayName}.";
+                        ? $"Verified update started for {previous.DisplayName}. BKE is watching the Agent for completion."
+                        : $"An update is already in progress for {previous.DisplayName}. BKE is watching the Agent for completion.";
+                    await WaitForProductConvergenceAsync(
+                        productId,
+                        "UPDATING",
+                        product => product.CanOpen && !product.CanUpdate,
+                        $"{previous.DisplayName} is up to date and ready.",
+                        cancellationToken);
                     return;
 
                 case "UP_TO_DATE":
@@ -4080,8 +4093,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 case "IN_PROGRESS":
                     CatalogStatus = "REPAIRING";
                     CatalogMessage = response.Status == "STARTED"
-                        ? $"Verified Repair started for {previous.DisplayName}. Refresh software after the elevation step completes."
-                        : $"Repair is already in progress for {previous.DisplayName}.";
+                        ? $"Verified Repair started for {previous.DisplayName}. BKE is watching the Agent for completion."
+                        : $"Repair is already in progress for {previous.DisplayName}. BKE is watching the Agent for completion.";
+                    await WaitForProductConvergenceAsync(
+                        productId,
+                        "REPAIRING",
+                        product =>
+                            product.CanOpen &&
+                            !string.Equals(
+                                product.StateLabel,
+                                "Repair required",
+                                StringComparison.Ordinal),
+                        $"{previous.DisplayName} Repair completed and the product is ready.",
+                        cancellationToken);
                     return;
 
                 case "NOT_INSTALLED":
@@ -4340,6 +4364,66 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CatalogMessage =
                 "The BKE Licensing Agent remove capability is unavailable or invalid.";
         }
+    }
+
+    private async Task WaitForProductConvergenceAsync(
+        string productId,
+        string operationStatus,
+        Func<SoftwareProductViewModel, bool> isComplete,
+        string successMessage,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        const int maxAttempts = 80;
+        var terminalObservations = 0;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(1500),
+                cancellationToken);
+            await RefreshCatalogAsync(cancellationToken);
+
+            if (CatalogStatus is "AUTH_REQUIRED" or "AGENT_UNAVAILABLE")
+            {
+                return;
+            }
+
+            var current = Products.FirstOrDefault(product =>
+                string.Equals(
+                    product.ProductId,
+                    productId,
+                    StringComparison.Ordinal));
+
+            var minimumObservationWindowElapsed =
+                DateTimeOffset.UtcNow - startedAt >= TimeSpan.FromSeconds(5);
+
+            if (current is not null &&
+                minimumObservationWindowElapsed &&
+                isComplete(current))
+            {
+                terminalObservations++;
+                if (terminalObservations >= 2)
+                {
+                    CatalogStatus = "READY";
+                    CatalogMessage = successMessage;
+                    await RefreshStoreAsync(cancellationToken);
+                    return;
+                }
+            }
+            else
+            {
+                terminalObservations = 0;
+            }
+
+            CatalogStatus = operationStatus;
+            CatalogMessage =
+                "BKE is waiting for the Licensing Agent to finish the verified operation…";
+        }
+
+        CatalogStatus = operationStatus;
+        CatalogMessage =
+            "The verified operation is still running. BKE will refresh the authoritative state the next time this Home surface is opened.";
     }
 
     public async Task RefreshAccountMfaAsync(CancellationToken cancellationToken)
@@ -6944,6 +7028,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearNotifications(
             "IDLE",
             "Open Notifications to load this BKE account inbox.");
+        SelectedModuleIndex = 0;
     }
 
     private void ResetShellSurface()
