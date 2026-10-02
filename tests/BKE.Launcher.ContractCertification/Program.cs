@@ -2470,13 +2470,13 @@ Require(
     "Launcher BKE Signal GPU telemetry dependency is not pinned.");
 Require(
     mainWindowMarkup.Contains(
-        "Content=\"Dashboard\"",
+        "Text=\"Dashboard\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Click=\"OpenDashboard\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Content=\"Library\"",
+        "Text=\"Library\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Click=\"OpenLibrary\"",
