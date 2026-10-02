@@ -96,6 +96,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Verify bundled plugin provenance
+        shell: bash
+        run: bash eng/verify-bundled-plugins.sh
 
       - name: Checkout pinned Licensing Agent
         uses: actions/checkout@v4
