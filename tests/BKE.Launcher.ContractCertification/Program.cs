@@ -2509,6 +2509,57 @@ Require(
         StringComparison.Ordinal),
     "Launcher does not own its Obsidian Core window chrome.");
 Require(
+    mainWindowMarkup.Contains(
+        "Width=\"1024\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Height=\"680\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "MinWidth=\"760\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "MinHeight=\"540\"",
+        StringComparison.Ordinal),
+    "Launcher no longer opens as the compact resizable BKE desktop surface.");
+Require(
+    mainWindowMarkup.Contains(
+        "Width=\"{Binding SidebarWidth}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"ToggleSidebar\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding IsSidebarExpanded}\"",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "public double SidebarWidth",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "? 208\n            : 68;",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "args.NewSize.Width < 900",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ViewModel.CollapseSidebar();",
+        StringComparison.Ordinal),
+    "Launcher compact sidebar no longer supports hamburger collapse and narrow-window adaptation.");
+Require(
+    mainWindowMarkup.Contains(
+        "Text=\"Notifications\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding AccountInitials}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"Connected\"",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "public string AccountInitials",
+        StringComparison.Ordinal),
+    "Launcher sidebar lost bottom Notifications / Account / Connected identity treatment.");
+Require(
     !mainWindowMarkup.Contains(
         "Text=\"BKE SIGNAL\"",
         StringComparison.Ordinal) &&
@@ -2629,8 +2680,11 @@ Require(
         StringComparison.Ordinal) &&
     !dashboardSurface.Contains(
         "Click=\"RemoveProduct\"",
+        StringComparison.Ordinal) &&
+    dashboardSurface.Contains(
+        "Click=\"OpenDashboardProduct\"",
         StringComparison.Ordinal),
-    "Launcher Dashboard software shelf is no longer minimal.");
+    "Launcher Dashboard software shelf is no longer minimal/clickable.");
 Require(
     librarySurface.Contains(
         "Click=\"InstallProduct\"",
