@@ -241,6 +241,15 @@ static void CertifyDuplicateRegistrationFailsClosed()
     }
 }
 
+static void Require(bool condition, string message)
+{
+    if (!condition)
+    {
+        throw new InvalidOperationException(message);
+    }
+}
+
+
 sealed class FakeAuthorizationPort(
     List<string> events,
     LauncherPluginAuthorizationDecision? decision = null)
@@ -316,10 +325,3 @@ sealed class TestPlugin(
     }
 }
 
-static void Require(bool condition, string message)
-{
-    if (!condition)
-    {
-        throw new InvalidOperationException(message);
-    }
-}
