@@ -5,10 +5,10 @@
         x:Class="BKE.Launcher.Desktop.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="BKE"
-        Width="1280"
-        Height="820"
-        MinWidth="980"
-        MinHeight="640"
+        Width="1024"
+        Height="680"
+        MinWidth="760"
+        MinHeight="540"
         WindowDecorations="None">
   <Grid>
     <Border Height="12"
@@ -222,100 +222,175 @@
     </Border>
 
     <Grid IsVisible="{Binding ShowAuthenticatedShell}"
-          RowDefinitions="Auto,*"
-          Margin="26,20,26,24">
-      <Grid ColumnDefinitions="Auto,*,Auto"
-            Margin="0,0,0,22">
-        <StackPanel Orientation="Horizontal"
-                    Spacing="12"
-                    VerticalAlignment="Center">
-          <Grid Width="42"
-                Height="42">
-            <Border Margin="5,7,0,0"
-                    Width="37"
-                    Height="37"
-                    Background="#66000000"
-                    CornerRadius="14" />
-            <Border Width="37"
-                    Height="37"
-                    Classes="app-mark"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top">
-              <Grid>
-                <Ellipse Width="16"
-                         Height="16"
-                         Stroke="#5367D9FF"
-                         StrokeThickness="1" />
-                <Border Width="7"
-                        Height="7"
-                        Classes="signal-dot"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center" />
-              </Grid>
-            </Border>
+          ColumnDefinitions="Auto,*"
+          Margin="16,16,16,16">
+      <Border Width="{Binding SidebarWidth}"
+              Classes="sidebar"
+              Padding="10">
+        <Grid RowDefinitions="Auto,*,Auto"
+              RowSpacing="14">
+          <Grid ColumnDefinitions="Auto,*"
+                ColumnSpacing="8">
+            <Button Width="40"
+                    Height="40"
+                    Classes="icon-button"
+                    Click="ToggleSidebar"
+                    ToolTip.Tip="Toggle navigation">
+              <TextBlock Text="≡"
+                         FontSize="20"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center" />
+            </Button>
+            <StackPanel Grid.Column="1"
+                        IsVisible="{Binding IsSidebarExpanded}"
+                        VerticalAlignment="Center"
+                        Spacing="0">
+              <TextBlock Text="BKE"
+                         Classes="brand"
+                         FontSize="21" />
+              <TextBlock Text="OBSIDIAN"
+                         Classes="kicker"
+                         FontSize="7" />
+            </StackPanel>
           </Grid>
-          <TextBlock Text="BKE"
-                     Classes="brand"
-                     VerticalAlignment="Center" />
-        </StackPanel>
 
-        <Border Grid.Column="1"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Background="#B2090B0E"
-                BorderBrush="#20262E"
-                BorderThickness="1"
-                CornerRadius="999"
-                Padding="4">
-          <StackPanel Orientation="Horizontal"
-                      Spacing="2">
-            <Button Content="Dashboard"
-                    Classes="nav"
+          <StackPanel Grid.Row="1"
+                      Spacing="7">
+            <Button Classes="sidebar-nav"
                     Classes.active="{Binding ShowHomeModule}"
-                    Click="OpenDashboard" />
-            <Button Content="Library"
-                    Classes="nav"
+                    Click="OpenDashboard"
+                    ToolTip.Tip="Dashboard">
+              <Grid ColumnDefinitions="32,*"
+                    ColumnSpacing="10">
+                <Border Classes="sidebar-glyph">
+                  <TextBlock Text="◫"
+                             FontSize="16"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Grid.Column="1"
+                           Text="Dashboard"
+                           IsVisible="{Binding IsSidebarExpanded}"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+              </Grid>
+            </Button>
+
+            <Button Classes="sidebar-nav"
                     Classes.active="{Binding ShowLibraryModule}"
-                    Click="OpenLibrary" />
-            <Button Content="Notifications"
-                    Classes="nav"
-                    Classes.active="{Binding ShowNotificationsModule}"
-                    Click="OpenNotifications" />
+                    Click="OpenLibrary"
+                    ToolTip.Tip="Library">
+              <Grid ColumnDefinitions="32,*"
+                    ColumnSpacing="10">
+                <Border Classes="sidebar-glyph">
+                  <TextBlock Text="▦"
+                             FontSize="15"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Grid.Column="1"
+                           Text="Library"
+                           IsVisible="{Binding IsSidebarExpanded}"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+              </Grid>
+            </Button>
+
+            <Button Classes="sidebar-nav"
+                    IsEnabled="False"
+                    ToolTip.Tip="Future feature">
+              <Grid ColumnDefinitions="32,*"
+                    ColumnSpacing="10">
+                <Border Classes="sidebar-glyph">
+                  <TextBlock Text="◇"
+                             FontSize="16"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1"
+                            IsVisible="{Binding IsSidebarExpanded}"
+                            VerticalAlignment="Center"
+                            Spacing="0">
+                  <TextBlock Text="Future"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="Coming later"
+                             Classes="muted"
+                             FontSize="8" />
+                </StackPanel>
+              </Grid>
+            </Button>
           </StackPanel>
-        </Border>
 
-        <StackPanel Grid.Column="2"
-                    Orientation="Horizontal"
-                    Spacing="10"
-                    VerticalAlignment="Center">
-          <Border Classes="status-pill signal"
-                  Padding="11,7">
-            <StackPanel Orientation="Horizontal"
-                        Spacing="7">
-              <Border Width="7"
-                      Height="7"
-                      Classes="signal-dot"
-                      VerticalAlignment="Center" />
-              <TextBlock Text="Connected"
-                         FontSize="10"
-                         FontWeight="SemiBold" />
-            </StackPanel>
-          </Border>
-          <Button Classes="icon-button"
-                  Click="OpenAccount">
-            <StackPanel Orientation="Horizontal"
-                        Spacing="8">
-              <TextBlock Text="Account"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="›"
-                         Foreground="{StaticResource BkeMutedTextBrush}" />
-            </StackPanel>
-          </Button>
-        </StackPanel>
-      </Grid>
+          <StackPanel Grid.Row="2"
+                      Spacing="8">
+            <Border Height="1"
+                    Background="#252B33"
+                    Margin="4,0,4,4" />
 
-      <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="24">
-        <Border Width="380"
+            <Button Classes="sidebar-nav"
+                    Classes.active="{Binding ShowNotificationsModule}"
+                    Click="OpenNotifications"
+                    ToolTip.Tip="Notifications">
+              <Grid ColumnDefinitions="32,*"
+                    ColumnSpacing="10">
+                <Border Classes="sidebar-glyph">
+                  <TextBlock Text="●"
+                             Foreground="{StaticResource BkeSignalBrush}"
+                             FontSize="10"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Grid.Column="1"
+                           Text="Notifications"
+                           IsVisible="{Binding IsSidebarExpanded}"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+              </Grid>
+            </Button>
+
+            <Button Classes="sidebar-nav"
+                    Click="OpenAccount"
+                    ToolTip.Tip="Account">
+              <Grid ColumnDefinitions="38,*"
+                    ColumnSpacing="10">
+                <Border Classes="avatar">
+                  <TextBlock Text="{Binding AccountInitials}"
+                             FontSize="11"
+                             FontWeight="Bold"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1"
+                            IsVisible="{Binding IsSidebarExpanded}"
+                            VerticalAlignment="Center"
+                            Spacing="1">
+                  <TextBlock Text="{Binding AccountDisplay}"
+                             FontSize="11"
+                             FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis"
+                             MaxWidth="125" />
+                  <StackPanel Orientation="Horizontal"
+                              Spacing="5">
+                    <Border Width="6"
+                            Height="6"
+                            Classes="signal-dot"
+                            VerticalAlignment="Center" />
+                    <TextBlock Text="Connected"
+                               Classes="muted"
+                               FontSize="9" />
+                  </StackPanel>
+                </StackPanel>
+              </Grid>
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Column="1"
+            Margin="18,0,0,0">
+
+        <Border MaxWidth="620"
+                HorizontalAlignment="Left"
                 Classes="signal-panel"
                 Padding="22"
                 IsVisible="{Binding ShowAccountSurface}">
@@ -1557,7 +1632,7 @@
           </ScrollViewer>
         </Border>
 
-        <Grid Grid.Column="1">
+        <Grid>
           <Grid>
           <Grid IsVisible="{Binding ShowHomeModule}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -1783,54 +1858,57 @@
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SoftwareProductViewModel">
-                      <Grid Width="170"
-                            Height="142"
-                            Margin="0,0,12,12">
-                        <Border Background="#5A000000"
-                                CornerRadius="22"
-                                Margin="8,10,0,0" />
-                        <Border Classes="app-shelf-card"
-                                Margin="0,0,8,10"
-                                Padding="16">
-                          <StackPanel HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"
-                                      Spacing="12">
-                            <Grid Width="58"
-                                  Height="58">
-                              <Border Background="#4A000000"
-                                      CornerRadius="18"
-                                      Margin="5,7,0,0" />
-                              <Border Width="53"
-                                      Height="53"
-                                      Classes="app-mark"
-                                      HorizontalAlignment="Left"
-                                      VerticalAlignment="Top">
-                                <Grid>
-                                  <Ellipse Width="28"
-                                           Height="28"
-                                           Stroke="#355064"
-                                           StrokeThickness="1" />
-                                  <Ellipse Width="16"
-                                           Height="16"
-                                           Stroke="#4A8177FF"
-                                           StrokeThickness="1" />
-                                  <Border Width="7"
-                                          Height="7"
-                                          Classes="signal-dot"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center" />
-                                </Grid>
-                              </Border>
-                            </Grid>
-                            <TextBlock Text="{Binding DisplayName}"
-                                       FontSize="13"
-                                       FontWeight="SemiBold"
-                                       TextAlignment="Center"
-                                       TextWrapping="Wrap"
-                                       MaxWidth="132" />
-                          </StackPanel>
-                        </Border>
-                      </Grid>
+                      <Button Classes="app-tile"
+                              Margin="0,0,12,12"
+                              Click="OpenDashboardProduct">
+                        <Grid Width="170"
+                              Height="142">
+                          <Border Background="#5A000000"
+                                  CornerRadius="22"
+                                  Margin="8,10,0,0" />
+                          <Border Classes="app-shelf-card"
+                                  Margin="0,0,8,10"
+                                  Padding="16">
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Spacing="12">
+                              <Grid Width="58"
+                                    Height="58">
+                                <Border Background="#4A000000"
+                                        CornerRadius="18"
+                                        Margin="5,7,0,0" />
+                                <Border Width="53"
+                                        Height="53"
+                                        Classes="app-mark"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top">
+                                  <Grid>
+                                    <Ellipse Width="28"
+                                             Height="28"
+                                             Stroke="#355064"
+                                             StrokeThickness="1" />
+                                    <Ellipse Width="16"
+                                             Height="16"
+                                             Stroke="#4A8177FF"
+                                             StrokeThickness="1" />
+                                    <Border Width="7"
+                                            Height="7"
+                                            Classes="signal-dot"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center" />
+                                  </Grid>
+                                </Border>
+                              </Grid>
+                              <TextBlock Text="{Binding DisplayName}"
+                                         FontSize="13"
+                                         FontWeight="SemiBold"
+                                         TextAlignment="Center"
+                                         TextWrapping="Wrap"
+                                         MaxWidth="132" />
+                            </StackPanel>
+                          </Border>
+                        </Grid>
+                      </Button>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
