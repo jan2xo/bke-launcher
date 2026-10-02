@@ -7,6 +7,7 @@ using BKE.Launcher.Application;
 using BKE.Launcher.Infrastructure;
 using BKE.Launcher.Presentation;
 using BKE.Launcher.PluginHost;
+using BKE.Demo.LauncherPlugin;
 
 namespace BKE.Launcher.Desktop;
 
@@ -60,7 +61,10 @@ public sealed partial class App : Avalonia.Application
             var pluginAuthorization =
                 new LauncherPluginAuthorizationController(agentClient);
             var pluginRuntime = new LauncherPluginRuntime(
-                Array.Empty<IBkeLauncherPlugin>(),
+                new IBkeLauncherPlugin[]
+                {
+                    new BkeDemoLauncherPlugin(),
+                },
                 pluginAuthorization);
             var claimCodeRedemption = new LauncherClaimCodeRedemptionController(agentClient);
             var accountPasswordChange = new LauncherAccountPasswordChangeController(agentClient);
