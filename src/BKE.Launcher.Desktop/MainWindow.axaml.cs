@@ -2,18 +2,29 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Threading;
 using BKE.Launcher.Presentation;
 
 namespace BKE.Launcher.Desktop;
 
 public sealed partial class MainWindow : Window
 {
+    private readonly SystemTelemetrySampler _telemetrySampler = new();
+    private readonly DispatcherTimer _telemetryTimer;
     private bool _startupInitialized;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _telemetryTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2),
+        };
+        _telemetryTimer.Tick += TelemetryTick;
+
         Opened += WindowOpened;
+        Closed += WindowClosed;
     }
 
     private MainWindowViewModel ViewModel =>
@@ -29,6 +40,41 @@ public sealed partial class MainWindow : Window
 
         _startupInitialized = true;
         await ViewModel.InitializeAsync(CancellationToken.None);
+        UpdateTelemetry();
+        _telemetryTimer.Start();
+    }
+
+    private void TelemetryTick(object? sender, EventArgs args) =>
+        UpdateTelemetry();
+
+    private void UpdateTelemetry()
+    {
+        if (WindowState == WindowState.Minimized ||
+            DataContext is not MainWindowViewModel viewModel ||
+            !viewModel.ShowAuthenticatedShell)
+        {
+            return;
+        }
+
+        try
+        {
+            viewModel.Telemetry.Apply(_telemetrySampler.Sample());
+        }
+        catch (InvalidOperationException)
+        {
+            // Hardware telemetry is optional. BKE software lifecycle and account
+            // surfaces must remain usable if an OS counter disappears.
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            // Windows performance counters are best-effort presentation data.
+        }
+    }
+
+    private void WindowClosed(object? sender, EventArgs args)
+    {
+        _telemetryTimer.Stop();
+        _telemetrySampler.Dispose();
     }
 
     private async void OpenAccount(object? sender, RoutedEventArgs args)
