@@ -1,0 +1,806 @@
+name: BKE Windows Parent Installer
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact Launcher commit SHA to certify
+        required: true
+        type: string
+      agent_source_sha:
+        description: Exact merged Licensing Agent commit SHA to bundle
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact Launcher commit SHA to certify
+        required: true
+        type: string
+      agent_source_sha:
+        description: Exact merged Licensing Agent commit SHA to bundle
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bke-parent-${{ inputs.source_sha }}
+  cancel-in-progress: true
+
+env:
+  BKE_VERSION: "0.1.0"
+  AGENT_VERSION: "2.0.0"
+  AGENT_SOURCE_SHA: ${{ inputs.agent_source_sha }}
+  AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
+  SOURCE_SHA: ${{ inputs.source_sha }}
+
+jobs:
+  launcher-contracts:
+    name: Launcher contracts
+    uses: ./.github/workflows/_launcher-contracts.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+
+  agent-contracts:
+    name: Pinned Agent contracts
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout pinned Licensing Agent
+        uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: ${{ inputs.agent_source_sha }}
+          path: agent-src
+          fetch-depth: 1
+
+      - name: Verify pinned Licensing Agent commit
+        shell: pwsh
+        run: |
+          $actualAgentSourceSha = (git -C agent-src rev-parse HEAD).Trim()
+          if ($actualAgentSourceSha -ne $env:AGENT_SOURCE_SHA) {
+            throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
+          }
+          Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Certify pinned Licensing Agent source
+        shell: pwsh
+        working-directory: agent-src
+        run: |
+          dotnet build dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent bootstrap build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent runtime build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Desktop/BKE.LicensingAgent.Desktop.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent License Center build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Updater/BKE.LicensingAgent.Updater.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent updater build failed." }
+          dotnet build dotnet/src/BKE.LicensingAgent.Provisioner/BKE.LicensingAgent.Provisioner.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent provisioner build failed." }
+          dotnet run --project dotnet/certification/BKE.LicensingAgent.ContractCertification/BKE.LicensingAgent.ContractCertification.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Agent contract certification failed." }
+
+  parent-package:
+    name: Build immutable parent package
+    needs: [launcher-contracts, agent-contracts]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact BKE Launcher head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Checkout pinned Licensing Agent
+        uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: ${{ inputs.agent_source_sha }}
+          path: agent-src
+          fetch-depth: 1
+
+      - name: Verify pinned Licensing Agent commit
+        shell: pwsh
+        run: |
+          $actualAgentSourceSha = (git -C agent-src rev-parse HEAD).Trim()
+          if ($actualAgentSourceSha -ne $env:AGENT_SOURCE_SHA) {
+            throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
+          }
+          Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Publish BKE Windows x64 payload
+        shell: pwsh
+        run: |
+          dotnet publish src/BKE.Launcher.Desktop/BKE.Launcher.Desktop.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:DebugType=None -p:DebugSymbols=false -p:Version=$env:BKE_VERSION `
+            -o dist/windows-x64
+          if ($LASTEXITCODE -ne 0) { throw "BKE x64 publish failed." }
+
+      - name: Build pinned Agent x64 support payloads
+        shell: pwsh
+        working-directory: agent-src
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish_dotnet_windows_payloads.ps1 -Version $env:AGENT_VERSION -Architecture x64
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 support payload publish failed." }
+
+          dotnet run --project dotnet/tools/BKE.LicensingAgent.ReleaseTooling/BKE.LicensingAgent.ReleaseTooling.csproj --configuration Release -- `
+            generate-disposable-trust `
+            --root dist/windows `
+            --target-key-id bke-parent-preproduction-target `
+            --policy-id bke-parent-preproduction `
+            --update-key-id bke-parent-preproduction-update
+          if ($LASTEXITCODE -ne 0) { throw "Agent disposable trust generation failed." }
+
+          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-service | Out-Null
+          New-Item -ItemType Directory -Force dist/windows/bke-licensing-agent-runtime | Out-Null
+
+          dotnet publish dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj `
+            --configuration Release --runtime win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:Version=$env:AGENT_VERSION `
+            --output dist/windows/bke-licensing-agent-service
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 service publish failed." }
+
+          dotnet publish dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj `
+            --configuration Release --runtime win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:BKEAgentRuntimeBridge=true -p:Version=$env:AGENT_VERSION `
+            --output dist/windows/bke-licensing-agent-runtime
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 runtime publish failed." }
+
+      - name: Compile pinned Agent x64 installer
+        shell: pwsh
+        working-directory: agent-src
+        run: |
+          $iscc = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "Inno Setup 6\ISCC.exe"
+          & $iscc packaging/windows/bke-licensing-agent.iss
+          if ($LASTEXITCODE -ne 0) { throw "Agent x64 installer compile failed." }
+
+      - name: Verify Windows x64 component architecture
+        shell: pwsh
+        run: |
+          function Assert-PeMachine([string]$Path,[int]$Expected) {
+            $bytes=[IO.File]::ReadAllBytes((Resolve-Path $Path))
+            $offset=[BitConverter]::ToInt32($bytes,0x3c)
+            $signature="PE"+[char]0+[char]0
+            if ([Text.Encoding]::ASCII.GetString($bytes,$offset,4) -ne $signature) { throw "invalid PE: $Path" }
+            $machine=[BitConverter]::ToUInt16($bytes,$offset+4)
+            if ($machine -ne $Expected) { throw ("wrong PE machine {0}: 0x{1:X4}" -f $Path,$machine) }
+          }
+          Assert-PeMachine "dist/windows-x64/bke-launcher.exe" 0x8664
+          Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-service/bke-licensing-agent-service.exe" 0x8664
+          Assert-PeMachine "agent-src/dist/windows/bke-licensing-agent-runtime/bke-licensing-agent-runtime.exe" 0x8664
+
+          $parent = Get-Content packaging/windows/bke-parent-x64.iss -Raw
+          foreach ($required in @(
+            'OutputBaseFilename=BKE-{#BkeVersion}-PREPRODUCTION-Windows',
+            'ArchitecturesAllowed=x64compatible',
+            'ArchitecturesInstallIn64BitMode=x64compatible',
+            'Source: "..\..\dist\windows-x64\*"',
+            'BKE-Licensing-Agent-" + AgentVersion + "-Windows-x64.exe'
+          )) {
+            if (-not $parent.Contains($required)) {
+              throw "Windows x64 parent invariant missing: $required"
+            }
+          }
+          if ($parent.Contains('windows-arm64') -or $parent.Contains('Windows-arm64.exe')) {
+            throw "Windows x64 parent contains an ARM64 payload reference."
+          }
+          Write-Host "Windows x64 parent architecture invariants: PASS"
+
+      - name: Build parent component manifest
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/parent | Out-Null
+          $manifest = [ordered]@{
+            schema = "bke.parent-installer-components.v2"
+            status = "PREPRODUCTION"
+            production_ready = $false
+            bke_source_sha = $env:SOURCE_SHA
+            bke_version = $env:BKE_VERSION
+            agent_source_sha = $env:AGENT_SOURCE_SHA
+            agent_version = $env:AGENT_VERSION
+            agent_trust = "DISPOSABLE_PREPRODUCTION"
+            root_uninstall = "CERTIFIED_PREPRODUCTION"
+            customer_download_surface = "BKE_WINDOWS_ONLY"
+            platform = "windows"
+            application_architecture = "x64"
+            hardware_architecture_selection = "NONE"
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content dist/parent/COMPONENT-MANIFEST.json -Encoding utf8
+          Get-Content dist/parent/COMPONENT-MANIFEST.json
+
+      - name: Compile BKE Windows x64 parent installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "Inno Setup 6\ISCC.exe"
+          & $iscc "/DBkeVersion=$env:BKE_VERSION" "/DAgentVersion=$env:AGENT_VERSION" packaging/windows/bke-parent-x64.iss
+          if ($LASTEXITCODE -ne 0) { throw "BKE Windows x64 parent compile failed." }
+
+      - name: Build immutable package-boundary manifest
+        shell: pwsh
+        run: |
+          $installer = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
+          $boundary = [ordered]@{
+            schema = "bke.parent-package-boundary.v2"
+            status = "PREPRODUCTION"
+            production_ready = $false
+            source_sha = $env:SOURCE_SHA
+            agent_source_sha = $env:AGENT_SOURCE_SHA
+            bke_version = $env:BKE_VERSION
+            agent_version = $env:AGENT_VERSION
+            installer = [ordered]@{
+              platform = "windows"
+              application_architecture = "x64"
+              file = $installer.Name
+              sha256 = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              bytes = $installer.Length
+            }
+          }
+          $boundary | ConvertTo-Json -Depth 8 | Set-Content dist/parent/PACKAGE-MANIFEST.json -Encoding utf8
+          Get-Content dist/parent/PACKAGE-MANIFEST.json
+
+      - name: Upload immutable parent package boundary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bke-parent-package
+          path: |
+            dist/installer/BKE-${{ env.BKE_VERSION }}-PREPRODUCTION-Windows.exe
+            dist/parent/COMPONENT-MANIFEST.json
+            dist/parent/PACKAGE-MANIFEST.json
+          if-no-files-found: error
+          retention-days: 2
+
+  defender-scan:
+    name: Defender scan
+    needs: parent-package
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
+
+      - name: Defender scan Windows x64 parent installer
+        shell: pwsh
+        run: |
+          $platformRoot=Join-Path $env:ProgramData "Microsoft\Windows Defender\Platform"
+          $mp=Get-ChildItem $platformRoot -Filter MpCmdRun.exe -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $mp) {
+            $fallback=Join-Path $env:ProgramFiles "Windows Defender\MpCmdRun.exe"
+            if (Test-Path $fallback) { $mp=Get-Item $fallback }
+          }
+          if ($null -eq $mp) { throw "Microsoft Defender unavailable." }
+
+          $path = "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
+          & $mp.FullName -Scan -ScanType 3 -File (Resolve-Path $path).Path -DisableRemediation
+          if ($LASTEXITCODE -ne 0) { throw "Defender failed for $path" }
+          Write-Host "Defender scan PASS: $path"
+
+  fresh-install:
+    name: Fresh install + runtime health
+    needs: parent-package
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
+
+      - name: Fresh-install Windows x64 parent package
+        shell: pwsh
+        run: |
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
+          $log=Join-Path $env:RUNNER_TEMP "bke-parent-install.log"
+          $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log }
+            throw "BKE parent installer failed: $($process.ExitCode)"
+          }
+
+          $bke=Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\bke-launcher.exe"
+          if (!(Test-Path $bke)) { throw "BKE launcher missing after parent install." }
+
+          $smoke=Start-Process -FilePath $bke -ArgumentList "--smoke" -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Installed BKE smoke failed: $($smoke.ExitCode)" }
+
+          $uiSmoke=Start-Process -FilePath $bke -ArgumentList "--ui-smoke" -PassThru
+          if (!$uiSmoke.WaitForExit(15000)) {
+            Stop-Process -Id $uiSmoke.Id -Force -ErrorAction SilentlyContinue
+            throw "Installed BKE Avalonia UI smoke timed out."
+          }
+          if ($uiSmoke.ExitCode -ne 0) {
+            throw "Installed BKE Avalonia UI smoke failed: $($uiSmoke.ExitCode)"
+          }
+          Write-Host "Installed BKE Avalonia UI startup smoke: PASS"
+
+          $service=Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue
+          if ($null -eq $service) { throw "Bundled Licensing Agent service is missing." }
+          $service.WaitForStatus("Running",[TimeSpan]::FromSeconds(30))
+
+          $deadline=(Get-Date).AddSeconds(30)
+          $healthy=$false
+          do {
+            try {
+              $response=Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:43873/license-center?product_id=bke-parent-cert&version=$($env:AGENT_VERSION)&installation_id=github-parent-cert" -TimeoutSec 2
+              if ($response.StatusCode -eq 200) { $healthy=$true; break }
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          } while ((Get-Date) -lt $deadline)
+          if (!$healthy) { throw "Bundled Agent local API did not become healthy." }
+
+          $nativeContextBody = @{ correlation_id = "github-native-context-cert" } | ConvertTo-Json -Compress
+          $nativeContext = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:43873/v1/account-session/device-context" -ContentType "application/json" -Body $nativeContextBody -TimeoutSec 5
+          if ($nativeContext.status -ne "READY") { throw "Bundled Agent native device-context capability is unavailable." }
+          if ([string]::IsNullOrWhiteSpace([string]$nativeContext.device_id)) { throw "Bundled Agent returned empty native device id." }
+          if ([string]$nativeContext.platform -ne "windows") { throw "Bundled Agent native platform context drifted." }
+          if ([string]$nativeContext.architecture -notin @("x64","arm64","x86")) { throw "Bundled Agent native architecture context is invalid." }
+          if ($null -ne $nativeContext.access_token -or $null -ne $nativeContext.refresh_token) { throw "Bundled Agent native device-context leaked cloud tokens." }
+          Write-Host "Bundled Agent native device-context capability: PASS"
+
+          $agentShortcut=Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\BKE Licensing Agent"
+          if (Test-Path $agentShortcut) { throw "Agent customer-facing Start Menu shortcut survived parent installation." }
+
+          $manifest=Get-Content (Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\COMPONENT-MANIFEST.json") -Raw | ConvertFrom-Json
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Installed Agent source pin drifted." }
+          if ($manifest.production_ready -ne $false) { throw "PREPRODUCTION parent installer claims production readiness." }
+          if ($manifest.root_uninstall -ne "CERTIFIED_PREPRODUCTION") { throw "Root uninstall manifest state drifted." }
+
+          $lifecycle = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE\lifecycle\bke-root-uninstall.ps1"
+          if (!(Test-Path $lifecycle)) { throw "BKE root uninstall orchestrator is missing." }
+
+          function Get-InnoUninstallCandidates([string]$DisplayName, [string]$ExpectedRoot) {
+            $registryRoots = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            )
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\') + '\'
+            foreach ($registryRoot in $registryRoots) {
+              if (!(Test-Path -LiteralPath $registryRoot)) { continue }
+              foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
+                $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+                if ($null -eq $entry) { continue }
+                if ([string]$entry.DisplayName -ne $DisplayName -or [string]$entry.Publisher -ne "BKE Digital Solutions") { continue }
+                $command = [string]$entry.UninstallString
+                $uninstaller = $null
+                if ($command -match '^\s*"([^"]+)"') { $uninstaller = $Matches[1] }
+                elseif ($command -match '^\s*(\S+\.exe)(?:\s|$)') { $uninstaller = $Matches[1] }
+                if ([string]::IsNullOrWhiteSpace($uninstaller)) { continue }
+                $fullUninstaller = [IO.Path]::GetFullPath($uninstaller)
+                if (!$fullUninstaller.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ([IO.Path]::GetFileName($fullUninstaller) -notmatch '^unins\d+\.exe$') { continue }
+                [pscustomobject]@{ RegistryPath = $key.PSPath; Uninstaller = $fullUninstaller }
+              }
+            }
+          }
+
+          $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
+          $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
+          $bkeUninstallEntries = @(Get-InnoUninstallCandidates "BKE" $bkeRoot)
+          if ($bkeUninstallEntries.Count -ne 1) { throw "BKE uninstall registration is missing or ambiguous." }
+          $agentUninstallEntries = @(Get-InnoUninstallCandidates "BKE Licensing Agent" $agentRoot)
+          if ($agentUninstallEntries.Count -ne 1) { throw "Agent uninstall registration is missing or ambiguous." }
+
+          Write-Host "BKE Windows x64 parent fresh install: PASS"
+
+  root-uninstall:
+    name: Managed root uninstall
+    needs: [parent-package, fresh-install]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned Licensing Agent
+        uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: ${{ inputs.agent_source_sha }}
+          path: agent-src
+          fetch-depth: 1
+
+      - name: Verify pinned Licensing Agent commit
+        shell: pwsh
+        run: |
+          $actualAgentSourceSha = (git -C agent-src rev-parse HEAD).Trim()
+          if ($actualAgentSourceSha -ne $env:AGENT_SOURCE_SHA) {
+            throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
+          }
+          Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
+
+      - name: Install Windows x64 parent prerequisite for root-uninstall certification
+        shell: pwsh
+        run: |
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
+          $log=Join-Path $env:RUNNER_TEMP "bke-parent-root-uninstall-install.log"
+          $process=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log }
+            throw "BKE parent prerequisite install failed: $($process.ExitCode)"
+          }
+          $service=Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue
+          if ($null -eq $service) { throw "Bundled Licensing Agent service is missing." }
+          $service.WaitForStatus("Running",[TimeSpan]::FromSeconds(30))
+
+      - name: Certify full BKE root uninstall
+        shell: pwsh
+        run: |
+          function Get-InnoUninstallCandidates([string]$DisplayName, [string]$ExpectedRoot) {
+            $registryRoots = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            )
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\') + '\'
+            foreach ($registryRoot in $registryRoots) {
+              if (!(Test-Path -LiteralPath $registryRoot)) { continue }
+              foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
+                $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+                if ($null -eq $entry) { continue }
+                if ([string]$entry.DisplayName -ne $DisplayName -or [string]$entry.Publisher -ne "BKE Digital Solutions") { continue }
+                $command = [string]$entry.UninstallString
+                $uninstaller = $null
+                if ($command -match '^\s*"([^"]+)"') { $uninstaller = $Matches[1] }
+                elseif ($command -match '^\s*(\S+\.exe)(?:\s|$)') { $uninstaller = $Matches[1] }
+                if ([string]::IsNullOrWhiteSpace($uninstaller)) { continue }
+                $fullUninstaller = [IO.Path]::GetFullPath($uninstaller)
+                if (!$fullUninstaller.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ([IO.Path]::GetFileName($fullUninstaller) -notmatch '^unins\d+\.exe$') { continue }
+                [pscustomobject]@{ RegistryPath = $key.PSPath; Uninstaller = $fullUninstaller }
+              }
+            }
+          }
+
+          function Resolve-InnoUninstaller([string]$DisplayName, [string]$ExpectedRoot) {
+            $entries = @(Get-InnoUninstallCandidates $DisplayName $ExpectedRoot)
+            if ($entries.Count -ne 1) { throw "Expected exactly one trusted uninstall entry for $DisplayName." }
+            $uninstaller = [string]$entries[0].Uninstaller
+            if (!(Test-Path -LiteralPath $uninstaller -PathType Leaf)) { throw "Registered uninstaller is missing for $DisplayName." }
+            return $uninstaller
+          }
+
+          $sentinelRoot = Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data"
+          $sentinel = Join-Path $sentinelRoot "sentinel.txt"
+          New-Item -ItemType Directory -Force $sentinelRoot | Out-Null
+          "preserve-me" | Set-Content $sentinel -Encoding utf8
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --seed-managed-product
+          if ($LASTEXITCODE -ne 0) { throw "Managed product fixture seeding failed." }
+
+          $managedRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Certification Product"
+          if (!(Test-Path $managedRoot)) { throw "Managed product fixture was not created." }
+
+          $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
+          $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
+          $agentData = Join-Path $env:ProgramData "BKE Digital Solutions\Licensing Agent"
+          $bkeUninstaller = Resolve-InnoUninstaller "BKE" $bkeRoot
+
+          $process = Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "BKE root uninstall failed: $($process.ExitCode)" }
+
+          if (Test-Path $managedRoot) { throw "Managed product survived BKE root uninstall." }
+          if (Test-Path $agentRoot) { throw "Licensing Agent install root survived BKE root uninstall." }
+          if (Test-Path $bkeRoot) { throw "BKE install root survived BKE root uninstall." }
+          if ($null -ne (Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue)) {
+            throw "Licensing Agent service survived BKE root uninstall."
+          }
+          if (!(Test-Path $sentinel)) { throw "Unrelated user-data sentinel was removed." }
+          if (!(Test-Path $agentData)) { throw "Agent ProgramData was silently purged." }
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --assert-product-absent bke-certification-product
+          if ($LASTEXITCODE -ne 0) { throw "Managed product inventory row survived BKE root uninstall." }
+
+          $remainingBkeRegistration = @(Get-InnoUninstallCandidates "BKE" $bkeRoot)
+          if ($remainingBkeRegistration.Count -ne 0) { throw "BKE uninstall registration survived root uninstall." }
+          $remainingAgentRegistration = @(Get-InnoUninstallCandidates "BKE Licensing Agent" $agentRoot)
+          if ($remainingAgentRegistration.Count -ne 0) { throw "Agent uninstall registration survived root uninstall." }
+
+          Write-Host "BKE full root uninstall certification: PASS"
+
+  fail-closed-uninstall:
+    name: Fail-closed unknown provenance
+    needs: [parent-package, fresh-install]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned Licensing Agent
+        uses: actions/checkout@v4
+        with:
+          repository: jan2xo/bke-licensing-agent
+          ref: ${{ inputs.agent_source_sha }}
+          path: agent-src
+          fetch-depth: 1
+
+      - name: Verify pinned Licensing Agent commit
+        shell: pwsh
+        run: |
+          $actualAgentSourceSha = (git -C agent-src rev-parse HEAD).Trim()
+          if ($actualAgentSourceSha -ne $env:AGENT_SOURCE_SHA) {
+            throw "Pinned Licensing Agent checkout drifted: expected $env:AGENT_SOURCE_SHA, got $actualAgentSourceSha"
+          }
+          Write-Host "Pinned Licensing Agent checkout: $actualAgentSourceSha"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
+
+      - name: Certify fail-closed BKE root uninstall
+        shell: pwsh
+        run: |
+          function Get-InnoUninstallCandidates([string]$DisplayName, [string]$ExpectedRoot) {
+            $registryRoots = @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            )
+            $fullRoot = [IO.Path]::GetFullPath($ExpectedRoot).TrimEnd('\') + '\'
+            foreach ($registryRoot in $registryRoots) {
+              if (!(Test-Path -LiteralPath $registryRoot)) { continue }
+              foreach ($key in Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue) {
+                $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+                if ($null -eq $entry) { continue }
+                if ([string]$entry.DisplayName -ne $DisplayName -or [string]$entry.Publisher -ne "BKE Digital Solutions") { continue }
+                $command = [string]$entry.UninstallString
+                $uninstaller = $null
+                if ($command -match '^\s*"([^"]+)"') { $uninstaller = $Matches[1] }
+                elseif ($command -match '^\s*(\S+\.exe)(?:\s|$)') { $uninstaller = $Matches[1] }
+                if ([string]::IsNullOrWhiteSpace($uninstaller)) { continue }
+                $fullUninstaller = [IO.Path]::GetFullPath($uninstaller)
+                if (!$fullUninstaller.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ([IO.Path]::GetFileName($fullUninstaller) -notmatch '^unins\d+\.exe$') { continue }
+                [pscustomobject]@{ RegistryPath = $key.PSPath; Uninstaller = $fullUninstaller }
+              }
+            }
+          }
+
+          function Resolve-InnoUninstaller([string]$DisplayName, [string]$ExpectedRoot) {
+            $entries = @(Get-InnoUninstallCandidates $DisplayName $ExpectedRoot)
+            if ($entries.Count -ne 1) { throw "Expected exactly one trusted uninstall entry for $DisplayName." }
+            $uninstaller = [string]$entries[0].Uninstaller
+            if (!(Test-Path -LiteralPath $uninstaller -PathType Leaf)) { throw "Registered uninstaller is missing for $DisplayName." }
+            return $uninstaller
+          }
+
+          $installer=(Resolve-Path "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe").Path
+          $log=Join-Path $env:RUNNER_TEMP "bke-parent-reinstall.log"
+          $install=Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=$log") -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log }
+            throw "BKE parent reinstall failed: $($install.ExitCode)"
+          }
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --seed-legacy-product
+          if ($LASTEXITCODE -ne 0) { throw "LEGACY_UNKNOWN fixture seeding failed." }
+
+          $legacyRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Certification Legacy Product"
+          $bkeRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\BKE"
+          $agentRoot = Join-Path $env:ProgramFiles "BKE Digital Solutions\Licensing Agent"
+          $sentinelRoot = Join-Path $env:RUNNER_TEMP "bke-root-uninstall-user-data"
+          $sentinel = Join-Path $sentinelRoot "sentinel.txt"
+          New-Item -ItemType Directory -Force $sentinelRoot | Out-Null
+          "preserve-me" | Set-Content $sentinel -Encoding utf8
+          $bkeUninstaller = Resolve-InnoUninstaller "BKE" $bkeRoot
+
+          $uninstall=Start-Process -FilePath $bkeUninstaller -ArgumentList @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART") -Wait -PassThru
+          if ($uninstall.ExitCode -eq 0) { throw "BKE root uninstall did not fail closed for LEGACY_UNKNOWN inventory." }
+
+          if (!(Test-Path $legacyRoot)) { throw "LEGACY_UNKNOWN product was modified by failed root uninstall." }
+          if (!(Test-Path $bkeRoot)) { throw "BKE was removed despite failed product cleanup." }
+          if (!(Test-Path $agentRoot)) { throw "Licensing Agent was removed despite failed product cleanup." }
+          if ($null -eq (Get-Service -Name $env:AGENT_SERVICE_NAME -ErrorAction SilentlyContinue)) {
+            throw "Licensing Agent service was removed despite failed product cleanup."
+          }
+          if (!(Test-Path $sentinel)) { throw "Unrelated user-data sentinel was removed during failed root uninstall." }
+
+          dotnet run --project agent-src/dotnet/certification/BKE.LicensingAgent.RootCleanupCertification/BKE.LicensingAgent.RootCleanupCertification.csproj --configuration Release -- --assert-product-present bke-certification-legacy
+          if ($LASTEXITCODE -ne 0) { throw "LEGACY_UNKNOWN inventory row changed during failed root uninstall." }
+
+          $bke=Join-Path $bkeRoot "bke-launcher.exe"
+          $smoke=Start-Process -FilePath $bke -ArgumentList "--smoke" -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "BKE no longer works after fail-closed uninstall refusal." }
+
+          Write-Host "BKE fail-closed root uninstall certification: PASS"
+
+  evidence:
+    name: Evidence + final candidates
+    needs: [parent-package, defender-scan, fresh-install, root-uninstall, fail-closed-uninstall]
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download exact parent package
+        uses: actions/download-artifact@v4
+        with:
+          name: bke-parent-package
+          path: dist
+      - name: Verify immutable parent package boundary
+        shell: pwsh
+        run: |
+          $manifestPath = "dist/parent/PACKAGE-MANIFEST.json"
+          if (!(Test-Path $manifestPath -PathType Leaf)) { throw "Parent package boundary manifest is missing." }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.schema -ne "bke.parent-package-boundary.v2") { throw "Parent package boundary schema drifted." }
+          if ($manifest.production_ready -ne $false -or $manifest.status -ne "PREPRODUCTION") { throw "Parent package crossed PREPRODUCTION boundary." }
+          if ($manifest.source_sha -ne $env:SOURCE_SHA) { throw "Parent package source SHA drifted." }
+          if ($manifest.agent_source_sha -ne $env:AGENT_SOURCE_SHA) { throw "Parent package Agent SHA drifted." }
+          $entry = $manifest.installer
+          if ($null -eq $entry) { throw "Windows installer boundary is missing." }
+          if ([string]$entry.platform -ne "windows") { throw "Parent package platform drifted." }
+          if ([string]$entry.application_architecture -ne "x64") { throw "Parent package application architecture drifted." }
+          $path = Join-Path "dist/installer" ([string]$entry.file)
+          if (!(Test-Path $path -PathType Leaf)) { throw "Windows installer is missing." }
+          $item = Get-Item $path
+          $hash = (Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne [string]$entry.sha256) { throw "Windows installer SHA-256 drifted." }
+          if ($item.Length -ne [long]$entry.bytes) { throw "Windows installer size drifted." }
+          Write-Host "Immutable Windows x64 parent package boundary: PASS"
+
+      - name: Package parent-installer evidence
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/parent-evidence | Out-Null
+          Copy-Item dist/parent/COMPONENT-MANIFEST.json dist/parent-evidence/
+          $customerInstaller = Get-Item "dist/installer/BKE-$($env:BKE_VERSION)-PREPRODUCTION-Windows.exe"
+          $customerHash = (Get-FileHash $customerInstaller.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$customerHash  $($customerInstaller.Name)" | Add-Content dist/parent-evidence/SHA256SUMS.txt -Encoding ascii
+          Copy-Item $customerInstaller.FullName dist/parent-evidence/
+          Copy-Item dist/parent/PACKAGE-MANIFEST.json dist/parent-evidence/
+
+          @(
+            "PREPRODUCTION ONLY",
+            "Agent trust is disposable and unsigned.",
+            "BKE ships one customer-facing Windows installer backed by the x64 application runtime.",
+            "Root BKE uninstall is implemented and remotely certified for managed-product cleanup, Agent teardown, and fail-closed unknown provenance.",
+            "Do not publish this candidate as a production installer."
+          ) | Set-Content dist/parent-evidence/NOT-PRODUCTION.txt -Encoding utf8
+
+      - name: Upload BKE parent installer candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: BKE-Windows-Parent-Installer-PREPRODUCTION
+          path: dist/parent-evidence/**
+          if-no-files-found: error
+          retention-days: 14
+
+  required-certification:
+    name: Required parent certification
+    if: ${{ always() }}
+    needs:
+      - launcher-contracts
+      - agent-contracts
+      - parent-package
+      - defender-scan
+      - fresh-install
+      - root-uninstall
+      - fail-closed-uninstall
+      - evidence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every parent-installer module
+        env:
+          LAUNCHER_CONTRACTS: ${{ needs.launcher-contracts.result }}
+          AGENT_CONTRACTS: ${{ needs.agent-contracts.result }}
+          PACKAGE: ${{ needs.parent-package.result }}
+          DEFENDER: ${{ needs.defender-scan.result }}
+          FRESH_INSTALL: ${{ needs.fresh-install.result }}
+          ROOT_UNINSTALL: ${{ needs.root-uninstall.result }}
+          FAIL_CLOSED: ${{ needs.fail-closed-uninstall.result }}
+          EVIDENCE: ${{ needs.evidence.result }}
+        run: |
+          for value in "$LAUNCHER_CONTRACTS" "$AGENT_CONTRACTS" "$PACKAGE" "$DEFENDER" "$FRESH_INSTALL" "$ROOT_UNINSTALL" "$FAIL_CLOSED" "$EVIDENCE"; do
+            test "$value" = "success" || { echo "Required parent module did not pass: $value"; exit 1; }
+          done
+          echo "Required parent certification: PASS"
