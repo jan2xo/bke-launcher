@@ -2470,10 +2470,13 @@ Require(
     "Launcher BKE Signal GPU telemetry dependency is not pinned.");
 Require(
     mainWindowMarkup.Contains(
-        "Header=\"Home\"",
+        "Click=\"OpenHome\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Text=\"BKE SIGNAL\"",
+        "Classes.active=\"{Binding ShowHomeModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"SYSTEM CORE\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Telemetry.CpuLabel",
@@ -2483,8 +2486,11 @@ Require(
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Telemetry.MemoryLabel",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes=\"product-card\"",
         StringComparison.Ordinal),
-    "Launcher BKE Signal Home dashboard surface is incomplete.");
+    "Launcher BKE Signal branded Home dashboard surface is incomplete.");
 Require(
     mainWindowSource.Contains(
         "Interval = TimeSpan.FromSeconds(2)",
@@ -2520,18 +2526,42 @@ Require(
     "Launcher BKE Signal introduced an actual 3D rendering dependency.");
 Require(
     telemetryViewModelSource.Contains(
-        "SYSTEM HEALTHY",
+        "System healthy",
         StringComparison.Ordinal) &&
     telemetryViewModelSource.Contains(
-        "SYSTEM BUSY",
+        "System busy",
+        StringComparison.Ordinal) &&
+    telemetryViewModelSource.Contains(
+        "GpuDetail",
         StringComparison.Ordinal),
-    "Launcher BKE Signal telemetry projection lost human-readable health state.");
+    "Launcher BKE Signal telemetry projection lost human-readable health/GPU state.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowLoginPage}\"", StringComparison.Ordinal),
     "Launcher does not gate unauthenticated startup on the Login page.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAuthenticatedShell}\"", StringComparison.Ordinal),
     "Launcher does not gate authenticated startup on the BKE shell.");
-Require(mainWindowMarkup.Contains("SelectedIndex=\"{Binding SelectedModuleIndex, Mode=TwoWay}\"", StringComparison.Ordinal),
-    "Launcher shell does not preserve an explicitly unselected module state.");
+Require(
+    !mainWindowMarkup.Contains(
+        "<TabControl",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowHomeModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowNotificationsModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenHome",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenNotifications",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenStore",
+        StringComparison.Ordinal),
+    "Launcher shell did not replace default tab chrome with explicit Signal navigation.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", StringComparison.Ordinal),
     "Launcher Account surface is not explicitly user-selected.");
 Require(
