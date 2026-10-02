@@ -108,6 +108,90 @@ Require(
         StringComparison.OrdinalIgnoreCase),
     "BKE preproduction release workflow must not publish a latest alias.");
 
+var activeWorkflowDirectory = Path.Combine(".github", "workflows");
+var activeWorkflowNames = Directory
+    .GetFiles(activeWorkflowDirectory, "*.yml")
+    .Select(Path.GetFileName)
+    .OrderBy(name => name, StringComparer.Ordinal)
+    .ToArray();
+var expectedActiveWorkflowNames = new[]
+{
+    "_intent-contracts.yml",
+    "_launcher-contracts.yml",
+    "certify.yml",
+    "ci.yml",
+    "windows-parent-installer.yml",
+}.OrderBy(name => name, StringComparer.Ordinal).ToArray();
+
+Require(
+    activeWorkflowNames.SequenceEqual(expectedActiveWorkflowNames),
+    "Active Launcher workflow surface is not the declared intentional certification graph.");
+
+foreach (var workflowName in expectedActiveWorkflowNames)
+{
+    var workflowSource = File.ReadAllText(
+        Path.Combine(activeWorkflowDirectory, workflowName));
+    var permissionsIndex = workflowSource.IndexOf(
+        "\npermissions:",
+        StringComparison.Ordinal);
+    var jobsIndex = workflowSource.IndexOf(
+        "\njobs:",
+        StringComparison.Ordinal);
+    var boundaryCandidates = new[] { permissionsIndex, jobsIndex }
+        .Where(index => index >= 0)
+        .ToArray();
+    var triggerBoundary = boundaryCandidates.Length == 0
+        ? workflowSource.Length
+        : boundaryCandidates.Min();
+    var triggerSource = workflowSource[..triggerBoundary];
+
+    Require(
+        !triggerSource.Contains(
+            "\n  pull_request:",
+            StringComparison.Ordinal),
+        $"Launcher workflow {workflowName} must not certify automatically on pull_request.");
+    Require(
+        !triggerSource.Contains(
+            "\n  push:",
+            StringComparison.Ordinal),
+        $"Launcher workflow {workflowName} must not certify automatically on push.");
+}
+
+var legacyWorkflowDirectory = Path.Combine(
+    ".github",
+    "legacy-workflows",
+    "2026-10-02");
+foreach (var legacyOnly in new[]
+{
+    "pr-guard.yml",
+    "preproduction-release.yml",
+})
+{
+    Require(
+        File.Exists(Path.Combine(legacyWorkflowDirectory, legacyOnly)),
+        $"Legacy Launcher workflow archive is missing {legacyOnly}.");
+    Require(
+        !File.Exists(Path.Combine(activeWorkflowDirectory, legacyOnly)),
+        $"Legacy-only Launcher workflow {legacyOnly} was reactivated.");
+}
+
+var launcherCertifySource = File.ReadAllText(
+    Path.Combine(activeWorkflowDirectory, "certify.yml"));
+Require(
+    launcherCertifySource.Contains(
+        "issue_comment:",
+        StringComparison.Ordinal) &&
+    launcherCertifySource.Contains(
+        "workflow_dispatch:",
+        StringComparison.Ordinal) &&
+    !launcherCertifySource.Contains(
+        "github.event_name == 'pull_request'",
+        StringComparison.Ordinal) &&
+    !launcherCertifySource.Contains(
+        "context.eventName === \"pull_request\"",
+        StringComparison.Ordinal),
+    "Launcher certification entrypoint is not explicit-only.");
+
 
 Require(AgentLocalContract.PlatformAuthorityPath == "/v1/runtime/platform-authority", "platform-authority path drifted");
 Require(AgentLocalContract.PlatformAuthorityCapabilityId == "bke.platform-authority", "platform-authority capability id drifted");
