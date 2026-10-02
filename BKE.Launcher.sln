@@ -8,6 +8,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Application", 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.AgentClient", "src\BKE.Launcher.AgentClient\BKE.Launcher.AgentClient.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10003}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Plugin.Abstractions", "src\BKE.Launcher.Plugin.Abstractions\BKE.Launcher.Plugin.Abstractions.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10010}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.PluginHost", "src\BKE.Launcher.PluginHost\BKE.Launcher.PluginHost.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10004}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BKE.Launcher.Infrastructure", "src\BKE.Launcher.Infrastructure\BKE.Launcher.Infrastructure.csproj", "{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10005}"
@@ -62,5 +64,9 @@ Global
 		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10009}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10010}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10010}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10010}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C7E251-A2F0-45F7-B4EA-1EFA0AA10010}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
