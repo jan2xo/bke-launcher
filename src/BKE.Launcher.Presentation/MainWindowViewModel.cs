@@ -1636,6 +1636,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SetField(ref _selectedModuleIndex, value);
             Raise(nameof(ShowHomeModule));
+            Raise(nameof(ShowLibraryModule));
             Raise(nameof(ShowNotificationsModule));
             Raise(nameof(ShowStoreModule));
         }
@@ -1646,15 +1647,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         !ShowAccountSurface &&
         SelectedModuleIndex == 0;
 
-    public bool ShowNotificationsModule =>
+    public bool ShowLibraryModule =>
         IsAuthenticated &&
         !ShowAccountSurface &&
         SelectedModuleIndex == 1;
 
-    public bool ShowStoreModule =>
+    public bool ShowNotificationsModule =>
         IsAuthenticated &&
         !ShowAccountSurface &&
         SelectedModuleIndex == 2;
+
+    public bool ShowStoreModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 3;
 
     public bool ShowAccountSurface
     {
@@ -1663,6 +1669,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SetField(ref _showAccountSurface, value);
             Raise(nameof(ShowHomeModule));
+            Raise(nameof(ShowLibraryModule));
             Raise(nameof(ShowNotificationsModule));
             Raise(nameof(ShowStoreModule));
         }
@@ -2065,9 +2072,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 await RefreshCatalogAsync(cancellationToken);
                 break;
             case 1:
-                await RefreshNotificationsAsync(cancellationToken);
+                await RefreshCatalogAsync(cancellationToken);
                 break;
             case 2:
+                await RefreshNotificationsAsync(cancellationToken);
+                break;
+            case 3:
                 await RefreshStoreAsync(cancellationToken);
                 break;
         }
