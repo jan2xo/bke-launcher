@@ -1634,12 +1634,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _selectedModuleIndex;
         set
         {
-            if (SetField(ref _selectedModuleIndex, value))
-            {
-                Raise(nameof(ShowHomeModule));
-                Raise(nameof(ShowNotificationsModule));
-                Raise(nameof(ShowStoreModule));
-            }
+            SetField(ref _selectedModuleIndex, value);
+            Raise(nameof(ShowHomeModule));
+            Raise(nameof(ShowNotificationsModule));
+            Raise(nameof(ShowStoreModule));
         }
     }
 
@@ -1663,12 +1661,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _showAccountSurface;
         private set
         {
-            if (SetField(ref _showAccountSurface, value))
-            {
-                Raise(nameof(ShowHomeModule));
-                Raise(nameof(ShowNotificationsModule));
-                Raise(nameof(ShowStoreModule));
-            }
+            SetField(ref _showAccountSurface, value);
+            Raise(nameof(ShowHomeModule));
+            Raise(nameof(ShowNotificationsModule));
+            Raise(nameof(ShowStoreModule));
         }
     }
 
