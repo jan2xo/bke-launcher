@@ -9,13 +9,12 @@
         Height="820"
         MinWidth="980"
         MinHeight="640"
-        SystemDecorations="None">
+        WindowDecorations="None">
   <Grid>
     <Border Height="12"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Top"
             Background="Transparent"
-            Panel.ZIndex="100"
             PointerPressed="WindowDragPointerPressed" />
 
     <Border IsVisible="{Binding ShowLoginPage}"
