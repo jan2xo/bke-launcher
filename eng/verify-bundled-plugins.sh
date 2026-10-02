@@ -7,6 +7,24 @@ cd "$ROOT"
 PIN_FILE="eng/demo-app-source.sha"
 PLUGIN_PATH="plugins/bke-demo-app"
 
+pin_present=0
+gitlink_present=0
+
+[[ -f "$PIN_FILE" ]] && pin_present=1
+if git ls-tree HEAD "$PLUGIN_PATH" | grep -q .; then
+  gitlink_present=1
+fi
+
+if [[ "$pin_present" == "0" && "$gitlink_present" == "0" ]]; then
+  echo "BKE bundled plugin provenance: PASS (no bundled plugin declared)"
+  exit 0
+fi
+
+if [[ "$pin_present" != "1" || "$gitlink_present" != "1" ]]; then
+  echo "BKE bundled plugin declaration is incomplete: pin=$pin_present gitlink=$gitlink_present" >&2
+  exit 1
+fi
+
 [[ -f "$PIN_FILE" ]] || {
   echo "BKE Demo App source pin is missing." >&2
   exit 1
