@@ -11,6 +11,59 @@ var agentBase = new Uri(AgentLocalContract.DefaultBaseAddress, UriKind.Absolute)
 Require(agentBase.IsLoopback, "Agent default address is not loopback.");
 Require(agentBase.Scheme == Uri.UriSchemeHttp, "Agent default address must use local HTTP.");
 
+var pluginAbstractionsProject = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Plugin.Abstractions",
+        "BKE.Launcher.Plugin.Abstractions.csproj"));
+var pluginAbstractionsContract = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Plugin.Abstractions",
+        "PluginContract.cs"));
+var pluginHostProject = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.PluginHost",
+        "BKE.Launcher.PluginHost.csproj"));
+
+Require(
+    pluginAbstractionsProject.Contains(
+        "<AssemblyName>BKE.Launcher.Plugin.Abstractions</AssemblyName>",
+        StringComparison.Ordinal),
+    "Launcher plugin abstractions assembly identity drifted.");
+Require(
+    !pluginAbstractionsProject.Contains(
+        "ProjectReference",
+        StringComparison.Ordinal) &&
+    !pluginAbstractionsProject.Contains(
+        "PackageReference",
+        StringComparison.Ordinal),
+    "Launcher plugin abstractions gained a runtime/application dependency.");
+Require(
+    pluginAbstractionsContract.Contains(
+        "public interface IBkeLauncherPlugin",
+        StringComparison.Ordinal) &&
+    pluginAbstractionsContract.Contains(
+        "public interface ILauncherContext",
+        StringComparison.Ordinal) &&
+    pluginAbstractionsContract.Contains(
+        "public interface IProductAuthorizationGateway",
+        StringComparison.Ordinal),
+    "Launcher plugin abstractions lost the stable host contract.");
+Require(
+    pluginHostProject.Contains(
+        "../BKE.Launcher.Plugin.Abstractions/BKE.Launcher.Plugin.Abstractions.csproj",
+        StringComparison.Ordinal),
+    "Launcher PluginHost no longer consumes the stable abstractions assembly.");
+Require(
+    !File.Exists(
+        Path.Combine(
+            "src",
+            "BKE.Launcher.PluginHost",
+            "PluginContract.cs")),
+    "Launcher PluginHost duplicated the external plugin contract source.");
+
 var preproductionReleaseRequestPath = Path.Combine(
     "eng",
     "preproduction-parent-release.json");

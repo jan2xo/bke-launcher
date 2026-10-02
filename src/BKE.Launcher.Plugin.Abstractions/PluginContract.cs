@@ -30,7 +30,9 @@ public interface IBkeLauncherPlugin
 {
     LauncherPluginIdentity Identity { get; }
 
-    Task InitializeAsync(ILauncherContext context, CancellationToken cancellationToken);
+    Task InitializeAsync(
+        ILauncherContext context,
+        CancellationToken cancellationToken);
 
     Task OpenAsync(CancellationToken cancellationToken);
 
