@@ -1,4 +1,6 @@
 using BKE.Launcher.Application;
+using BKE.Launcher.Contracts;
+using BKE.Launcher.Presentation;
 using BKE.Demo.LauncherPlugin;
 using BKE.Launcher.PluginHost;
 
@@ -42,6 +44,7 @@ await CertifyDenialBeforePluginCode();
 await CertifyVersionAndHostContractGates();
 CertifyDuplicateRegistrationFailsClosed();
 CertifyBundledDemoPlugin();
+CertifyCustomerCatalogToBundledDemoOpen();
 
 Console.WriteLine("BKE Launcher plugin certification: PASS");
 Console.WriteLine("Plugin contract v1 exposes capabilities, not cloud credentials");
@@ -272,6 +275,112 @@ static void CertifyBundledDemoPlugin()
     Require(
         !runtime.IsRegistered("bke-other-product", "2.0.0"),
         "Launcher invented a Demo plugin registration for another product.");
+}
+
+static void CertifyCustomerCatalogToBundledDemoOpen()
+{
+    const string DigitalSolutionsSourceSha =
+        "1778eef839c122d97c37e69f208a7a76312411b5";
+
+    var pinnedDigitalSolutionsSource =
+        File.ReadAllText(
+            Path.Combine(
+                "eng",
+                "digital-solutions-source.sha"))
+            .Trim();
+
+    const string LicensingAgentSourceSha =
+        "6570511cf2701f31a92800c26c2b919528b74c6e";
+    var pinnedLicensingAgentSource =
+        File.ReadAllText(
+            Path.Combine(
+                "eng",
+                "licensing-agent-source.sha"))
+            .Trim();
+
+    Require(
+        pinnedDigitalSolutionsSource ==
+            DigitalSolutionsSourceSha,
+        "Digital Solutions customer authority pin drifted.");
+
+    Require(
+        pinnedLicensingAgentSource ==
+            LicensingAgentSourceSha,
+        "Licensing Agent plugin-authorization authority pin drifted.");
+
+    IBkeLauncherPlugin plugin =
+        new BkeDemoLauncherPlugin();
+    var authorization =
+        new FakeAuthorizationPort([]);
+    var runtime =
+        new LauncherPluginRuntime(
+            [plugin],
+            authorization);
+
+    var product =
+        new LauncherProduct(
+            "bke-trial-product",
+            "BKE Demo App",
+            "BKE Launcher-hosted demonstration plugin.",
+            ProductExecutionType.LauncherPlugin,
+            LauncherProductState.Installable,
+            InstalledVersion: null,
+            AvailableVersion: "2.0.0");
+
+    var visible =
+        SoftwareProductViewModel.From(
+            product,
+            runtime.IsRegistered(
+                product.ProductId,
+                product.AvailableVersion!));
+
+    Require(
+        visible.ExecutionType ==
+            ProductExecutionType.LauncherPlugin,
+        "Customer catalog lost Launcher-plugin execution type.");
+    Require(
+        visible.StateLabel == "Available",
+        "Bundled entitled Launcher plugin is not presented as available.");
+    Require(
+        visible.CanOpen,
+        "Bundled exact-version Launcher plugin is not customer-openable.");
+    Require(
+        !visible.CanInstall &&
+        !visible.CanUpdate &&
+        !visible.CanRepair &&
+        !visible.CanRemove,
+        "Launcher plugin incorrectly exposed standalone lifecycle actions.");
+
+    var presentationSource =
+        File.ReadAllText(
+            Path.Combine(
+                "src",
+                "BKE.Launcher.Presentation",
+                "MainWindowViewModel.cs"));
+
+    var pluginBranch =
+        presentationSource.IndexOf(
+            "if (product.ExecutionType == ProductExecutionType.LauncherPlugin)",
+            StringComparison.Ordinal);
+    var pluginOpen =
+        presentationSource.IndexOf(
+            "var result = await _pluginRuntime.OpenAsync(",
+            StringComparison.Ordinal);
+    var standaloneOpen =
+        presentationSource.IndexOf(
+            "var response = await _softwareOpen.OpenAsync(",
+            StringComparison.Ordinal);
+
+    Require(
+        pluginBranch >= 0 &&
+        pluginOpen > pluginBranch &&
+        standaloneOpen > pluginOpen,
+        "Customer Open routing no longer sends Launcher plugins through the plugin runtime before the standalone path.");
+    Require(
+        presentationSource.Contains(
+            "product.ProductId,\n                    product.AvailableVersion,",
+            StringComparison.Ordinal),
+        "Customer Open no longer forwards the exact catalog-authorized plugin identity and version.");
 }
 
 static void Require(bool condition, string message)
