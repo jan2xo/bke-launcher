@@ -26,6 +26,7 @@ public sealed partial class MainWindow : Window
 
         Opened += WindowOpened;
         Closed += WindowClosed;
+        SizeChanged += WindowSizeChanged;
     }
 
     private MainWindowViewModel ViewModel =>
@@ -94,6 +95,20 @@ public sealed partial class MainWindow : Window
                 CancellationToken.None);
         }
     }
+    private void ToggleSidebar(object? sender, RoutedEventArgs args) =>
+        ViewModel.ToggleSidebar();
+
+    private void WindowSizeChanged(
+        object? sender,
+        SizeChangedEventArgs args)
+    {
+        if (args.NewSize.Width < 900 &&
+            ViewModel.IsSidebarExpanded)
+        {
+            ViewModel.CollapseSidebar();
+        }
+    }
+
     private async void OpenDashboard(object? sender, RoutedEventArgs args)
     {
         await ViewModel.OpenModuleAsync(
@@ -1076,6 +1091,31 @@ public sealed partial class MainWindow : Window
                 product.ProductId,
                 CancellationToken.None);
         }
+    }
+
+    private async void OpenDashboardProduct(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is not Button
+            {
+                DataContext: SoftwareProductViewModel product,
+            })
+        {
+            return;
+        }
+
+        if (product.CanOpen)
+        {
+            await ViewModel.OpenProductAsync(
+                product.ProductId,
+                CancellationToken.None);
+            return;
+        }
+
+        await ViewModel.OpenModuleAsync(
+            1,
+            CancellationToken.None);
     }
 
     private async void RemoveProduct(object? sender, RoutedEventArgs args)
