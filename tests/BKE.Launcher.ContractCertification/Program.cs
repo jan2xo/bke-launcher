@@ -245,6 +245,12 @@ Require(BkePlatformContract.NativeMfaVerifyPath == "/api/agent-sessions/native/m
 Require(AgentLocalContract.SoftwareCatalogPath == "/v1/software/catalog", "software catalog path drifted");
 Require(AgentLocalContract.SoftwareCatalogCapabilityId == "bke.software-catalog", "software catalog capability id drifted");
 Require(AgentLocalContract.SoftwareCatalogContractVersion == 1, "software catalog contract version drifted");
+Require(AgentLocalContract.LauncherPluginAuthorizePath == "/v1/software/launcher-plugin/authorize",
+    "Launcher Agent plugin authorization path drifted.");
+Require(AgentLocalContract.LauncherPluginAuthorizeCapabilityId == "bke.launcher-plugin-authorize",
+    "Launcher Agent plugin authorization capability id drifted.");
+Require(AgentLocalContract.LauncherPluginAuthorizeContractVersion == 1,
+    "Launcher Agent plugin authorization contract version drifted.");
 Require(AgentLocalContract.SoftwareInstallPath == "/v1/software/install", "software install path drifted");
 Require(AgentLocalContract.SoftwareInstallCapabilityId == "bke.software-install", "software install capability id drifted");
 Require(AgentLocalContract.SoftwareInstallContractVersion == 1, "software install contract version drifted");
@@ -434,6 +440,7 @@ Require(agentMethods.SetEquals([
     "GetStoreGiftClaimsAsync",
     "RevealPersistentStoreGiftClaimAsync",
     "GetSoftwareCatalogAsync",
+    "AuthorizeLauncherPluginAsync",
     "InstallSoftwareAsync",
     "UpdateSoftwareAsync",
     "RepairSoftwareAsync",
@@ -6207,7 +6214,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountPendingOrdersController(agent),
         new LauncherAccountLicenseSeatsController(agent),
         new LauncherAccountLicenseDevicesController(agent),
-        new LauncherAccountOrganizationController(agent));
+        new LauncherAccountOrganizationController(agent),
+        new CustomerJourneyPluginRuntime());
 }
 
 static void Require(bool condition, string message)
@@ -6240,6 +6248,24 @@ sealed class CustomerJourneyCatalogSource : ILauncherCatalogSource
             },
             null));
     }
+}
+
+sealed class CustomerJourneyPluginRuntime : ILauncherPluginRuntime
+{
+    public bool IsRegistered(
+        string productId,
+        string version) => false;
+
+    public Task<LauncherPluginOpenResult> OpenAsync(
+        string productId,
+        string version,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException(
+            "Customer journey certification uses standalone software only.");
+
+    public Task ShutdownAsync(
+        CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 }
 
 sealed class CustomerJourneyRecoveryStore : ILauncherCheckoutRecoveryStore
@@ -8568,6 +8594,11 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public Task<SoftwareCatalogResponse> GetSoftwareCatalogAsync(
         SoftwareCatalogRequest request,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<LauncherPluginAuthorizeResponse> AuthorizeLauncherPluginAsync(
+        LauncherPluginAuthorizeRequest request,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
