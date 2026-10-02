@@ -3,39 +3,57 @@
              x:Class="BKE.Launcher.Desktop.App"
              RequestedThemeVariant="Dark">
   <Application.Resources>
-    <SolidColorBrush x:Key="BkeBackgroundBrush">#0A0E13</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSurfaceBrush">#111821</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSurfaceRaisedBrush">#151E29</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeBorderBrush">#263241</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeTextBrush">#F4F7FA</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeMutedTextBrush">#91A0AF</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeAccentBrush">#F4F7FA</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeAccentTextBrush">#0A0E13</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSignalBrush">#7DD3FC</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSignalSoftBrush">#1A7DD3FC</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSignalBorderBrush">#4D7DD3FC</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeBackgroundBrush">#07090C</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSurfaceBrush">#0C0F13</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSurfaceRaisedBrush">#11151B</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeBorderBrush">#232A33</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeTextBrush">#F3F1EA</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeMutedTextBrush">#8E959E</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeAccentBrush">#F3F1EA</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeAccentTextBrush">#08090B</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBrush">#67D9FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalSoftBrush">#1667D9FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBorderBrush">#4767D9FF</SolidColorBrush>
     <SolidColorBrush x:Key="BkeSuccessBrush">#86EFAC</SolidColorBrush>
     <SolidColorBrush x:Key="BkeWarningBrush">#FDE68A</SolidColorBrush>
     <SolidColorBrush x:Key="BkeDangerBrush">#FDA4AF</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeInsetBrush">#0C1219</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeQuietBrush">#0F161F</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeCanvasBrush">#080C11</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeGlassBrush">#D90E151E</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeGlassRaisedBrush">#E6121B26</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeHairlineBrush">#1D2C3B</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSignalBrightBrush">#A8E7FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeInsetBrush">#090B0E</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeQuietBrush">#090B0E</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeCanvasBrush">#050608</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeGlassBrush">#EA0A0C0F</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeGlassRaisedBrush">#F00F1216</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeHairlineBrush">#242A32</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBrightBrush">#B7ECFF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeIndigoBrush">#8177FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeIndigoSoftBrush">#218177FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeObsidianBrush">#0A0C0F</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeObsidianRaisedBrush">#11151A</SolidColorBrush>
     <LinearGradientBrush x:Key="BkeHeroBrush"
                          StartPoint="0%,0%"
                          EndPoint="100%,100%">
-      <GradientStop Color="#F0121A24" Offset="0" />
-      <GradientStop Color="#F00B1118" Offset="0.55" />
-      <GradientStop Color="#E90C1720" Offset="1" />
+      <GradientStop Color="#FA101317" Offset="0" />
+      <GradientStop Color="#F6090B0E" Offset="0.58" />
+      <GradientStop Color="#EE0B0D13" Offset="1" />
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="BkeProductBrush"
                          StartPoint="0%,0%"
                          EndPoint="100%,100%">
-      <GradientStop Color="#E915202C" Offset="0" />
-      <GradientStop Color="#E90D141D" Offset="1" />
+      <GradientStop Color="#F412161B" Offset="0" />
+      <GradientStop Color="#F00B0D11" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="BkeCoreDiscBrush"
+                         StartPoint="10%,0%"
+                         EndPoint="90%,100%">
+      <GradientStop Color="#283140" Offset="0" />
+      <GradientStop Color="#1B222D" Offset="0.45" />
+      <GradientStop Color="#11141B" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="BkeCoreHighlightBrush"
+                         StartPoint="0%,0%"
+                         EndPoint="100%,100%">
+      <GradientStop Color="#3867D9FF" Offset="0" />
+      <GradientStop Color="#168177FF" Offset="0.55" />
+      <GradientStop Color="#0667D9FF" Offset="1" />
     </LinearGradientBrush>
   </Application.Resources>
 
@@ -170,6 +188,53 @@
       <Setter Property="Background" Value="{StaticResource BkeSignalBrush}" />
     </Style>
 
+    <Style Selector="Border.obsidian-hero">
+      <Setter Property="Background" Value="{StaticResource BkeHeroBrush}" />
+      <Setter Property="BorderBrush" Value="#313740" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="28" />
+    </Style>
+
+    <Style Selector="Border.obsidian-depth">
+      <Setter Property="Background" Value="#66000000" />
+      <Setter Property="CornerRadius" Value="30" />
+    </Style>
+
+    <Style Selector="Border.obsidian-metric">
+      <Setter Property="Background" Value="#D90A0C0F" />
+      <Setter Property="BorderBrush" Value="#242B35" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="15" />
+    </Style>
+
+    <Style Selector="Border.core-disc">
+      <Setter Property="Background" Value="{StaticResource BkeCoreDiscBrush}" />
+      <Setter Property="BorderBrush" Value="#4A5665" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="999" />
+    </Style>
+
+    <Style Selector="Border.app-shelf-card">
+      <Setter Property="Background" Value="{StaticResource BkeProductBrush}" />
+      <Setter Property="BorderBrush" Value="#252C35" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="20" />
+    </Style>
+
+    <Style Selector="Border.app-mark">
+      <Setter Property="Background" Value="#CA0B0E12" />
+      <Setter Property="BorderBrush" Value="#34404C" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="17" />
+    </Style>
+
+    <Style Selector="Border.library-card">
+      <Setter Property="Background" Value="{StaticResource BkeProductBrush}" />
+      <Setter Property="BorderBrush" Value="#252D37" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="20" />
+    </Style>
+
     <Style Selector="Border.signal-card">
       <Setter Property="Background" Value="{StaticResource BkeSurfaceRaisedBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
@@ -250,8 +315,8 @@
     </Style>
 
     <Style Selector="Button.nav.active">
-      <Setter Property="Background" Value="#B8121E2A" />
-      <Setter Property="BorderBrush" Value="#2F5067" />
+      <Setter Property="Background" Value="#E112161C" />
+      <Setter Property="BorderBrush" Value="#353D48" />
       <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
     </Style>
 
