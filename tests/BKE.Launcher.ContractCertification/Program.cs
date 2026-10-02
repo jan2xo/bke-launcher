@@ -2499,7 +2499,7 @@ Require(
     "Launcher BKE Obsidian Core Dashboard surface is incomplete.");
 Require(
     mainWindowMarkup.Contains(
-        "SystemDecorations=\"None\"",
+        "WindowDecorations=\"None\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "PointerPressed=\"WindowDragPointerPressed\"",
