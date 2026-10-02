@@ -16,14 +16,21 @@ var preproductionReleaseRequestPath = Path.Combine(
     "preproduction-parent-release.json");
 var preproductionReleaseWorkflowPath = Path.Combine(
     ".github",
-    "workflows",
+    "legacy-workflows",
+    "2026-10-02",
     "preproduction-release.yml");
 Require(
     File.Exists(preproductionReleaseRequestPath),
     "BKE preproduction release request is missing.");
 Require(
+    !File.Exists(Path.Combine(
+        ".github",
+        "workflows",
+        "preproduction-release.yml")),
+    "BKE preproduction release publication must remain inactive outside an explicit release intent.");
+Require(
     File.Exists(preproductionReleaseWorkflowPath),
-    "BKE preproduction release publication workflow is missing.");
+    "Archived BKE preproduction release publication workflow is missing.");
 
 using (var releaseRequest = JsonDocument.Parse(
     File.ReadAllText(preproductionReleaseRequestPath)))
