@@ -8,8 +8,16 @@
         Width="1280"
         Height="820"
         MinWidth="980"
-        MinHeight="640">
+        MinHeight="640"
+        SystemDecorations="None">
   <Grid>
+    <Border Height="12"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            Background="Transparent"
+            Panel.ZIndex="100"
+            PointerPressed="WindowDragPointerPressed" />
+
     <Border IsVisible="{Binding ShowLoginPage}"
             Classes="surface"
             Width="680"
@@ -216,55 +224,64 @@
 
     <Grid IsVisible="{Binding ShowAuthenticatedShell}"
           RowDefinitions="Auto,*"
-          Margin="24,18,24,22">
+          Margin="26,20,26,24">
       <Grid ColumnDefinitions="Auto,*,Auto"
-            Margin="0,0,0,18">
+            Margin="0,0,0,22">
         <StackPanel Orientation="Horizontal"
                     Spacing="12"
                     VerticalAlignment="Center">
-          <Border Width="38"
-                  Height="38"
-                  Classes="product-icon">
-            <Grid>
-              <Border Width="12"
-                      Height="12"
-                      Classes="signal-dot"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Center" />
-            </Grid>
-          </Border>
-          <StackPanel Spacing="0"
-                      VerticalAlignment="Center">
-            <TextBlock Text="BKE"
-                       Classes="brand" />
-            <TextBlock Text="SIGNAL"
-                       Classes="kicker"
-                       FontSize="9" />
-          </StackPanel>
+          <Grid Width="42"
+                Height="42">
+            <Border Margin="5,7,0,0"
+                    Width="37"
+                    Height="37"
+                    Background="#66000000"
+                    CornerRadius="14" />
+            <Border Width="37"
+                    Height="37"
+                    Classes="app-mark"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top">
+              <Grid>
+                <Ellipse Width="16"
+                         Height="16"
+                         Stroke="#5367D9FF"
+                         StrokeThickness="1" />
+                <Border Width="7"
+                        Height="7"
+                        Classes="signal-dot"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+          </Grid>
+          <TextBlock Text="BKE"
+                     Classes="brand"
+                     VerticalAlignment="Center" />
         </StackPanel>
 
         <Border Grid.Column="1"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Background="#660D141C"
-                BorderBrush="#182838"
+                Background="#B2090B0E"
+                BorderBrush="#20262E"
                 BorderThickness="1"
                 CornerRadius="999"
                 Padding="4">
           <StackPanel Orientation="Horizontal"
                       Spacing="2">
-            <Button Content="Home"
+            <Button Content="Dashboard"
                     Classes="nav"
                     Classes.active="{Binding ShowHomeModule}"
-                    Click="OpenHome" />
+                    Click="OpenDashboard" />
+            <Button Content="Library"
+                    Classes="nav"
+                    Classes.active="{Binding ShowLibraryModule}"
+                    Click="OpenLibrary" />
             <Button Content="Notifications"
                     Classes="nav"
                     Classes.active="{Binding ShowNotificationsModule}"
                     Click="OpenNotifications" />
-            <Button Content="Store"
-                    Classes="nav"
-                    Classes.active="{Binding ShowStoreModule}"
-                    Click="OpenStore" />
           </StackPanel>
         </Border>
 
@@ -273,10 +290,12 @@
                     Spacing="10"
                     VerticalAlignment="Center">
           <Border Classes="status-pill signal"
-                  Padding="10,7">
+                  Padding="11,7">
             <StackPanel Orientation="Horizontal"
                         Spacing="7">
-              <Border Classes="signal-dot"
+              <Border Width="7"
+                      Height="7"
+                      Classes="signal-dot"
                       VerticalAlignment="Center" />
               <TextBlock Text="Connected"
                          FontSize="10"
@@ -1543,248 +1562,308 @@
           <Grid>
           <Grid IsVisible="{Binding ShowHomeModule}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-              <StackPanel Spacing="24"
-                          Margin="2,4,10,10">
+              <StackPanel Spacing="26"
+                          Margin="2,4,12,14">
 
-                <Grid ColumnDefinitions="1.45*,0.75*"
-                      ColumnSpacing="16">
-                  <Border Classes="hero-surface"
-                          Padding="26"
-                          MinHeight="286">
-                    <Grid RowDefinitions="Auto,*">
-                      <StackPanel Spacing="7">
-                        <TextBlock Text="SYSTEM CORE"
+                <Grid MinHeight="332">
+                  <Border Classes="obsidian-depth"
+                          Margin="13,17,0,0" />
+                  <Border Background="#E00A0C0F"
+                          BorderBrush="#1E242B"
+                          BorderThickness="1"
+                          CornerRadius="29"
+                          Margin="7,9,6,5" />
+                  <Border Classes="obsidian-hero"
+                          Margin="0,0,13,13"
+                          Padding="30">
+                    <Grid ColumnDefinitions="0.85*,0.9*,0.7*"
+                          ColumnSpacing="26">
+
+                      <StackPanel Spacing="10"
+                                  VerticalAlignment="Center">
+                        <TextBlock Text="SYSTEM"
                                    Classes="kicker" />
                         <TextBlock Text="{Binding Telemetry.HealthLabel}"
-                                   Classes="display-title" />
+                                   Classes="display-title"
+                                   FontSize="38" />
                         <TextBlock Text="{Binding Telemetry.HealthDetail}"
                                    Classes="muted"
-                                   FontSize="13" />
-                      </StackPanel>
-
-                      <Grid Grid.Row="1"
-                            ColumnDefinitions="*,230"
-                            ColumnSpacing="20"
-                            Margin="0,20,0,0">
-                        <Grid RowDefinitions="*,Auto">
-                          <Grid ColumnDefinitions="*,*,*"
-                                ColumnSpacing="10"
-                                VerticalAlignment="Top">
-                            <Border Classes="metric-tile"
-                                    Padding="14">
-                              <StackPanel Spacing="6">
-                                <TextBlock Text="CPU"
-                                           Classes="kicker"
-                                           FontSize="9" />
-                                <TextBlock Text="{Binding Telemetry.CpuLabel}"
-                                           FontSize="28"
-                                           FontWeight="SemiBold" />
-                                <ProgressBar Minimum="0"
-                                             Maximum="100"
-                                             Value="{Binding Telemetry.CpuPercent}"
-                                             Height="3"
-                                             Background="#111B25"
-                                             Foreground="{StaticResource BkeSignalBrush}" />
-                                <TextBlock Text="System load"
-                                           Classes="muted"
-                                           FontSize="10" />
-                              </StackPanel>
-                            </Border>
-
-                            <Border Grid.Column="1"
-                                    Classes="metric-tile"
-                                    Padding="14">
-                              <StackPanel Spacing="6">
-                                <TextBlock Text="GPU"
-                                           Classes="kicker"
-                                           FontSize="9" />
-                                <TextBlock Text="{Binding Telemetry.GpuLabel}"
-                                           FontSize="28"
-                                           FontWeight="SemiBold" />
-                                <ProgressBar Minimum="0"
-                                             Maximum="100"
-                                             Value="{Binding Telemetry.GpuPercent}"
-                                             Height="3"
-                                             Background="#111B25"
-                                             Foreground="{StaticResource BkeSignalBrush}" />
-                                <TextBlock Text="{Binding Telemetry.GpuDetail}"
-                                           Classes="muted"
-                                           FontSize="10" />
-                              </StackPanel>
-                            </Border>
-
-                            <Border Grid.Column="2"
-                                    Classes="metric-tile"
-                                    Padding="14">
-                              <StackPanel Spacing="6">
-                                <TextBlock Text="MEMORY"
-                                           Classes="kicker"
-                                           FontSize="9" />
-                                <TextBlock Text="{Binding Telemetry.MemoryLabel}"
-                                           FontSize="20"
-                                           FontWeight="SemiBold" />
-                                <ProgressBar Minimum="0"
-                                             Maximum="100"
-                                             Value="{Binding Telemetry.MemoryPercent}"
-                                             Height="3"
-                                             Background="#111B25"
-                                             Foreground="{StaticResource BkeSignalBrush}" />
-                                <TextBlock Text="Physical memory"
-                                           Classes="muted"
-                                           FontSize="10" />
-                              </StackPanel>
-                            </Border>
-                          </Grid>
-
-                          <StackPanel Grid.Row="1"
-                                      Orientation="Horizontal"
-                                      Spacing="10"
-                                      Margin="2,14,0,0">
-                            <Border Classes="status-pill"
-                                    Padding="10,6">
-                              <StackPanel Orientation="Horizontal"
-                                          Spacing="7">
-                                <Border Classes="signal-dot"
-                                        Width="6"
-                                        Height="6"
-                                        VerticalAlignment="Center" />
-                                <TextBlock Text="Live telemetry"
-                                           FontSize="10"
-                                           Classes="muted" />
-                              </StackPanel>
-                            </Border>
-                            <TextBlock Text="Lightweight · pauses when minimized"
-                                       Classes="muted"
-                                       FontSize="10"
-                                       VerticalAlignment="Center" />
-                          </StackPanel>
-                        </Grid>
-
-                        <Grid Grid.Column="1"
-                              Width="220"
-                              Height="220"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center">
-                          <Ellipse Width="214"
-                                   Height="214"
-                                   Stroke="#173249"
-                                   StrokeThickness="1"
-                                   Opacity="0.75" />
-                          <Ellipse Width="174"
-                                   Height="174"
-                                   Stroke="#24526B"
-                                   StrokeThickness="1"
-                                   Opacity="0.7" />
-                          <Ellipse Width="128"
-                                   Height="128"
-                                   Fill="#120F2936"
-                                   Stroke="#4B7DD3FC"
-                                   StrokeThickness="1.2" />
-                          <Ellipse Width="76"
-                                   Height="76"
-                                   Fill="#1E7DD3FC"
-                                   Stroke="#6AA8E7FF"
-                                   StrokeThickness="1" />
-                          <StackPanel HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"
-                                      Spacing="2">
-                            <TextBlock Text="BKE"
-                                       FontSize="23"
-                                       FontWeight="SemiBold"
-                                       TextAlignment="Center" />
-                            <TextBlock Text="SIGNAL"
-                                       Classes="kicker"
-                                       FontSize="8"
-                                       TextAlignment="Center" />
-                          </StackPanel>
-                          <Border Width="8"
-                                  Height="8"
-                                  Classes="signal-dot"
-                                  HorizontalAlignment="Right"
-                                  VerticalAlignment="Top"
-                                  Margin="0,36,36,0" />
-                        </Grid>
-                      </Grid>
-                    </Grid>
-                  </Border>
-
-                  <Border Grid.Column="1"
-                          Classes="machine-card"
-                          Padding="22"
-                          MinHeight="286">
-                    <Grid RowDefinitions="Auto,*,Auto">
-                      <StackPanel Spacing="6">
-                        <TextBlock Text="THIS MACHINE"
-                                   Classes="kicker" />
-                        <TextBlock Text="Ready when you are."
-                                   FontSize="23"
-                                   FontWeight="SemiBold" />
-                      </StackPanel>
-
-                      <StackPanel Grid.Row="1"
-                                  Spacing="10"
-                                  Margin="0,18,0,0">
-                        <Border Classes="metric-tile"
-                                Padding="14">
-                          <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Spacing="3">
-                              <TextBlock Text="UPTIME"
-                                         Classes="kicker"
-                                         FontSize="8" />
-                              <TextBlock Text="{Binding Telemetry.UptimeLabel}"
-                                         FontSize="20"
+                                   FontSize="13"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="310" />
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="10"
+                                    Margin="0,14,0,0">
+                          <Border Classes="status-pill"
+                                  Padding="11,7">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="7">
+                              <Border Width="6"
+                                      Height="6"
+                                      Classes="signal-dot"
+                                      VerticalAlignment="Center" />
+                              <TextBlock Text="Live"
+                                         FontSize="10"
                                          FontWeight="SemiBold" />
                             </StackPanel>
-                            <Border Grid.Column="1"
-                                    Classes="status-pill signal"
-                                    Padding="9,5"
-                                    VerticalAlignment="Center">
-                              <TextBlock Text="LIVE"
-                                         FontSize="9"
+                          </Border>
+                          <Border Classes="status-pill"
+                                  Padding="11,7">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="7">
+                              <TextBlock Text="Uptime"
+                                         Classes="muted"
+                                         FontSize="10" />
+                              <TextBlock Text="{Binding Telemetry.UptimeLabel}"
+                                         FontSize="10"
                                          FontWeight="SemiBold" />
-                            </Border>
+                            </StackPanel>
+                          </Border>
+                        </StackPanel>
+                      </StackPanel>
+
+                      <Grid Grid.Column="1"
+                            Width="244"
+                            Height="244"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <Ellipse Width="196"
+                                 Height="58"
+                                 Fill="#5C000000"
+                                 VerticalAlignment="Bottom"
+                                 Margin="0,0,0,14" />
+                        <Ellipse Width="230"
+                                 Height="230"
+                                 Stroke="#1B262F"
+                                 StrokeThickness="1" />
+                        <Ellipse Width="200"
+                                 Height="200"
+                                 Stroke="#273540"
+                                 StrokeThickness="1" />
+                        <Ellipse Width="166"
+                                 Height="166"
+                                 Stroke="#355064"
+                                 StrokeThickness="1" />
+                        <Ellipse Width="132"
+                                 Height="132"
+                                 Fill="#100F1318"
+                                 Stroke="#3A8177FF"
+                                 StrokeThickness="1" />
+                        <Border Width="100"
+                                Height="100"
+                                Classes="core-disc"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                          <Grid>
+                            <Ellipse Width="88"
+                                     Height="88"
+                                     Stroke="#2467D9FF"
+                                     StrokeThickness="1"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center" />
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Spacing="1">
+                              <TextBlock Text="BKE"
+                                         FontSize="24"
+                                         FontWeight="SemiBold"
+                                         LetterSpacing="1"
+                                         TextAlignment="Center" />
+                              <TextBlock Text="CORE"
+                                         Classes="kicker"
+                                         FontSize="7"
+                                         TextAlignment="Center" />
+                            </StackPanel>
+                          </Grid>
+                        </Border>
+                        <Border Width="9"
+                                Height="9"
+                                Background="{StaticResource BkeSignalBrush}"
+                                CornerRadius="999"
+                                BorderBrush="#D8F7FF"
+                                BorderThickness="1"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Margin="0,43,32,0" />
+                        <Border Width="4"
+                                Height="4"
+                                Background="{StaticResource BkeIndigoBrush}"
+                                CornerRadius="999"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Bottom"
+                                Margin="38,0,0,34" />
+                      </Grid>
+
+                      <StackPanel Grid.Column="2"
+                                  Spacing="10"
+                                  VerticalAlignment="Center">
+                        <Border Classes="obsidian-metric"
+                                Padding="15">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="4">
+                              <TextBlock Text="CPU"
+                                         Classes="kicker"
+                                         FontSize="8" />
+                              <TextBlock Text="Processor"
+                                         Classes="muted"
+                                         FontSize="10" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Telemetry.CpuLabel}"
+                                       FontSize="24"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
                           </Grid>
                         </Border>
 
-                        <Border Classes="metric-tile"
-                                Padding="14">
-                          <StackPanel Spacing="3">
-                            <TextBlock Text="SIGNED IN AS"
-                                       Classes="kicker"
-                                       FontSize="8" />
-                            <TextBlock Text="{Binding AccountDisplay}"
-                                       FontSize="13"
+                        <Border Classes="obsidian-metric"
+                                Padding="15">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="4">
+                              <TextBlock Text="GPU"
+                                         Classes="kicker"
+                                         FontSize="8" />
+                              <TextBlock Text="{Binding Telemetry.GpuDetail}"
+                                         Classes="muted"
+                                         FontSize="10" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Telemetry.GpuLabel}"
+                                       FontSize="24"
                                        FontWeight="SemiBold"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding AccountTypeLabel}"
-                                       Classes="muted"
-                                       FontSize="10" />
-                          </StackPanel>
+                                       VerticalAlignment="Center" />
+                          </Grid>
+                        </Border>
+
+                        <Border Classes="obsidian-metric"
+                                Padding="15">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="4">
+                              <TextBlock Text="MEMORY"
+                                         Classes="kicker"
+                                         FontSize="8" />
+                              <TextBlock Text="Physical"
+                                         Classes="muted"
+                                         FontSize="10" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Telemetry.MemoryLabel}"
+                                       FontSize="17"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                          </Grid>
                         </Border>
                       </StackPanel>
-
-                      <Button Grid.Row="2"
-                              Content="Manage account  ›"
-                              Classes="quiet"
-                              HorizontalAlignment="Left"
-                              Click="OpenAccount" />
                     </Grid>
                   </Border>
                 </Grid>
 
                 <Grid ColumnDefinitions="*,Auto"
-                      Margin="2,0,2,0">
-                  <StackPanel Spacing="4">
+                      Margin="3,0,3,0">
+                  <StackPanel Spacing="3">
                     <TextBlock Text="Your software"
-                               FontSize="25"
+                               FontSize="24"
                                FontWeight="SemiBold" />
-                    <TextBlock Text="Everything you own or can run through BKE."
+                    <TextBlock Text="Launch-ready BKE products, kept intentionally simple."
                                Classes="muted"
-                               FontSize="12" />
+                               FontSize="11" />
+                  </StackPanel>
+                  <Button Grid.Column="1"
+                          Content="Library  ›"
+                          Classes="quiet"
+                          Click="OpenLibrary"
+                          VerticalAlignment="Center" />
+                </Grid>
+
+                <ItemsControl ItemsSource="{Binding Products}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal"
+                                 ItemWidth="182" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SoftwareProductViewModel">
+                      <Grid Width="170"
+                            Height="142"
+                            Margin="0,0,12,12">
+                        <Border Background="#5A000000"
+                                CornerRadius="22"
+                                Margin="8,10,0,0" />
+                        <Border Classes="app-shelf-card"
+                                Margin="0,0,8,10"
+                                Padding="16">
+                          <StackPanel HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Spacing="12">
+                            <Grid Width="58"
+                                  Height="58">
+                              <Border Background="#4A000000"
+                                      CornerRadius="18"
+                                      Margin="5,7,0,0" />
+                              <Border Width="53"
+                                      Height="53"
+                                      Classes="app-mark"
+                                      HorizontalAlignment="Left"
+                                      VerticalAlignment="Top">
+                                <Grid>
+                                  <Ellipse Width="28"
+                                           Height="28"
+                                           Stroke="#355064"
+                                           StrokeThickness="1" />
+                                  <Ellipse Width="16"
+                                           Height="16"
+                                           Stroke="#4A8177FF"
+                                           StrokeThickness="1" />
+                                  <Border Width="7"
+                                          Height="7"
+                                          Classes="signal-dot"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                                </Grid>
+                              </Border>
+                            </Grid>
+                            <TextBlock Text="{Binding DisplayName}"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="132" />
+                          </StackPanel>
+                        </Border>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border IsVisible="{Binding ShowEmptyProducts}"
+                        Classes="app-shelf-card"
+                        Padding="24">
+                  <TextBlock Text="Your BKE software will appear here."
+                             Classes="muted"
+                             TextAlignment="Center" />
+                </Border>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+
+          <Grid IsVisible="{Binding ShowLibraryModule}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <StackPanel Spacing="20"
+                          Margin="2,4,12,14">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="Library"
+                               FontSize="32"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="Install, open and maintain software available to this BKE account."
+                               Classes="muted"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
                   </StackPanel>
                   <StackPanel Grid.Column="1"
                               Orientation="Horizontal"
-                              Spacing="10"
+                              Spacing="8"
                               VerticalAlignment="Center">
                     <Border Classes="status-pill"
                             Padding="10,6">
@@ -1795,88 +1874,99 @@
                     <Button Content="Sync"
                             Classes="quiet"
                             Click="RefreshCatalog" />
+                    <Button Content="Browse Store  ›"
+                            Classes="signal"
+                            Click="OpenStore" />
                   </StackPanel>
                 </Grid>
+
+                <TextBlock Text="{Binding CatalogMessage}"
+                           Classes="muted"
+                           FontSize="11"
+                           TextWrapping="Wrap" />
 
                 <ItemsControl ItemsSource="{Binding Products}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                       <WrapPanel Orientation="Horizontal"
-                                 ItemWidth="430" />
+                                 ItemWidth="450" />
                     </ItemsPanelTemplate>
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SoftwareProductViewModel">
-                      <Border Classes="product-card"
-                              Width="416"
-                              MinHeight="190"
-                              Padding="18"
-                              Margin="0,0,14,14">
-                        <Grid RowDefinitions="Auto,*,Auto">
-                          <Grid ColumnDefinitions="Auto,*,Auto"
-                                ColumnSpacing="13">
-                            <Border Width="54"
-                                    Height="54"
-                                    Classes="product-icon">
-                              <Grid>
-                                <Ellipse Width="28"
-                                         Height="28"
-                                         Stroke="#477896"
-                                         StrokeThickness="1" />
-                                <Border Width="9"
-                                        Height="9"
-                                        Classes="signal-dot"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center" />
-                              </Grid>
-                            </Border>
+                      <Grid Width="436"
+                            MinHeight="210"
+                            Margin="0,0,14,14">
+                        <Border Background="#5A000000"
+                                CornerRadius="22"
+                                Margin="8,10,0,0" />
+                        <Border Classes="library-card"
+                                Margin="0,0,8,10"
+                                Padding="19">
+                          <Grid RowDefinitions="Auto,*,Auto">
+                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                  ColumnSpacing="14">
+                              <Border Width="58"
+                                      Height="58"
+                                      Classes="app-mark">
+                                <Grid>
+                                  <Ellipse Width="30"
+                                           Height="30"
+                                           Stroke="#355064"
+                                           StrokeThickness="1" />
+                                  <Ellipse Width="17"
+                                           Height="17"
+                                           Stroke="#4A8177FF"
+                                           StrokeThickness="1" />
+                                  <Border Width="7"
+                                          Height="7"
+                                          Classes="signal-dot"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                                </Grid>
+                              </Border>
 
-                            <StackPanel Grid.Column="1"
-                                        Spacing="3"
-                                        VerticalAlignment="Center">
-                              <TextBlock Text="{Binding DisplayName}"
-                                         Classes="product-title" />
-                              <StackPanel Orientation="Horizontal"
-                                          Spacing="8">
-                                <TextBlock Text="{Binding ExecutionLabel}"
-                                           Classes="muted"
-                                           FontSize="10" />
-                                <TextBlock Text="·"
-                                           Classes="muted"
-                                           FontSize="10" />
-                                <TextBlock Text="{Binding VersionLabel}"
-                                           Classes="muted"
-                                           FontSize="10" />
+                              <StackPanel Grid.Column="1"
+                                          Spacing="4"
+                                          VerticalAlignment="Center">
+                                <TextBlock Text="{Binding DisplayName}"
+                                           Classes="product-title" />
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="7">
+                                  <TextBlock Text="{Binding ExecutionLabel}"
+                                             Classes="muted"
+                                             FontSize="10" />
+                                  <TextBlock Text="·"
+                                             Classes="muted"
+                                             FontSize="10" />
+                                  <TextBlock Text="{Binding VersionLabel}"
+                                             Classes="muted"
+                                             FontSize="10" />
+                                </StackPanel>
                               </StackPanel>
-                            </StackPanel>
 
-                            <Border Grid.Column="2"
-                                    Classes="status-pill"
-                                    Padding="9,5"
-                                    VerticalAlignment="Top">
-                              <TextBlock Text="{Binding StateLabel}"
-                                         FontSize="9"
-                                         FontWeight="SemiBold" />
-                            </Border>
-                          </Grid>
+                              <Border Grid.Column="2"
+                                      Classes="status-pill"
+                                      Padding="9,5"
+                                      VerticalAlignment="Top">
+                                <TextBlock Text="{Binding StateLabel}"
+                                           FontSize="9"
+                                           FontWeight="SemiBold" />
+                              </Border>
+                            </Grid>
 
-                          <TextBlock Grid.Row="1"
-                                     Text="{Binding Summary}"
-                                     Classes="muted"
-                                     TextWrapping="Wrap"
-                                     FontSize="12"
-                                     Margin="0,14,0,12"
-                                     MaxHeight="42" />
-
-                          <Grid Grid.Row="2"
-                                ColumnDefinitions="*,Auto">
-                            <TextBlock Text="Managed by BKE"
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding Summary}"
                                        Classes="muted"
-                                       FontSize="9"
-                                       VerticalAlignment="Center" />
-                            <StackPanel Grid.Column="1"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="0,16,0,16"
+                                       MaxHeight="42" />
+
+                            <StackPanel Grid.Row="2"
                                         Orientation="Horizontal"
-                                        Spacing="6">
+                                        HorizontalAlignment="Right"
+                                        Spacing="7">
                               <Button Content="Install"
                                       Classes="signal"
                                       IsVisible="{Binding CanInstall}"
@@ -1889,7 +1979,7 @@
                                       Classes="quiet"
                                       IsVisible="{Binding CanRepair}"
                                       Click="RepairProduct" />
-                              <Button Content="Open  ›"
+                              <Button Content="Open"
                                       Classes="primary"
                                       IsVisible="{Binding CanOpen}"
                                       Click="OpenProduct" />
@@ -1899,32 +1989,22 @@
                                       Click="RemoveProduct" />
                             </StackPanel>
                           </Grid>
-                        </Grid>
-                      </Border>
+                        </Border>
+                      </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
                 <Border IsVisible="{Binding ShowEmptyProducts}"
-                        Classes="product-card"
-                        Padding="26">
-                  <StackPanel Spacing="6"
-                              HorizontalAlignment="Center">
-                    <TextBlock Text="Your software lives here."
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               TextAlignment="Center" />
-                    <TextBlock Text="BKE will surface software available to this account and machine."
-                               Classes="muted"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="520" />
-                  </StackPanel>
+                        Classes="library-card"
+                        Padding="24">
+                  <TextBlock Text="No software is currently available to this account."
+                             Classes="muted"
+                             TextAlignment="Center" />
                 </Border>
               </StackPanel>
             </ScrollViewer>
           </Grid>
-
 
           <Grid IsVisible="{Binding ShowNotificationsModule}">
             <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
