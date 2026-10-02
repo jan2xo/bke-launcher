@@ -40,6 +40,13 @@ public sealed partial class MainWindow : Window
 
         _startupInitialized = true;
         await ViewModel.InitializeAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
+
         UpdateTelemetry();
         _telemetryTimer.Start();
     }
@@ -86,6 +93,27 @@ public sealed partial class MainWindow : Window
                 CancellationToken.None);
         }
     }
+    private async void OpenHome(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            0,
+            CancellationToken.None);
+    }
+
+    private async void OpenNotifications(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            1,
+            CancellationToken.None);
+    }
+
+    private async void OpenStore(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            2,
+            CancellationToken.None);
+    }
+
 
     private async void ModuleChanged(object? sender, SelectionChangedEventArgs args)
     {
@@ -134,11 +162,23 @@ public sealed partial class MainWindow : Window
     private async void NativeSignIn(object? sender, RoutedEventArgs args)
     {
         await ViewModel.NativeSignInAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
     }
 
     private async void VerifyNativeMfa(object? sender, RoutedEventArgs args)
     {
         await ViewModel.VerifyNativeMfaAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
     }
 
     private void DismissMfaRecoveryCodes(object? sender, RoutedEventArgs args)
