@@ -83,10 +83,17 @@ public sealed class SystemTelemetryViewModel : INotifyPropertyChanged
 
     public string GpuLabel =>
         !GpuAvailable
-            ? "Not detected"
+            ? "—"
             : GpuPercent is double value
                 ? $"{value:0}%"
-                : "Available";
+                : "Ready";
+
+    public string GpuDetail =>
+        !GpuAvailable
+            ? "No GPU telemetry"
+            : GpuPercent is double
+                ? "Graphics load"
+                : "GPU available";
 
     public string UptimeLabel =>
         Uptime.TotalDays >= 1
@@ -97,15 +104,15 @@ public sealed class SystemTelemetryViewModel : INotifyPropertyChanged
 
     public string HealthLabel =>
         CpuPercent >= 92 || MemoryPercent >= 92
-            ? "SYSTEM BUSY"
-            : "SYSTEM HEALTHY";
+            ? "System busy"
+            : "System healthy";
 
     public string HealthDetail =>
         CpuPercent >= 92
-            ? "CPU load is very high."
+            ? "CPU load is very high right now."
             : MemoryPercent >= 92
-                ? "Memory pressure is very high."
-                : "BKE is keeping an eye on this machine without getting in the way.";
+                ? "Memory pressure is very high right now."
+                : "This machine is ready for your BKE software.";
 
     public void Apply(SystemTelemetrySnapshot snapshot)
     {
@@ -125,6 +132,7 @@ public sealed class SystemTelemetryViewModel : INotifyPropertyChanged
         Raise(nameof(CpuLabel));
         Raise(nameof(MemoryLabel));
         Raise(nameof(GpuLabel));
+        Raise(nameof(GpuDetail));
         Raise(nameof(UptimeLabel));
         Raise(nameof(HealthLabel));
         Raise(nameof(HealthDetail));
