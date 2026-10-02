@@ -460,6 +460,14 @@ public sealed class AgentLoopbackClient : ILauncherAgentClient, IDisposable
             request,
             cancellationToken);
 
+    public Task<LauncherPluginAuthorizeResponse> AuthorizeLauncherPluginAsync(
+        LauncherPluginAuthorizeRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<LauncherPluginAuthorizeRequest, LauncherPluginAuthorizeResponse>(
+            AgentLocalContract.LauncherPluginAuthorizePath,
+            request,
+            cancellationToken);
+
     public Task<SoftwareInstallResponse> InstallSoftwareAsync(
         SoftwareInstallRequest request,
         CancellationToken cancellationToken) =>
