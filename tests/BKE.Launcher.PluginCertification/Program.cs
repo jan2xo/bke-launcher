@@ -1,4 +1,5 @@
 using BKE.Launcher.Application;
+using BKE.Demo.LauncherPlugin;
 using BKE.Launcher.PluginHost;
 
 Require(LauncherPluginContract.Version == 1, "Launcher plugin contract version drifted.");
@@ -40,6 +41,7 @@ await CertifyAuthorizedLifecycle();
 await CertifyDenialBeforePluginCode();
 await CertifyVersionAndHostContractGates();
 CertifyDuplicateRegistrationFailsClosed();
+CertifyBundledDemoPlugin();
 
 Console.WriteLine("BKE Launcher plugin certification: PASS");
 Console.WriteLine("Plugin contract v1 exposes capabilities, not cloud credentials");
@@ -239,6 +241,37 @@ static void CertifyDuplicateRegistrationFailsClosed()
     {
         // Duplicate product identity must fail closed at composition time.
     }
+}
+
+static void CertifyBundledDemoPlugin()
+{
+    IBkeLauncherPlugin plugin = new BkeDemoLauncherPlugin();
+
+    Require(
+        plugin.Identity.ProductId == "bke-trial-product",
+        "Bundled BKE Demo plugin product id drifted.");
+    Require(
+        plugin.Identity.PluginVersion == "2.0.0",
+        "Bundled BKE Demo plugin version drifted.");
+    Require(
+        plugin.Identity.MinimumHostContractVersion ==
+            LauncherPluginContract.Version,
+        "Bundled BKE Demo plugin host-contract floor drifted.");
+
+    var authorization = new FakeAuthorizationPort([]);
+    var runtime = new LauncherPluginRuntime(
+        [plugin],
+        authorization);
+
+    Require(
+        runtime.IsRegistered("bke-trial-product", "2.0.0"),
+        "Exact bundled BKE Demo plugin is not registered.");
+    Require(
+        !runtime.IsRegistered("bke-trial-product", "1.9.9"),
+        "Launcher accepted a stale BKE Demo plugin version.");
+    Require(
+        !runtime.IsRegistered("bke-other-product", "2.0.0"),
+        "Launcher invented a Demo plugin registration for another product.");
 }
 
 static void Require(bool condition, string message)
