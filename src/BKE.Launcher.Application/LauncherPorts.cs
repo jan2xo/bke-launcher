@@ -188,6 +188,10 @@ public interface ILauncherAgentClient
         SoftwareCatalogRequest request,
         CancellationToken cancellationToken);
 
+    Task<LauncherPluginAuthorizeResponse> AuthorizeLauncherPluginAsync(
+        LauncherPluginAuthorizeRequest request,
+        CancellationToken cancellationToken);
+
     Task<SoftwareInstallResponse> InstallSoftwareAsync(
         SoftwareInstallRequest request,
         CancellationToken cancellationToken);
