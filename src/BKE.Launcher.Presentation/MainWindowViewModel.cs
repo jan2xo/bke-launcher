@@ -29,6 +29,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherSoftwareRepairController _softwareRepair;
     private readonly LauncherSoftwareOpenController _softwareOpen;
     private readonly LauncherSoftwareRemoveController _softwareRemove;
+    private readonly ILauncherPluginRuntime _pluginRuntime;
     private readonly LauncherClaimCodeRedemptionController _claimCodeRedemption;
     private readonly LauncherAccountPasswordChangeController _accountPasswordChange;
     private readonly LauncherAccountMfaController _accountMfa;
@@ -242,7 +243,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountPendingOrdersController accountPendingOrders,
         LauncherAccountLicenseSeatsController accountLicenseSeats,
         LauncherAccountLicenseDevicesController accountLicenseDevices,
-        LauncherAccountOrganizationController accountOrganization)
+        LauncherAccountOrganizationController accountOrganization,
+        ILauncherPluginRuntime pluginRuntime)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -275,6 +277,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountLicenseSeats = accountLicenseSeats;
         _accountLicenseDevices = accountLicenseDevices;
         _accountOrganization = accountOrganization;
+        _pluginRuntime = pluginRuntime ??
+            throw new ArgumentNullException(nameof(pluginRuntime));
         RestoreCheckoutRecoveryState();
     }
 
@@ -2915,7 +2919,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Products.Clear();
             foreach (var product in snapshot.Products)
             {
-                Products.Add(SoftwareProductViewModel.From(product));
+                var pluginRegistered =
+                    product.ExecutionType == ProductExecutionType.LauncherPlugin &&
+                    !string.IsNullOrWhiteSpace(product.AvailableVersion) &&
+                    _pluginRuntime.IsRegistered(
+                        product.ProductId,
+                        product.AvailableVersion);
+                Products.Add(
+                    SoftwareProductViewModel.From(
+                        product,
+                        pluginRegistered));
             }
 
             Raise(nameof(ShowEmptyProducts));
@@ -4131,6 +4144,73 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         var product = Products[index];
+
+        if (product.ExecutionType == ProductExecutionType.LauncherPlugin)
+        {
+            if (string.IsNullOrWhiteSpace(product.AvailableVersion))
+            {
+                Products[index] = product with { CanOpen = false };
+                CatalogStatus = "FAILED";
+                CatalogMessage =
+                    "The Launcher plugin does not have a catalog-authorized version.";
+                return;
+            }
+
+            CatalogStatus = "OPENING";
+            CatalogMessage =
+                $"Opening {product.DisplayName} inside BKE Launcher…";
+
+            try
+            {
+                var result = await _pluginRuntime.OpenAsync(
+                    product.ProductId,
+                    product.AvailableVersion,
+                    cancellationToken);
+
+                switch (result.Status)
+                {
+                    case "OPENED":
+                        CatalogStatus = "READY";
+                        CatalogMessage =
+                            $"{product.DisplayName} opened inside BKE Launcher.";
+                        return;
+
+                    case "AUTH_REQUIRED":
+                        Products[index] = product with { CanOpen = false };
+                        CatalogStatus = "AUTH_REQUIRED";
+                        CatalogMessage =
+                            result.Message ??
+                            "Sign in with BKE before opening this Launcher plugin.";
+                        return;
+
+                    case "UNAVAILABLE":
+                        Products[index] = product with { CanOpen = false };
+                        CatalogStatus = "FAILED";
+                        CatalogMessage =
+                            result.Message ??
+                            "This Launcher build cannot open the selected plugin.";
+                        return;
+
+                    default:
+                        CatalogStatus = "FAILED";
+                        CatalogMessage =
+                            result.Message ??
+                            $"Plugin open denied: {result.Reason}.";
+                        return;
+                }
+            }
+            catch (Exception error) when (
+                error is HttpRequestException or
+                TaskCanceledException or
+                InvalidDataException)
+            {
+                CatalogStatus = "AGENT_UNAVAILABLE";
+                CatalogMessage =
+                    "The BKE Licensing Agent plugin-authorization capability is unavailable or invalid.";
+                return;
+            }
+        }
+
         CatalogStatus = "OPENING";
         CatalogMessage =
             $"Opening {product.DisplayName} through the BKE Licensing Agent…";
@@ -8399,9 +8479,13 @@ public sealed record SoftwareProductViewModel(
     bool CanUpdate,
     bool CanRepair,
     bool CanOpen,
-    bool CanRemove)
+    bool CanRemove,
+    ProductExecutionType? ExecutionType = null,
+    string? AvailableVersion = null)
 {
-    public static SoftwareProductViewModel From(LauncherProduct product)
+    public static SoftwareProductViewModel From(
+        LauncherProduct product,
+        bool launcherPluginRegistered = false)
     {
         var execution = product.ExecutionType switch
         {
@@ -8414,6 +8498,12 @@ public sealed record SoftwareProductViewModel(
         var state = product.State switch
         {
             LauncherProductState.NotEntitled => "Not entitled",
+            LauncherProductState.Installable
+                when product.ExecutionType == ProductExecutionType.LauncherPlugin &&
+                     launcherPluginRegistered => "Available",
+            LauncherProductState.Installable
+                when product.ExecutionType == ProductExecutionType.LauncherPlugin =>
+                    "Launcher update required",
             LauncherProductState.Installable => "Installable",
             LauncherProductState.Installed => "Installed",
             LauncherProductState.UpdateAvailable => "Update available",
@@ -8448,13 +8538,18 @@ public sealed record SoftwareProductViewModel(
             product.State is LauncherProductState.Installed
                 or LauncherProductState.UpdateAvailable
                 or LauncherProductState.RepairRequired,
-            product.ExecutionType == ProductExecutionType.Standalone &&
-            product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable,
+            (product.ExecutionType == ProductExecutionType.Standalone &&
+             product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable) ||
+            (product.ExecutionType == ProductExecutionType.LauncherPlugin &&
+             launcherPluginRegistered &&
+             product.State == LauncherProductState.Installable),
             product.ExecutionType == ProductExecutionType.Standalone &&
             product.State is LauncherProductState.Installed
                 or LauncherProductState.UpdateAvailable
                 or LauncherProductState.InstalledNotEntitled
-                or LauncherProductState.RepairRequired);
+                or LauncherProductState.RepairRequired,
+            product.ExecutionType,
+            product.AvailableVersion);
     }
 }
 
