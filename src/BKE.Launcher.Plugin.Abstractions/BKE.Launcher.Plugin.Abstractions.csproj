@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>BKE.Launcher.Plugin.Abstractions</AssemblyName>
+    <RootNamespace>BKE.Launcher.PluginHost</RootNamespace>
+    <Description>Stable build-time plugin contract for BKE Launcher-hosted products.</Description>
+  </PropertyGroup>
+</Project>
