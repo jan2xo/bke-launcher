@@ -2526,17 +2526,6 @@ Require(
         "SYSTEM BUSY",
         StringComparison.Ordinal),
     "Launcher BKE Signal telemetry projection lost human-readable health state.");
-Require(
-    normalizedViewModelSource.Contains(
-        "WaitForProductConvergenceAsync(",
-        StringComparison.Ordinal) &&
-    normalizedViewModelSource.Contains(
-        "BKE is watching the Agent for completion.",
-        StringComparison.Ordinal) &&
-    !normalizedViewModelSource.Contains(
-        "Refresh software after the elevation step completes.",
-        StringComparison.Ordinal),
-    "Launcher software lifecycle still requires normal users to manually refresh after verified operations.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowLoginPage}\"", StringComparison.Ordinal),
     "Launcher does not gate unauthenticated startup on the Login page.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAuthenticatedShell}\"", StringComparison.Ordinal),
@@ -2782,6 +2771,17 @@ Require(mainWindowSource.Contains("OpenPurchaseLegalDocument", StringComparison.
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
+Require(
+    normalizedViewModelSource.Contains(
+        "WaitForProductConvergenceAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "BKE is watching the Agent for completion.",
+        StringComparison.Ordinal) &&
+    !normalizedViewModelSource.Contains(
+        "Refresh software after the elevation step completes.",
+        StringComparison.Ordinal),
+    "Launcher software lifecycle still requires normal users to manually refresh after verified operations.");
 Require(normalizedViewModelSource.Contains(
     "await _notifications.GetAsync(",
     StringComparison.Ordinal),
