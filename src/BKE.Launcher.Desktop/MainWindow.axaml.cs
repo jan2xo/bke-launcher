@@ -137,15 +137,16 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
-    private void WindowDragPointerPressed(
-        object? sender,
-        PointerPressedEventArgs args)
-    {
-        if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            BeginMoveDrag(args);
-        }
-    }
+    private void MinimizeWindow(object? sender, RoutedEventArgs args) =>
+        WindowState = WindowState.Minimized;
+
+    private void ToggleMaximizeWindow(object? sender, RoutedEventArgs args) =>
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+
+    private void CloseWindow(object? sender, RoutedEventArgs args) =>
+        Close();
 
 
     private async void ModuleChanged(object? sender, SelectionChangedEventArgs args)
