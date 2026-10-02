@@ -286,6 +286,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
+    public ObservableCollection<SoftwareProductViewModel> DashboardProducts { get; } = [];
     public SystemTelemetryViewModel Telemetry { get; } = new();
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
@@ -2052,6 +2053,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
 
     public bool ShowEmptyProducts => Products.Count == 0;
+    public bool ShowEmptyDashboardProducts => DashboardProducts.Count == 0;
     public bool ShowEmptyStore => StoreProducts.Count == 0;
     public bool ShowEmptyNotifications => Notifications.Count == 0;
 
@@ -3027,6 +3029,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                         pluginRegistered));
             }
 
+            RefreshDashboardProducts();
             Raise(nameof(ShowEmptyProducts));
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
@@ -7872,7 +7875,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CatalogStatus = status;
         CatalogMessage = message;
         Products.Clear();
+        DashboardProducts.Clear();
         Raise(nameof(ShowEmptyProducts));
+        Raise(nameof(ShowEmptyDashboardProducts));
+    }
+
+    private void RefreshDashboardProducts()
+    {
+        DashboardProducts.Clear();
+        foreach (var product in Products.Where(product => product.CanOpen))
+        {
+            DashboardProducts.Add(product);
+        }
+
+        Raise(nameof(ShowEmptyDashboardProducts));
     }
 
     private void ClearStore(string status, string message)
