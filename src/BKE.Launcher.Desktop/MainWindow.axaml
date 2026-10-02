@@ -9,13 +9,41 @@
         Height="680"
         MinWidth="760"
         MinHeight="540"
+        CanResize="True"
+        CanMinimize="True"
+        CanMaximize="True"
+        ExtendClientAreaToDecorationsHint="True"
         WindowDecorations="None">
   <Grid>
-    <Border Height="12"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Top"
-            Background="Transparent"
-            PointerPressed="WindowDragPointerPressed" />
+    <Grid Height="32"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Top"
+          ColumnDefinitions="*,Auto"
+          Panel.ZIndex="100">
+      <Border Background="Transparent"
+              WindowDecorationProperties.ElementRole="TitleBar" />
+      <StackPanel Grid.Column="1"
+                  Orientation="Horizontal"
+                  Spacing="2"
+                  Margin="0,3,6,0"
+                  VerticalAlignment="Top">
+        <Button Content="—"
+                Classes="window-control"
+                ToolTip.Tip="Minimize"
+                WindowDecorationProperties.ElementRole="MinimizeButton"
+                Click="MinimizeWindow" />
+        <Button Content="□"
+                Classes="window-control"
+                ToolTip.Tip="Maximize or restore"
+                WindowDecorationProperties.ElementRole="MaximizeButton"
+                Click="ToggleMaximizeWindow" />
+        <Button Content="×"
+                Classes="window-control window-close"
+                ToolTip.Tip="Close BKE"
+                WindowDecorationProperties.ElementRole="CloseButton"
+                Click="CloseWindow" />
+      </StackPanel>
+    </Grid>
 
     <Border IsVisible="{Binding ShowLoginPage}"
             Classes="surface"
@@ -223,7 +251,7 @@
 
     <Grid IsVisible="{Binding ShowAuthenticatedShell}"
           ColumnDefinitions="Auto,*"
-          Margin="16,16,16,16">
+          Margin="16,36,16,16">
       <Border Width="{Binding SidebarWidth}"
               Classes="sidebar"
               Padding="10">
@@ -1649,9 +1677,9 @@
                           Margin="7,9,6,5" />
                   <Border Classes="obsidian-hero"
                           Margin="0,0,13,13"
-                          Padding="30">
-                    <Grid ColumnDefinitions="0.85*,0.9*,0.7*"
-                          ColumnSpacing="26">
+                          Padding="24">
+                    <Grid ColumnDefinitions="*,208,164"
+                          ColumnSpacing="16">
 
                       <StackPanel Spacing="10"
                                   VerticalAlignment="Center">
@@ -1659,7 +1687,8 @@
                                    Classes="kicker" />
                         <TextBlock Text="{Binding Telemetry.HealthLabel}"
                                    Classes="display-title"
-                                   FontSize="38" />
+                                   FontSize="30"
+                                   TextWrapping="Wrap" />
                         <TextBlock Text="{Binding Telemetry.HealthDetail}"
                                    Classes="muted"
                                    FontSize="13"
@@ -1697,40 +1726,40 @@
                       </StackPanel>
 
                       <Grid Grid.Column="1"
-                            Width="244"
-                            Height="244"
+                            Width="208"
+                            Height="208"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center">
-                        <Ellipse Width="196"
-                                 Height="58"
+                        <Ellipse Width="168"
+                                 Height="48"
                                  Fill="#5C000000"
                                  VerticalAlignment="Bottom"
-                                 Margin="0,0,0,14" />
-                        <Ellipse Width="230"
-                                 Height="230"
+                                 Margin="0,0,0,12" />
+                        <Ellipse Width="196"
+                                 Height="196"
                                  Stroke="#1B262F"
                                  StrokeThickness="1" />
-                        <Ellipse Width="200"
-                                 Height="200"
+                        <Ellipse Width="170"
+                                 Height="170"
                                  Stroke="#273540"
                                  StrokeThickness="1" />
-                        <Ellipse Width="166"
-                                 Height="166"
+                        <Ellipse Width="142"
+                                 Height="142"
                                  Stroke="#355064"
                                  StrokeThickness="1" />
-                        <Ellipse Width="132"
-                                 Height="132"
+                        <Ellipse Width="112"
+                                 Height="112"
                                  Fill="#100F1318"
                                  Stroke="#3A8177FF"
                                  StrokeThickness="1" />
-                        <Border Width="100"
-                                Height="100"
+                        <Border Width="86"
+                                Height="86"
                                 Classes="core-disc"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
                           <Grid>
-                            <Ellipse Width="88"
-                                     Height="88"
+                            <Ellipse Width="74"
+                                     Height="74"
                                      Stroke="#2467D9FF"
                                      StrokeThickness="1"
                                      HorizontalAlignment="Center"
@@ -1739,7 +1768,7 @@
                                         VerticalAlignment="Center"
                                         Spacing="1">
                               <TextBlock Text="BKE"
-                                         FontSize="24"
+                                         FontSize="21"
                                          FontWeight="SemiBold"
                                          LetterSpacing="1"
                                          TextAlignment="Center" />
@@ -1750,22 +1779,22 @@
                             </StackPanel>
                           </Grid>
                         </Border>
-                        <Border Width="9"
-                                Height="9"
+                        <Border Width="8"
+                                Height="8"
                                 Background="{StaticResource BkeSignalBrush}"
                                 CornerRadius="999"
                                 BorderBrush="#D8F7FF"
                                 BorderThickness="1"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
-                                Margin="0,43,32,0" />
+                                Margin="0,36,27,0" />
                         <Border Width="4"
                                 Height="4"
                                 Background="{StaticResource BkeIndigoBrush}"
                                 CornerRadius="999"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Bottom"
-                                Margin="38,0,0,34" />
+                                Margin="32,0,0,29" />
                       </Grid>
 
                       <StackPanel Grid.Column="2"
@@ -1836,11 +1865,11 @@
                       Margin="3,0,3,0">
                   <StackPanel Spacing="3">
                     <TextBlock Text="Your software"
-                               FontSize="24"
+                               FontSize="20"
                                FontWeight="SemiBold" />
-                    <TextBlock Text="Launch-ready BKE products, kept intentionally simple."
+                    <TextBlock Text="Only software that is ready to open on this machine."
                                Classes="muted"
-                               FontSize="11" />
+                               FontSize="10" />
                   </StackPanel>
                   <Button Grid.Column="1"
                           Content="Library  ›"
@@ -1849,50 +1878,50 @@
                           VerticalAlignment="Center" />
                 </Grid>
 
-                <ItemsControl ItemsSource="{Binding Products}">
+                <ItemsControl ItemsSource="{Binding DashboardProducts}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                       <WrapPanel Orientation="Horizontal"
-                                 ItemWidth="182" />
+                                 ItemWidth="136" />
                     </ItemsPanelTemplate>
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SoftwareProductViewModel">
                       <Button Classes="app-tile"
-                              Margin="0,0,12,12"
+                              Margin="0,0,10,10"
                               Click="OpenDashboardProduct">
-                        <Grid Width="170"
-                              Height="142">
+                        <Grid Width="126"
+                              Height="104">
                           <Border Background="#5A000000"
-                                  CornerRadius="22"
-                                  Margin="8,10,0,0" />
+                                  CornerRadius="16"
+                                  Margin="5,7,0,0" />
                           <Border Classes="app-shelf-card"
-                                  Margin="0,0,8,10"
-                                  Padding="16">
+                                  Margin="0,0,5,7"
+                                  Padding="11">
                             <StackPanel HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
-                                        Spacing="12">
-                              <Grid Width="58"
-                                    Height="58">
+                                        Spacing="7">
+                              <Grid Width="42"
+                                    Height="42">
                                 <Border Background="#4A000000"
-                                        CornerRadius="18"
-                                        Margin="5,7,0,0" />
-                                <Border Width="53"
-                                        Height="53"
+                                        CornerRadius="14"
+                                        Margin="4,5,0,0" />
+                                <Border Width="38"
+                                        Height="38"
                                         Classes="app-mark"
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Top">
                                   <Grid>
-                                    <Ellipse Width="28"
-                                             Height="28"
+                                    <Ellipse Width="22"
+                                             Height="22"
                                              Stroke="#355064"
                                              StrokeThickness="1" />
-                                    <Ellipse Width="16"
-                                             Height="16"
+                                    <Ellipse Width="12"
+                                             Height="12"
                                              Stroke="#4A8177FF"
                                              StrokeThickness="1" />
-                                    <Border Width="7"
-                                            Height="7"
+                                    <Border Width="5"
+                                            Height="5"
                                             Classes="signal-dot"
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center" />
@@ -1900,11 +1929,11 @@
                                 </Border>
                               </Grid>
                               <TextBlock Text="{Binding DisplayName}"
-                                         FontSize="13"
+                                         FontSize="11"
                                          FontWeight="SemiBold"
                                          TextAlignment="Center"
                                          TextWrapping="Wrap"
-                                         MaxWidth="132" />
+                                         MaxWidth="102" />
                             </StackPanel>
                           </Border>
                         </Grid>
@@ -1913,12 +1942,15 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Border IsVisible="{Binding ShowEmptyProducts}"
-                        Classes="app-shelf-card"
-                        Padding="24">
-                  <TextBlock Text="Your BKE software will appear here."
+                <Border IsVisible="{Binding ShowEmptyDashboardProducts}"
+                        Classes="content-card"
+                        Padding="12"
+                        MaxWidth="420"
+                        HorizontalAlignment="Left">
+                  <TextBlock Text="No software is ready to open yet. Use Library to install software available to this account."
                              Classes="muted"
-                             TextAlignment="Center" />
+                             FontSize="11"
+                             TextWrapping="Wrap" />
                 </Border>
               </StackPanel>
             </ScrollViewer>
@@ -2441,5 +2473,60 @@
         </Grid>
       </Grid>
     </Grid>
+
+
+    <Border Height="6"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            Background="Transparent"
+            Panel.ZIndex="200"
+            WindowDecorationProperties.ElementRole="ResizeN" />
+    <Border Height="6"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Bottom"
+            Background="Transparent"
+            Panel.ZIndex="200"
+            WindowDecorationProperties.ElementRole="ResizeS" />
+    <Border Width="6"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Stretch"
+            Background="Transparent"
+            Panel.ZIndex="200"
+            WindowDecorationProperties.ElementRole="ResizeW" />
+    <Border Width="6"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Stretch"
+            Background="Transparent"
+            Panel.ZIndex="200"
+            WindowDecorationProperties.ElementRole="ResizeE" />
+
+    <Border Width="10"
+            Height="10"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Background="Transparent"
+            Panel.ZIndex="210"
+            WindowDecorationProperties.ElementRole="ResizeNW" />
+    <Border Width="10"
+            Height="10"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Background="Transparent"
+            Panel.ZIndex="210"
+            WindowDecorationProperties.ElementRole="ResizeNE" />
+    <Border Width="10"
+            Height="10"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="Transparent"
+            Panel.ZIndex="210"
+            WindowDecorationProperties.ElementRole="ResizeSW" />
+    <Border Width="10"
+            Height="10"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Background="Transparent"
+            Panel.ZIndex="210"
+            WindowDecorationProperties.ElementRole="ResizeSE" />
   </Grid>
 </Window>
