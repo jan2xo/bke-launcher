@@ -2837,7 +2837,7 @@ Require(
         "private void PrepareAuthenticatedShellSurface()",
         StringComparison.Ordinal) &&
     normalizedViewModelSource.Contains(
-        "Open My Software to load software for this BKE account.",
+        "Home is ready to sync software for this BKE account.",
         StringComparison.Ordinal) &&
     normalizedViewModelSource.Contains(
         "Open Store to browse software for this BKE account.",
@@ -6173,8 +6173,8 @@ static async Task CertifySelfPurchaseRefreshesMySoftwareAsync()
 
     await viewModel.InitializeAsync(CancellationToken.None);
     Require(viewModel.IsAuthenticated, "Customer journey did not enter the authenticated BKE shell.");
-    Require(viewModel.SelectedModuleIndex == -1,
-        "Authenticated startup auto-selected a customer destination.");
+    Require(viewModel.SelectedModuleIndex == 0,
+        "Authenticated startup did not select the BKE Signal Home surface.");
 
     await viewModel.OpenModuleAsync(0, CancellationToken.None);
     Require(viewModel.Products.Count == 1 &&
