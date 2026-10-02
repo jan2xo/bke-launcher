@@ -211,6 +211,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _checkoutRecoveryStateBlocked;
     private int _selectedModuleIndex = -1;
     private bool _showAccountSurface;
+    private bool _sidebarExpanded = true;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -1642,6 +1643,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool IsSidebarExpanded
+    {
+        get => _sidebarExpanded;
+        private set
+        {
+            SetField(ref _sidebarExpanded, value);
+            Raise(nameof(IsSidebarCollapsed));
+            Raise(nameof(SidebarWidth));
+        }
+    }
+
+    public bool IsSidebarCollapsed => !IsSidebarExpanded;
+
+    public double SidebarWidth =>
+        IsSidebarExpanded
+            ? 208
+            : 68;
+
+    public void ToggleSidebar() =>
+        IsSidebarExpanded = !IsSidebarExpanded;
+
+    public void CollapseSidebar() =>
+        IsSidebarExpanded = false;
+
     public bool ShowHomeModule =>
         IsAuthenticated &&
         !ShowAccountSurface &&
@@ -1708,7 +1733,40 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string AccountDisplay
     {
         get => _accountDisplay;
-        private set => SetField(ref _accountDisplay, value);
+        private set
+        {
+            SetField(ref _accountDisplay, value);
+            Raise(nameof(AccountInitials));
+        }
+    }
+
+    public string AccountInitials
+    {
+        get
+        {
+            var parts = AccountDisplay
+                .Split(
+                    [' ', '\t', '\r', '\n'],
+                    StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries);
+
+            if (parts.Length == 0)
+            {
+                return "B";
+            }
+
+            if (parts.Length == 1)
+            {
+                return parts[0].Length == 1
+                    ? parts[0].ToUpperInvariant()
+                    : parts[0][..2].ToUpperInvariant();
+            }
+
+            return string.Concat(
+                parts[0][0],
+                parts[^1][0])
+                .ToUpperInvariant();
+        }
     }
 
     public string AccountTypeLabel =>
