@@ -19,5 +19,6 @@
     <ProjectReference Include="../BKE.Launcher.Infrastructure/BKE.Launcher.Infrastructure.csproj" />
     <ProjectReference Include="../BKE.Launcher.Presentation/BKE.Launcher.Presentation.csproj" />
     <ProjectReference Include="../BKE.Launcher.PluginHost/BKE.Launcher.PluginHost.csproj" />
+    <ProjectReference Include="../../plugins/bke-demo-app/plugin/BKE.Demo.LauncherPlugin/BKE.Demo.LauncherPlugin.csproj" />
   </ItemGroup>
 </Project>

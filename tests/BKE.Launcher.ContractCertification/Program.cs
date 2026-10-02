@@ -64,6 +64,110 @@ Require(
             "PluginContract.cs")),
     "Launcher PluginHost duplicated the external plugin contract source.");
 
+const string BundledDemoSourceSha =
+    "0cf6155714ca444741347ecee1f26ee0c79a4738";
+const string BundledDemoLauncherContractSha =
+    "44c6f94eaf7f5ec3b94567eee4af5366f47fc873";
+
+var gitmodules = File.ReadAllText(".gitmodules");
+var demoSourcePin = File.ReadAllText(
+    Path.Combine("eng", "demo-app-source.sha")).Trim();
+var demoLauncherPin = File.ReadAllText(
+    Path.Combine(
+        "plugins",
+        "bke-demo-app",
+        "eng",
+        "launcher-source.sha")).Trim();
+var demoPluginProject = File.ReadAllText(
+    Path.Combine(
+        "plugins",
+        "bke-demo-app",
+        "plugin",
+        "BKE.Demo.LauncherPlugin",
+        "BKE.Demo.LauncherPlugin.csproj"));
+var demoPluginSource = File.ReadAllText(
+    Path.Combine(
+        "plugins",
+        "bke-demo-app",
+        "plugin",
+        "BKE.Demo.LauncherPlugin",
+        "BkeDemoLauncherPlugin.cs"));
+var launcherDesktopProject = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Desktop",
+        "BKE.Launcher.Desktop.csproj"));
+var launcherComposition = File.ReadAllText(
+    Path.Combine(
+        "src",
+        "BKE.Launcher.Desktop",
+        "App.axaml.cs"));
+
+Require(
+    gitmodules.Contains(
+        "path = plugins/bke-demo-app",
+        StringComparison.Ordinal) &&
+    gitmodules.Contains(
+        "url = https://github.com/jan2xo/bke-demo-app.git",
+        StringComparison.Ordinal),
+    "BKE Demo gitlink source repository drifted.");
+Require(
+    demoSourcePin == BundledDemoSourceSha,
+    "BKE Demo source pin drifted from the certified merged Demo App SHA.");
+Require(
+    demoLauncherPin == BundledDemoLauncherContractSha,
+    "BKE Demo was not certified against the expected Launcher plugin contract SHA.");
+Require(
+    demoPluginProject.Contains(
+        "BKE.Launcher.Plugin.Abstractions",
+        StringComparison.Ordinal) &&
+    !demoPluginProject.Contains(
+        "BKE.Launcher.PluginHost/BKE.Launcher.PluginHost.csproj",
+        StringComparison.Ordinal),
+    "BKE Demo plugin dependency boundary drifted.");
+Require(
+    demoPluginSource.Contains(
+        "public const string ProductId = \"bke-trial-product\"",
+        StringComparison.Ordinal) &&
+    demoPluginSource.Contains(
+        "public const string Version = \"2.0.0\"",
+        StringComparison.Ordinal) &&
+    demoPluginSource.Contains(
+        ": IBkeLauncherPlugin",
+        StringComparison.Ordinal),
+    "Bundled BKE Demo plugin identity/contract drifted.");
+Require(
+    !demoPluginSource.Contains(
+        "127.0.0.1:43873",
+        StringComparison.Ordinal) &&
+    !demoPluginSource.Contains(
+        "HttpClient",
+        StringComparison.Ordinal) &&
+    !demoPluginSource.Contains(
+        "/v1/",
+        StringComparison.Ordinal) &&
+    !demoPluginSource.Contains(
+        "BKE.Desktop.Client",
+        StringComparison.Ordinal),
+    "Bundled BKE Demo plugin crossed the Launcher host boundary.");
+Require(
+    launcherDesktopProject.Contains(
+        "../../plugins/bke-demo-app/plugin/BKE.Demo.LauncherPlugin/BKE.Demo.LauncherPlugin.csproj",
+        StringComparison.Ordinal),
+    "Launcher Desktop stopped compiling the exact bundled BKE Demo source.");
+Require(
+    launcherComposition.Contains(
+        "new BkeDemoLauncherPlugin()",
+        StringComparison.Ordinal) &&
+    !launcherComposition.Contains(
+        "Array.Empty<IBkeLauncherPlugin>()",
+        StringComparison.Ordinal),
+    "Launcher Desktop is not registering the real bundled BKE Demo plugin.");
+Require(
+    File.Exists(
+        Path.Combine("eng", "verify-bundled-plugins.sh")),
+    "Bundled plugin provenance verifier is missing.");
+
 var preproductionReleaseRequestPath = Path.Combine(
     "eng",
     "preproduction-parent-release.json");
