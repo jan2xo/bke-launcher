@@ -2502,12 +2502,33 @@ Require(
         "WindowDecorations=\"None\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "PointerPressed=\"WindowDragPointerPressed\"",
+        "CanResize=\"True\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ExtendClientAreaToDecorationsHint=\"True\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "WindowDecorationProperties.ElementRole=\"TitleBar\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "WindowDecorationProperties.ElementRole=\"ResizeSE\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"MinimizeWindow\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"ToggleMaximizeWindow\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"CloseWindow\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
-        "BeginMoveDrag(args);",
+        "WindowState = WindowState.Minimized;",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "Close();",
         StringComparison.Ordinal),
-    "Launcher does not own its Obsidian Core window chrome.");
+    "Launcher does not own usable custom window chrome and resize behavior.");
 Require(
     mainWindowMarkup.Contains(
         "Width=\"1024\"",
@@ -2664,7 +2685,13 @@ var librarySurface = mainWindowMarkup[
     librarySurfaceStart..notificationsSurfaceStart];
 Require(
     dashboardSurface.Contains(
-        "ItemsSource=\"{Binding Products}\"",
+        "ItemsSource=\"{Binding DashboardProducts}\"",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "public ObservableCollection<SoftwareProductViewModel> DashboardProducts",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "Products.Where(product => product.CanOpen)",
         StringComparison.Ordinal) &&
     dashboardSurface.Contains(
         "Text=\"{Binding DisplayName}\"",
