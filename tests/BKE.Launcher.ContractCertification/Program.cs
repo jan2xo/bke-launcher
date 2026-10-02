@@ -2470,13 +2470,22 @@ Require(
     "Launcher BKE Signal GPU telemetry dependency is not pinned.");
 Require(
     mainWindowMarkup.Contains(
-        "Click=\"OpenHome\"",
+        "Content=\"Dashboard\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Classes.active=\"{Binding ShowHomeModule}\"",
+        "Click=\"OpenDashboard\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Text=\"SYSTEM CORE\"",
+        "Content=\"Library\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenLibrary\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"SYSTEM\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"CORE\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Telemetry.CpuLabel",
@@ -2486,11 +2495,27 @@ Require(
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Telemetry.MemoryLabel",
+        StringComparison.Ordinal),
+    "Launcher BKE Obsidian Core Dashboard surface is incomplete.");
+Require(
+    mainWindowMarkup.Contains(
+        "SystemDecorations=\"None\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Classes=\"product-card\"",
+        "PointerPressed=\"WindowDragPointerPressed\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "BeginMoveDrag(args);",
         StringComparison.Ordinal),
-    "Launcher BKE Signal branded Home dashboard surface is incomplete.");
+    "Launcher does not own its Obsidian Core window chrome.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"BKE SIGNAL\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"SIGNAL\"",
+        StringComparison.Ordinal),
+    "Launcher still exposes Signal as a visible product brand instead of BKE.");
 Require(
     mainWindowSource.Contains(
         "Interval = TimeSpan.FromSeconds(2)",
@@ -2547,13 +2572,19 @@ Require(
         "IsVisible=\"{Binding ShowHomeModule}\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowLibraryModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowNotificationsModule}\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowStoreModule}\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
-        "OpenHome",
+        "OpenDashboard",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenLibrary",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
         "OpenNotifications",
@@ -2561,7 +2592,63 @@ Require(
     mainWindowSource.Contains(
         "OpenStore",
         StringComparison.Ordinal),
-    "Launcher shell did not replace default tab chrome with explicit Signal navigation.");
+    "Launcher shell did not preserve explicit Dashboard / Library / Notifications navigation.");
+var dashboardSurfaceStart = mainWindowMarkup.IndexOf(
+    "IsVisible=\"{Binding ShowHomeModule}\"",
+    StringComparison.Ordinal);
+var librarySurfaceStart = mainWindowMarkup.IndexOf(
+    "IsVisible=\"{Binding ShowLibraryModule}\"",
+    StringComparison.Ordinal);
+var notificationsSurfaceStart = mainWindowMarkup.IndexOf(
+    "IsVisible=\"{Binding ShowNotificationsModule}\"",
+    StringComparison.Ordinal);
+Require(
+    dashboardSurfaceStart >= 0 &&
+    librarySurfaceStart > dashboardSurfaceStart &&
+    notificationsSurfaceStart > librarySurfaceStart,
+    "Launcher Dashboard/Library surface boundaries are unavailable.");
+var dashboardSurface = mainWindowMarkup[
+    dashboardSurfaceStart..librarySurfaceStart];
+var librarySurface = mainWindowMarkup[
+    librarySurfaceStart..notificationsSurfaceStart];
+Require(
+    dashboardSurface.Contains(
+        "ItemsSource=\"{Binding Products}\"",
+        StringComparison.Ordinal) &&
+    dashboardSurface.Contains(
+        "Text=\"{Binding DisplayName}\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"InstallProduct\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"UpdateProduct\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"RepairProduct\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"RemoveProduct\"",
+        StringComparison.Ordinal),
+    "Launcher Dashboard software shelf is no longer minimal.");
+Require(
+    librarySurface.Contains(
+        "Click=\"InstallProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"UpdateProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"RepairProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"RemoveProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"OpenProduct\"",
+        StringComparison.Ordinal),
+    "Launcher Library no longer owns software lifecycle actions.");
+
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", StringComparison.Ordinal),
     "Launcher Account surface is not explicitly user-selected.");
 Require(
@@ -2779,7 +2866,7 @@ Require(mainWindowSource.Contains("RefreshNotifications", StringComparison.Ordin
     "BKE Notifications refresh click handler is missing.");
 Require(
     mainWindowMarkup.Contains(
-        "Content=\"Store\"",
+        "Content=\"Browse Store  ›\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Click=\"OpenStore\"",
@@ -2787,7 +2874,7 @@ Require(
     mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowStoreModule}\"",
         StringComparison.Ordinal),
-    "BKE Store Signal navigation/surface is missing.");
+    "BKE Store is no longer reachable from the Library commerce entry point.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
 Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
@@ -6022,7 +6109,7 @@ static async Task CertifySafeAccountSwitchingAsync()
     Require(
         lockedViewModel.CanLeaveOrganization,
         "Checkout-lock certification did not begin with an otherwise leave-authorized Organization membership.");
-    await lockedViewModel.OpenModuleAsync(2, CancellationToken.None);
+    await lockedViewModel.OpenModuleAsync(3, CancellationToken.None);
     await lockedViewModel.ReviewPurchaseAsync(
         CustomerJourneyAgentClient.PurchasePlanId,
         CancellationToken.None);
@@ -6074,7 +6161,7 @@ static async Task CertifySafeAccountSwitchingAsync()
         "Checkout-lock ownership certification did not begin with an authorized owner.");
 
     await lockedOwnerViewModel.OpenModuleAsync(
-        2,
+        3,
         CancellationToken.None);
     await lockedOwnerViewModel.ReviewPurchaseAsync(
         CustomerJourneyAgentClient.PurchasePlanId,
@@ -6143,7 +6230,7 @@ static async Task CertifySelfServiceTrialRefreshesMySoftwareAsync()
         viewModel.Products.Single().StateLabel == "Not entitled",
         "Trial journey did not begin without entitlement.");
 
-    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    await viewModel.OpenModuleAsync(3, CancellationToken.None);
     var edition = viewModel.StoreProducts.Single().Editions.Single();
     Require(
         edition.EditionId == CustomerJourneyAgentClient.EditionId &&
@@ -6179,7 +6266,7 @@ static async Task CertifySelfServiceTrialRefreshesMySoftwareAsync()
     await uncertainViewModel.InitializeAsync(
         CancellationToken.None);
     await uncertainViewModel.OpenModuleAsync(
-        2,
+        3,
         CancellationToken.None);
     var uncertainEdition =
         uncertainViewModel.StoreProducts.Single().Editions.Single();
@@ -6223,7 +6310,7 @@ static async Task CertifySelfPurchaseRefreshesMySoftwareAsync()
     await viewModel.InitializeAsync(CancellationToken.None);
     Require(viewModel.IsAuthenticated, "Customer journey did not enter the authenticated BKE shell.");
     Require(viewModel.SelectedModuleIndex == 0,
-        "Authenticated startup did not select the BKE Signal Home surface.");
+        "Authenticated startup did not select the BKE Dashboard surface.");
 
     await viewModel.OpenModuleAsync(0, CancellationToken.None);
     Require(viewModel.Products.Count == 1 &&
@@ -6231,7 +6318,7 @@ static async Task CertifySelfPurchaseRefreshesMySoftwareAsync()
             !viewModel.Products[0].CanInstall,
         "SELF journey did not begin without software ownership.");
 
-    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    await viewModel.OpenModuleAsync(3, CancellationToken.None);
     Require(viewModel.StoreProducts.Count == 1,
         "SELF journey could not load the Agent-mediated Store.");
 
@@ -6278,7 +6365,7 @@ static async Task CertifyGiftPurchaseStaysUnboundAsync()
 
     await viewModel.InitializeAsync(CancellationToken.None);
     await viewModel.OpenModuleAsync(0, CancellationToken.None);
-    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    await viewModel.OpenModuleAsync(3, CancellationToken.None);
     await viewModel.ReviewPurchaseAsync(
         CustomerJourneyAgentClient.PurchasePlanId,
         CancellationToken.None);
