@@ -6,6 +6,7 @@ using BKE.Launcher.AgentClient;
 using BKE.Launcher.Application;
 using BKE.Launcher.Infrastructure;
 using BKE.Launcher.Presentation;
+using BKE.Launcher.PluginHost;
 
 namespace BKE.Launcher.Desktop;
 
@@ -56,6 +57,11 @@ public sealed partial class App : Avalonia.Application
             var softwareRepair = new LauncherSoftwareRepairController(agentClient);
             var softwareOpen = new LauncherSoftwareOpenController(agentClient);
             var softwareRemove = new LauncherSoftwareRemoveController(agentClient);
+            var pluginAuthorization =
+                new LauncherPluginAuthorizationController(agentClient);
+            var pluginRuntime = new LauncherPluginRuntime(
+                Array.Empty<IBkeLauncherPlugin>(),
+                pluginAuthorization);
             var claimCodeRedemption = new LauncherClaimCodeRedemptionController(agentClient);
             var accountPasswordChange = new LauncherAccountPasswordChangeController(agentClient);
             var accountMfa = new LauncherAccountMfaController(agentClient);
@@ -99,7 +105,8 @@ public sealed partial class App : Avalonia.Application
                 accountPendingOrders,
                 accountLicenseSeats,
                 accountLicenseDevices,
-                accountOrganization);
+                accountOrganization,
+                pluginRuntime);
 
             desktop.MainWindow = new MainWindow
             {
@@ -125,6 +132,21 @@ public sealed partial class App : Avalonia.Application
 
             desktop.Exit += (_, _) =>
             {
+                using var shutdownTimeout =
+                    new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                try
+                {
+                    pluginRuntime
+                        .ShutdownAsync(shutdownTimeout.Token)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+                catch
+                {
+                    // Application shutdown must continue even when a bundled
+                    // plugin cannot finish cleanup within the bounded window.
+                }
+
                 identityClient.Dispose();
                 agentClient.Dispose();
             };
