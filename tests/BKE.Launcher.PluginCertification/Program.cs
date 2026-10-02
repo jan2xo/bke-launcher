@@ -289,10 +289,24 @@ static void CertifyCustomerCatalogToBundledDemoOpen()
                 "digital-solutions-source.sha"))
             .Trim();
 
+    const string LicensingAgentSourceSha =
+        "6570511cf2701f31a92800c26c2b919528b74c6e";
+    var pinnedLicensingAgentSource =
+        File.ReadAllText(
+            Path.Combine(
+                "eng",
+                "licensing-agent-source.sha"))
+            .Trim();
+
     Require(
         pinnedDigitalSolutionsSource ==
             DigitalSolutionsSourceSha,
         "Digital Solutions customer authority pin drifted.");
+
+    Require(
+        pinnedLicensingAgentSource ==
+            LicensingAgentSourceSha,
+        "Licensing Agent plugin-authorization authority pin drifted.");
 
     IBkeLauncherPlugin plugin =
         new BkeDemoLauncherPlugin();
