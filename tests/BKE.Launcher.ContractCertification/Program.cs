@@ -2891,7 +2891,7 @@ Require(mainWindowSource.Contains("ChangePassword", StringComparison.Ordinal),
     "Launcher Change Password click handler is missing.");
 Require(
     mainWindowMarkup.Contains(
-        "Content=\"Notifications\"",
+        "Text=\"Notifications\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Click=\"OpenNotifications\"",
