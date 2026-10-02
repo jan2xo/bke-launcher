@@ -11,6 +11,14 @@
     <SolidColorBrush x:Key="BkeMutedTextBrush">#91A0AF</SolidColorBrush>
     <SolidColorBrush x:Key="BkeAccentBrush">#F4F7FA</SolidColorBrush>
     <SolidColorBrush x:Key="BkeAccentTextBrush">#0A0E13</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBrush">#7DD3FC</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalSoftBrush">#1A7DD3FC</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBorderBrush">#4D7DD3FC</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSuccessBrush">#86EFAC</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeWarningBrush">#FDE68A</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDangerBrush">#FDA4AF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeInsetBrush">#0C1219</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeQuietBrush">#0F161F</SolidColorBrush>
   </Application.Resources>
 
   <Application.Styles>
@@ -37,6 +45,30 @@
       <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
     </Style>
 
+    <Style Selector="TextBlock.hero-title">
+      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeSignalBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.metric-label">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.metric-value">
+      <Setter Property="FontSize" Value="24" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
     <Style Selector="Border.surface">
       <Setter Property="Background" Value="{StaticResource BkeSurfaceBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
@@ -48,6 +80,37 @@
       <Setter Property="Background" Value="{StaticResource BkeSurfaceRaisedBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="Border.signal-panel">
+      <Setter Property="Background" Value="{StaticResource BkeSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="18" />
+    </Style>
+
+    <Style Selector="Border.signal-card">
+      <Setter Property="Background" Value="{StaticResource BkeSurfaceRaisedBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="14" />
+    </Style>
+
+    <Style Selector="Border.signal-card.active">
+      <Setter Property="Background" Value="{StaticResource BkeQuietBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeSignalBorderBrush}" />
+    </Style>
+
+    <Style Selector="Border.signal-inset">
+      <Setter Property="Background" Value="{StaticResource BkeInsetBrush}" />
+      <Setter Property="BorderBrush" Value="#1B2734" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+
+    <Style Selector="Border.signal-rail">
+      <Setter Property="Background" Value="{StaticResource BkeSignalSoftBrush}" />
+      <Setter Property="CornerRadius" Value="999" />
     </Style>
 
     <Style Selector="Border.status-pill">
@@ -72,6 +135,18 @@
       <Setter Property="Background" Value="{StaticResource BkeAccentBrush}" />
       <Setter Property="Foreground" Value="{StaticResource BkeAccentTextBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource BkeAccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.signal">
+      <Setter Property="Background" Value="{StaticResource BkeSignalSoftBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeSignalBorderBrush}" />
+    </Style>
+
+    <Style Selector="Button.quiet">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
     </Style>
 
     <Style Selector="TextBox">
