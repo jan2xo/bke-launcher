@@ -1632,13 +1632,44 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public int SelectedModuleIndex
     {
         get => _selectedModuleIndex;
-        set => SetField(ref _selectedModuleIndex, value);
+        set
+        {
+            if (SetField(ref _selectedModuleIndex, value))
+            {
+                Raise(nameof(ShowHomeModule));
+                Raise(nameof(ShowNotificationsModule));
+                Raise(nameof(ShowStoreModule));
+            }
+        }
     }
+
+    public bool ShowHomeModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 0;
+
+    public bool ShowNotificationsModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 1;
+
+    public bool ShowStoreModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 2;
 
     public bool ShowAccountSurface
     {
         get => _showAccountSurface;
-        private set => SetField(ref _showAccountSurface, value);
+        private set
+        {
+            if (SetField(ref _showAccountSurface, value))
+            {
+                Raise(nameof(ShowHomeModule));
+                Raise(nameof(ShowNotificationsModule));
+                Raise(nameof(ShowStoreModule));
+            }
+        }
     }
 
     public string SessionStatus
