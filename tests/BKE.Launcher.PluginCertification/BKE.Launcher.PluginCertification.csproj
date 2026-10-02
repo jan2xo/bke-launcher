@@ -7,5 +7,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/BKE.Launcher.PluginHost/BKE.Launcher.PluginHost.csproj" />
     <ProjectReference Include="../../src/BKE.Launcher.Application/BKE.Launcher.Application.csproj" />
+    <ProjectReference Include="../../plugins/bke-demo-app/plugin/BKE.Demo.LauncherPlugin/BKE.Demo.LauncherPlugin.csproj" />
   </ItemGroup>
 </Project>
