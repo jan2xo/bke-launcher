@@ -8,7 +8,6 @@ namespace BKE.Launcher.Desktop;
 
 internal sealed class SystemTelemetrySampler : IDisposable
 {
-    private readonly bool _windows = OperatingSystem.IsWindows();
     private readonly bool _gpuAvailable;
     private readonly List<PerformanceCounter> _gpuCounters = [];
     private ulong? _previousIdle;
@@ -18,12 +17,15 @@ internal sealed class SystemTelemetrySampler : IDisposable
 
     public SystemTelemetrySampler()
     {
-        _gpuAvailable = _windows && DetectGpuAdapter();
+        if (OperatingSystem.IsWindows())
+        {
+            _gpuAvailable = DetectGpuAdapter();
+        }
     }
 
     public SystemTelemetrySnapshot Sample()
     {
-        if (!_windows)
+        if (!OperatingSystem.IsWindows())
         {
             return new SystemTelemetrySnapshot(
                 0,
@@ -36,6 +38,20 @@ internal sealed class SystemTelemetrySampler : IDisposable
                 DateTimeOffset.UtcNow);
         }
 
+        return SampleWindows();
+    }
+
+    public void Dispose()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            DisposeWindows();
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private SystemTelemetrySnapshot SampleWindows()
+    {
         var cpu = SampleCpu();
         var memory = SampleMemory();
         var gpu = SampleGpu();
@@ -51,7 +67,8 @@ internal sealed class SystemTelemetrySampler : IDisposable
             DateTimeOffset.UtcNow);
     }
 
-    public void Dispose()
+    [SupportedOSPlatform("windows")]
+    private void DisposeWindows()
     {
         foreach (var counter in _gpuCounters)
         {
