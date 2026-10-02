@@ -15,36 +15,6 @@
         ExtendClientAreaToDecorationsHint="True"
         WindowDecorations="None">
   <Grid>
-    <Grid Height="32"
-          HorizontalAlignment="Stretch"
-          VerticalAlignment="Top"
-          ColumnDefinitions="*,Auto"
-          Panel.ZIndex="100">
-      <Border Background="Transparent"
-              WindowDecorationProperties.ElementRole="TitleBar" />
-      <StackPanel Grid.Column="1"
-                  Orientation="Horizontal"
-                  Spacing="2"
-                  Margin="0,3,6,0"
-                  VerticalAlignment="Top">
-        <Button Content="—"
-                Classes="window-control"
-                ToolTip.Tip="Minimize"
-                WindowDecorationProperties.ElementRole="MinimizeButton"
-                Click="MinimizeWindow" />
-        <Button Content="□"
-                Classes="window-control"
-                ToolTip.Tip="Maximize or restore"
-                WindowDecorationProperties.ElementRole="MaximizeButton"
-                Click="ToggleMaximizeWindow" />
-        <Button Content="×"
-                Classes="window-control window-close"
-                ToolTip.Tip="Close BKE"
-                WindowDecorationProperties.ElementRole="CloseButton"
-                Click="CloseWindow" />
-      </StackPanel>
-    </Grid>
-
     <Border IsVisible="{Binding ShowLoginPage}"
             Classes="surface"
             Width="680"
@@ -2479,25 +2449,21 @@
             HorizontalAlignment="Stretch"
             VerticalAlignment="Top"
             Background="Transparent"
-            Panel.ZIndex="200"
             WindowDecorationProperties.ElementRole="ResizeN" />
     <Border Height="6"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Bottom"
             Background="Transparent"
-            Panel.ZIndex="200"
             WindowDecorationProperties.ElementRole="ResizeS" />
     <Border Width="6"
             HorizontalAlignment="Left"
             VerticalAlignment="Stretch"
             Background="Transparent"
-            Panel.ZIndex="200"
             WindowDecorationProperties.ElementRole="ResizeW" />
     <Border Width="6"
             HorizontalAlignment="Right"
             VerticalAlignment="Stretch"
             Background="Transparent"
-            Panel.ZIndex="200"
             WindowDecorationProperties.ElementRole="ResizeE" />
 
     <Border Width="10"
@@ -2505,28 +2471,52 @@
             HorizontalAlignment="Left"
             VerticalAlignment="Top"
             Background="Transparent"
-            Panel.ZIndex="210"
             WindowDecorationProperties.ElementRole="ResizeNW" />
     <Border Width="10"
             Height="10"
             HorizontalAlignment="Right"
             VerticalAlignment="Top"
             Background="Transparent"
-            Panel.ZIndex="210"
             WindowDecorationProperties.ElementRole="ResizeNE" />
     <Border Width="10"
             Height="10"
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
             Background="Transparent"
-            Panel.ZIndex="210"
             WindowDecorationProperties.ElementRole="ResizeSW" />
     <Border Width="10"
             Height="10"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
             Background="Transparent"
-            Panel.ZIndex="210"
             WindowDecorationProperties.ElementRole="ResizeSE" />
+    <Grid Height="26"
+          Margin="6,6,6,0"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Top"
+          ColumnDefinitions="*,Auto">
+      <Border Background="Transparent"
+              WindowDecorationProperties.ElementRole="TitleBar" />
+      <StackPanel Grid.Column="1"
+                  Orientation="Horizontal"
+                  Spacing="2"
+                  VerticalAlignment="Top">
+        <Button Content="—"
+                Classes="window-control"
+                ToolTip.Tip="Minimize"
+                WindowDecorationProperties.ElementRole="MinimizeButton"
+                Click="MinimizeWindow" />
+        <Button Content="□"
+                Classes="window-control"
+                ToolTip.Tip="Maximize or restore"
+                WindowDecorationProperties.ElementRole="MaximizeButton"
+                Click="ToggleMaximizeWindow" />
+        <Button Content="×"
+                Classes="window-control window-close"
+                ToolTip.Tip="Close BKE"
+                WindowDecorationProperties.ElementRole="CloseButton"
+                Click="CloseWindow" />
+      </StackPanel>
+    </Grid>
   </Grid>
 </Window>
