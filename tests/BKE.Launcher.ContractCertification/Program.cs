@@ -2748,8 +2748,17 @@ Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanChangePassword}\"", S
     "Launcher Change Password action is not state-bound.");
 Require(mainWindowSource.Contains("ChangePassword", StringComparison.Ordinal),
     "Launcher Change Password click handler is missing.");
-Require(mainWindowMarkup.Contains("Header=\"Notifications\"", StringComparison.Ordinal),
-    "BKE Notifications tab is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "Content=\"Notifications\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenNotifications\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowNotificationsModule}\"",
+        StringComparison.Ordinal),
+    "BKE Notifications Signal navigation/surface is missing.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding Notifications}\"", StringComparison.Ordinal),
     "BKE Notifications are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Content=\"Refresh notifications\"", StringComparison.Ordinal),
@@ -2768,7 +2777,17 @@ Require(mainWindowSource.Contains("DismissNotification", StringComparison.Ordina
     "BKE Notifications Dismiss click handler is missing.");
 Require(mainWindowSource.Contains("RefreshNotifications", StringComparison.Ordinal),
     "BKE Notifications refresh click handler is missing.");
-Require(mainWindowMarkup.Contains("Header=\"Store\"", StringComparison.Ordinal), "BKE Store tab is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "Content=\"Store\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenStore\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal),
+    "BKE Store Signal navigation/surface is missing.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
 Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
