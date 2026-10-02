@@ -218,7 +218,7 @@
       <Setter Property="Background" Value="{StaticResource BkeProductBrush}" />
       <Setter Property="BorderBrush" Value="#252C35" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="20" />
+      <Setter Property="CornerRadius" Value="16" />
     </Style>
 
     <Style Selector="Border.app-mark">
@@ -328,6 +328,29 @@
       <Setter Property="Background" Value="#8A101821" />
     </Style>
 
+    <Style Selector="Button.window-control">
+      <Setter Property="Width" Value="34" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="Button.window-control:pointerover">
+      <Setter Property="Background" Value="#C0182028" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.window-control.window-close:pointerover">
+      <Setter Property="Background" Value="#C03B1720" />
+      <Setter Property="Foreground" Value="#FFF4F6" />
+    </Style>
+
     <Style Selector="Border.sidebar">
       <Setter Property="Background" Value="#F20A0C0F" />
       <Setter Property="BorderBrush" Value="#252B33" />
@@ -375,12 +398,12 @@
     </Style>
 
     <Style Selector="Button.app-tile">
-      <Setter Property="Width" Value="170" />
-      <Setter Property="Height" Value="142" />
+      <Setter Property="Width" Value="126" />
+      <Setter Property="Height" Value="104" />
       <Setter Property="Padding" Value="0" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
-      <Setter Property="CornerRadius" Value="22" />
+      <Setter Property="CornerRadius" Value="16" />
     </Style>
 
     <Style Selector="Button.app-tile:pointerover">
