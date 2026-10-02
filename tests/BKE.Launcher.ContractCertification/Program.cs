@@ -2532,10 +2532,10 @@ Require(
     mainWindowMarkup.Contains(
         "IsVisible=\"{Binding IsSidebarExpanded}\"",
         StringComparison.Ordinal) &&
-    normalizedViewModelSource.Contains(
+    registrationViewModelSource.Contains(
         "public double SidebarWidth",
         StringComparison.Ordinal) &&
-    normalizedViewModelSource.Contains(
+    registrationViewModelSource.Contains(
         "? 208\n            : 68;",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
@@ -2555,7 +2555,7 @@ Require(
     mainWindowMarkup.Contains(
         "Text=\"Connected\"",
         StringComparison.Ordinal) &&
-    normalizedViewModelSource.Contains(
+    registrationViewModelSource.Contains(
         "public string AccountInitials",
         StringComparison.Ordinal),
     "Launcher sidebar lost bottom Notifications / Account / Connected identity treatment.");
