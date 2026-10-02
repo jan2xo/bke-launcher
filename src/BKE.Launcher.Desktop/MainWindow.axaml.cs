@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Threading;
 using BKE.Launcher.Presentation;
@@ -93,25 +94,42 @@ public sealed partial class MainWindow : Window
                 CancellationToken.None);
         }
     }
-    private async void OpenHome(object? sender, RoutedEventArgs args)
+    private async void OpenDashboard(object? sender, RoutedEventArgs args)
     {
         await ViewModel.OpenModuleAsync(
             0,
             CancellationToken.None);
     }
 
-    private async void OpenNotifications(object? sender, RoutedEventArgs args)
+    private async void OpenLibrary(object? sender, RoutedEventArgs args)
     {
         await ViewModel.OpenModuleAsync(
             1,
             CancellationToken.None);
     }
 
-    private async void OpenStore(object? sender, RoutedEventArgs args)
+    private async void OpenNotifications(object? sender, RoutedEventArgs args)
     {
         await ViewModel.OpenModuleAsync(
             2,
             CancellationToken.None);
+    }
+
+    private async void OpenStore(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            3,
+            CancellationToken.None);
+    }
+
+    private void WindowDragPointerPressed(
+        object? sender,
+        PointerPressedEventArgs args)
+    {
+        if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            BeginMoveDrag(args);
+        }
     }
 
 
