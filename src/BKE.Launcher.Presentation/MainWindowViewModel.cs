@@ -7021,7 +7021,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetShellSurface();
         ClearCatalog(
             "IDLE",
-            "Open My Software to load software for this BKE account.");
+            "Home is ready to sync software for this BKE account.");
         ClearStore(
             "IDLE",
             "Open Store to browse software for this BKE account.");
