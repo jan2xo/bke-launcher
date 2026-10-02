@@ -2418,6 +2418,10 @@ var mainWindowMarkup = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml"));
 var desktopProjectSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "BKE.Launcher.Desktop.csproj"));
+var telemetrySamplerSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Desktop", "SystemTelemetrySampler.cs"));
+var telemetryViewModelSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Presentation", "SystemTelemetryViewModel.cs"));
 Require(mainWindowMarkup.Contains(
         "I have reviewed and accept this exact published version.",
         StringComparison.Ordinal),
@@ -2459,6 +2463,80 @@ Require(desktopProjectSource.Contains("Avalonia\" Version=\"12.1.3\"", StringCom
     "Launcher Avalonia package baseline is not 12.1.3.");
 Require(!desktopProjectSource.Contains("12.1.1", StringComparison.Ordinal),
     "Launcher still references the superseded Avalonia 12.1.1 baseline.");
+Require(
+    desktopProjectSource.Contains(
+        "System.Diagnostics.PerformanceCounter\" Version=\"10.0.0\"",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal GPU telemetry dependency is not pinned.");
+Require(
+    mainWindowMarkup.Contains(
+        "Header=\"Home\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"BKE SIGNAL\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Telemetry.CpuLabel",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Telemetry.GpuLabel",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Telemetry.MemoryLabel",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal Home dashboard surface is incomplete.");
+Require(
+    mainWindowSource.Contains(
+        "Interval = TimeSpan.FromSeconds(2)",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "WindowState == WindowState.Minimized",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal telemetry is not bounded/throttled by window lifecycle.");
+Require(
+    telemetrySamplerSource.Contains(
+        "GetSystemTimes",
+        StringComparison.Ordinal) &&
+    telemetrySamplerSource.Contains(
+        "GlobalMemoryStatusEx",
+        StringComparison.Ordinal) &&
+    telemetrySamplerSource.Contains(
+        "PerformanceCounterCategory.Exists(\"GPU Engine\")",
+        StringComparison.Ordinal) &&
+    telemetrySamplerSource.Contains(
+        ".Take(64)",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal telemetry lost bounded CPU/memory/GPU sampling.");
+Require(
+    !mainWindowMarkup.Contains(
+        "WebGL",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "WebGPU",
+        StringComparison.OrdinalIgnoreCase) &&
+    !telemetrySamplerSource.Contains(
+        "Three.js",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher BKE Signal introduced an actual 3D rendering dependency.");
+Require(
+    telemetryViewModelSource.Contains(
+        "SYSTEM HEALTHY",
+        StringComparison.Ordinal) &&
+    telemetryViewModelSource.Contains(
+        "SYSTEM BUSY",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal telemetry projection lost human-readable health state.");
+Require(
+    normalizedViewModelSource.Contains(
+        "WaitForProductConvergenceAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "BKE is watching the Agent for completion.",
+        StringComparison.Ordinal) &&
+    !normalizedViewModelSource.Contains(
+        "Refresh software after the elevation step completes.",
+        StringComparison.Ordinal),
+    "Launcher software lifecycle still requires normal users to manually refresh after verified operations.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowLoginPage}\"", StringComparison.Ordinal),
     "Launcher does not gate unauthenticated startup on the Login page.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAuthenticatedShell}\"", StringComparison.Ordinal),
@@ -2718,12 +2796,15 @@ Require(normalizedViewModelSource.Contains(
     "Launcher lacks explicit module-open intent.");
 Require(normalizedViewModelSource.Contains(
     "SelectedModuleIndex = -1;",
-    StringComparison.Ordinal),
-    "Launcher does not preserve the naked authenticated shell state.");
+    StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "SelectedModuleIndex = 0;",
+        StringComparison.Ordinal),
+    "Launcher shell no longer resets safely or selects Home after authenticated convergence.");
 Require(normalizedViewModelSource.Contains(
     "ShowAccountSurface = false;",
     StringComparison.Ordinal),
-    "Launcher naked shell does not close the Account surface.");
+    "Launcher authenticated Home convergence does not close the Account surface.");
 
 var nativeSignInStart = normalizedViewModelSource.IndexOf(
     "public async Task NativeSignInAsync(",
