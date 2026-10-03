@@ -2567,6 +2567,12 @@ Require(
     mainWindowMarkup.Contains(
         "IsVisible=\"{Binding IsSidebarExpanded}\"",
         StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding IsSidebarCollapsed}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes.compact=\"{Binding IsSidebarCollapsed}\"",
+        StringComparison.Ordinal) &&
     registrationViewModelSource.Contains(
         "public double SidebarWidth",
         StringComparison.Ordinal) &&
@@ -2607,9 +2613,29 @@ Require(
         "Text=\"Coming later\"",
         StringComparison.Ordinal) &&
     !mainWindowMarkup.Contains(
+        "Text=\"Future\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
         "Text=\"Your software\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Only software that is ready to open on this machine.",
         StringComparison.Ordinal),
-    "Launcher compact shell restored deprecated sidebar/dashboard helper headlines.");
+    "Launcher compact shell restored removed sidebar/dashboard helper content.");
+Require(
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Menu\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"LayoutDashboard\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Library\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Bell\"",
+        StringComparison.Ordinal),
+    "Launcher compact navigation lost its Lucide icon treatment.");
 Require(
     mainWindowSource.Contains(
         "Interval = TimeSpan.FromSeconds(2)",
