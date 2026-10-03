@@ -2466,6 +2466,17 @@ Require(
         "Lucide.Avalonia\" Version=\"0.2.24\"",
         StringComparison.Ordinal),
     "Launcher custom chrome does not pin the Lucide.Avalonia icon package.");
+Require(
+    appMarkup.Contains(
+        "BkeDigitalYellowBrush\">#FFD15A",
+        StringComparison.Ordinal) &&
+    appMarkup.Contains(
+        "BkeDigitalYellowBorderBrush\">#66FFD15A",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes=\"quiet shelf-link\"",
+        StringComparison.Ordinal),
+    "Launcher lost the authoritative Digital Solutions yellow accent treatment.");
 Require(!desktopProjectSource.Contains("12.1.1", StringComparison.Ordinal),
     "Launcher still references the superseded Avalonia 12.1.1 baseline.");
 Require(
@@ -2487,7 +2498,10 @@ Require(
         "Click=\"OpenLibrary\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Text=\"SYSTEM\"",
+        "Text=\"{Binding AccountGreeting}\"",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "public string AccountGreeting",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Text=\"CORE\"",
@@ -2620,6 +2634,12 @@ Require(
         StringComparison.Ordinal) &&
     !mainWindowMarkup.Contains(
         "Only software that is ready to open on this machine.",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"OBSIDIAN\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"SYSTEM\"",
         StringComparison.Ordinal),
     "Launcher compact shell restored removed sidebar/dashboard helper content.");
 Require(
