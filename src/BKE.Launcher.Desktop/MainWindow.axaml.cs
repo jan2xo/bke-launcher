@@ -914,11 +914,6 @@ public sealed partial class MainWindow : Window
         await ViewModel.RefreshCatalogAsync(CancellationToken.None);
     }
 
-    private async void RefreshNotifications(object? sender, RoutedEventArgs args)
-    {
-        await ViewModel.RefreshNotificationsAsync(CancellationToken.None);
-    }
-
     private async void MarkNotificationRead(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
