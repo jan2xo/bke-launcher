@@ -227,20 +227,21 @@
               Padding="10">
         <Grid RowDefinitions="Auto,*,Auto"
               RowSpacing="14">
-          <Grid ColumnDefinitions="Auto,*"
+          <Grid IsVisible="{Binding IsSidebarExpanded}"
+                ColumnDefinitions="Auto,*"
                 ColumnSpacing="8">
             <Button Width="40"
                     Height="40"
                     Classes="icon-button"
                     Click="ToggleSidebar"
-                    ToolTip.Tip="Toggle navigation">
-              <TextBlock Text="≡"
-                         FontSize="20"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center" />
+                    ToolTip.Tip="Collapse navigation">
+              <LucideIcon Kind="Menu"
+                          Size="18"
+                          StrokeWidth="1.8"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center" />
             </Button>
             <StackPanel Grid.Column="1"
-                        IsVisible="{Binding IsSidebarExpanded}"
                         VerticalAlignment="Center"
                         Spacing="0">
               <TextBlock Text="BKE"
@@ -252,127 +253,175 @@
             </StackPanel>
           </Grid>
 
+          <Button IsVisible="{Binding IsSidebarCollapsed}"
+                  Width="40"
+                  Height="40"
+                  Classes="icon-button"
+                  HorizontalAlignment="Center"
+                  Click="ToggleSidebar"
+                  ToolTip.Tip="Expand navigation">
+            <LucideIcon Kind="Menu"
+                        Size="18"
+                        StrokeWidth="1.8"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
+          </Button>
+
           <StackPanel Grid.Row="1"
-                      Spacing="7">
+                      Spacing="4">
             <Button Classes="sidebar-nav"
+                    Classes.compact="{Binding IsSidebarCollapsed}"
                     Classes.active="{Binding ShowHomeModule}"
                     Click="OpenDashboard"
                     ToolTip.Tip="Dashboard">
-              <Grid ColumnDefinitions="32,*"
-                    ColumnSpacing="10">
-                <Border Classes="sidebar-glyph">
-                  <TextBlock Text="◫"
-                             FontSize="16"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center" />
+              <Grid>
+                <Grid IsVisible="{Binding IsSidebarExpanded}"
+                      ColumnDefinitions="28,*"
+                      ColumnSpacing="8">
+                  <Border Classes="sidebar-glyph">
+                    <LucideIcon Kind="LayoutDashboard"
+                                Size="14"
+                                StrokeWidth="1.8"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1"
+                             Text="Dashboard"
+                             FontSize="13"
+                             VerticalAlignment="Center"
+                             FontWeight="SemiBold" />
+                </Grid>
+                <Border IsVisible="{Binding IsSidebarCollapsed}"
+                        Classes="sidebar-glyph"
+                        HorizontalAlignment="Center">
+                  <LucideIcon Kind="LayoutDashboard"
+                              Size="14"
+                              StrokeWidth="1.8"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center" />
                 </Border>
-                <TextBlock Grid.Column="1"
-                           Text="Dashboard"
-                           IsVisible="{Binding IsSidebarExpanded}"
-                           VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
               </Grid>
             </Button>
 
             <Button Classes="sidebar-nav"
+                    Classes.compact="{Binding IsSidebarCollapsed}"
                     Classes.active="{Binding ShowLibraryModule}"
                     Click="OpenLibrary"
                     ToolTip.Tip="Library">
-              <Grid ColumnDefinitions="32,*"
-                    ColumnSpacing="10">
-                <Border Classes="sidebar-glyph">
-                  <TextBlock Text="▦"
-                             FontSize="15"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center" />
+              <Grid>
+                <Grid IsVisible="{Binding IsSidebarExpanded}"
+                      ColumnDefinitions="28,*"
+                      ColumnSpacing="8">
+                  <Border Classes="sidebar-glyph">
+                    <LucideIcon Kind="Library"
+                                Size="14"
+                                StrokeWidth="1.8"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1"
+                             Text="Library"
+                             FontSize="13"
+                             VerticalAlignment="Center"
+                             FontWeight="SemiBold" />
+                </Grid>
+                <Border IsVisible="{Binding IsSidebarCollapsed}"
+                        Classes="sidebar-glyph"
+                        HorizontalAlignment="Center">
+                  <LucideIcon Kind="Library"
+                              Size="14"
+                              StrokeWidth="1.8"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center" />
                 </Border>
-                <TextBlock Grid.Column="1"
-                           Text="Library"
-                           IsVisible="{Binding IsSidebarExpanded}"
-                           VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
-              </Grid>
-            </Button>
-
-            <Button Classes="sidebar-nav"
-                    IsEnabled="False"
-                    ToolTip.Tip="Future feature">
-              <Grid ColumnDefinitions="32,*"
-                    ColumnSpacing="10">
-                <Border Classes="sidebar-glyph">
-                  <TextBlock Text="◇"
-                             FontSize="16"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center" />
-                </Border>
-                <TextBlock Grid.Column="1"
-                           Text="Future"
-                           IsVisible="{Binding IsSidebarExpanded}"
-                           VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
               </Grid>
             </Button>
           </StackPanel>
 
           <StackPanel Grid.Row="2"
-                      Spacing="8">
+                      Spacing="6">
             <Border Height="1"
                     Background="#252B33"
                     Margin="4,0,4,4" />
 
             <Button Classes="sidebar-nav"
+                    Classes.compact="{Binding IsSidebarCollapsed}"
                     Classes.active="{Binding ShowNotificationsModule}"
                     Click="OpenNotifications"
                     ToolTip.Tip="Notifications">
-              <Grid ColumnDefinitions="32,*"
-                    ColumnSpacing="10">
-                <Border Classes="sidebar-glyph">
-                  <TextBlock Text="●"
-                             Foreground="{StaticResource BkeSignalBrush}"
-                             FontSize="10"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center" />
+              <Grid>
+                <Grid IsVisible="{Binding IsSidebarExpanded}"
+                      ColumnDefinitions="28,*"
+                      ColumnSpacing="8">
+                  <Border Classes="sidebar-glyph">
+                    <LucideIcon Kind="Bell"
+                                Size="14"
+                                StrokeWidth="1.8"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1"
+                             Text="Notifications"
+                             FontSize="13"
+                             VerticalAlignment="Center"
+                             FontWeight="SemiBold" />
+                </Grid>
+                <Border IsVisible="{Binding IsSidebarCollapsed}"
+                        Classes="sidebar-glyph"
+                        HorizontalAlignment="Center">
+                  <LucideIcon Kind="Bell"
+                              Size="14"
+                              StrokeWidth="1.8"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center" />
                 </Border>
-                <TextBlock Grid.Column="1"
-                           Text="Notifications"
-                           IsVisible="{Binding IsSidebarExpanded}"
-                           VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
               </Grid>
             </Button>
 
             <Button Classes="sidebar-nav"
+                    Classes.compact="{Binding IsSidebarCollapsed}"
                     Click="OpenAccount"
                     ToolTip.Tip="Account">
-              <Grid ColumnDefinitions="38,*"
-                    ColumnSpacing="10">
-                <Border Classes="avatar">
+              <Grid>
+                <Grid IsVisible="{Binding IsSidebarExpanded}"
+                      ColumnDefinitions="38,*"
+                      ColumnSpacing="10">
+                  <Border Classes="avatar">
+                    <TextBlock Text="{Binding AccountInitials}"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                  </Border>
+                  <StackPanel Grid.Column="1"
+                              VerticalAlignment="Center"
+                              Spacing="1">
+                    <TextBlock Text="{Binding AccountDisplay}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="125" />
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="5">
+                      <Border Width="6"
+                              Height="6"
+                              Classes="signal-dot"
+                              VerticalAlignment="Center" />
+                      <TextBlock Text="Connected"
+                                 Classes="muted"
+                                 FontSize="9" />
+                    </StackPanel>
+                  </StackPanel>
+                </Grid>
+                <Border IsVisible="{Binding IsSidebarCollapsed}"
+                        Classes="avatar"
+                        HorizontalAlignment="Center">
                   <TextBlock Text="{Binding AccountInitials}"
                              FontSize="11"
                              FontWeight="Bold"
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center" />
                 </Border>
-                <StackPanel Grid.Column="1"
-                            IsVisible="{Binding IsSidebarExpanded}"
-                            VerticalAlignment="Center"
-                            Spacing="1">
-                  <TextBlock Text="{Binding AccountDisplay}"
-                             FontSize="11"
-                             FontWeight="SemiBold"
-                             TextTrimming="CharacterEllipsis"
-                             MaxWidth="125" />
-                  <StackPanel Orientation="Horizontal"
-                              Spacing="5">
-                    <Border Width="6"
-                            Height="6"
-                            Classes="signal-dot"
-                            VerticalAlignment="Center" />
-                    <TextBlock Text="Connected"
-                               Classes="muted"
-                               FontSize="9" />
-                  </StackPanel>
-                </StackPanel>
               </Grid>
             </Button>
           </StackPanel>
@@ -1826,18 +1875,11 @@
                   </Border>
                 </Grid>
 
-                <Grid ColumnDefinitions="*,Auto"
-                      Margin="3,0,3,0">
-                  <TextBlock Text="Only software that is ready to open on this machine."
-                             Classes="muted"
-                             FontSize="10"
-                             VerticalAlignment="Center" />
-                  <Button Grid.Column="1"
-                          Content="Library  ›"
-                          Classes="quiet"
-                          Click="OpenLibrary"
-                          VerticalAlignment="Center" />
-                </Grid>
+                <Button Content="Library  ›"
+                        Classes="quiet"
+                        Click="OpenLibrary"
+                        HorizontalAlignment="Right"
+                        Margin="0,0,3,0" />
 
                 <ItemsControl ItemsSource="{Binding DashboardProducts}">
                   <ItemsControl.ItemsPanel>
