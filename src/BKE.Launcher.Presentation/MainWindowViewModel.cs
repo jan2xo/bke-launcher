@@ -1738,6 +1738,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SetField(ref _accountDisplay, value);
             Raise(nameof(AccountInitials));
+            Raise(nameof(AccountGreeting));
+        }
+    }
+
+    public string AccountGreeting
+    {
+        get
+        {
+            var separatorIndex = AccountDisplay.IndexOf(
+                " · ",
+                StringComparison.Ordinal);
+            var displayName = separatorIndex > 0
+                ? AccountDisplay[..separatorIndex]
+                : AccountDisplay;
+
+            if (string.IsNullOrWhiteSpace(displayName) ||
+                displayName is "Not signed in" or "Not available")
+            {
+                return "Welcome back";
+            }
+
+            return $"Welcome back, {displayName.Trim()}";
         }
     }
 
