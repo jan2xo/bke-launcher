@@ -2123,20 +2123,9 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
               <StackPanel Spacing="20"
                           Margin="2,4,12,14">
-                <StackPanel Spacing="4">
-                  <TextBlock Text="Library"
-                             FontSize="32"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="Install, open and maintain software available to this BKE account."
-                             Classes="muted"
-                             FontSize="12"
-                             TextWrapping="Wrap" />
-                </StackPanel>
-
-                <TextBlock Text="{Binding CatalogMessage}"
-                           Classes="muted"
-                           FontSize="11"
-                           TextWrapping="Wrap" />
+                <TextBlock Text="Library"
+                           FontSize="32"
+                           FontWeight="SemiBold" />
 
                 <ItemsControl ItemsSource="{Binding Products}">
                   <ItemsControl.ItemsPanel>
@@ -2260,21 +2249,12 @@
           </Grid>
 
           <Grid IsVisible="{Binding ShowNotificationsModule}">
-            <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
-              <StackPanel Spacing="3">
-                <TextBlock Text="Notifications" Classes="section-title" />
-                <TextBlock Text="{Binding NotificationMessage}"
-                           TextWrapping="Wrap"
-                           Opacity="0.72" />
-              </StackPanel>
+            <Grid RowDefinitions="Auto,*" Margin="4,14,4,4">
+              <TextBlock Text="Notifications"
+                         Classes="section-title"
+                         Margin="0,0,0,14" />
 
-              <TextBlock Grid.Row="1"
-                         Text="This inbox is scoped by Digital Solutions to the selected BKE account and is mediated by the Licensing Agent. Mark Read and Dismiss are server-authoritative receipt actions."
-                         TextWrapping="Wrap"
-                         Opacity="0.62"
-                         Margin="0,12,0,14" />
-
-              <ScrollViewer Grid.Row="2"
+              <ScrollViewer Grid.Row="1"
                             VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="10">
                   <ItemsControl ItemsSource="{Binding Notifications}">
