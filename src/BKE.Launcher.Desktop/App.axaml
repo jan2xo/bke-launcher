@@ -217,6 +217,34 @@
       <Setter Property="CornerRadius" Value="999" />
     </Style>
 
+    <Style Selector="Grid.ds-orbit-clockwise">
+      <Style.Animations>
+        <Animation Duration="0:0:18"
+                   IterationCount="infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
+    <Style Selector="Grid.ds-orbit-counter">
+      <Style.Animations>
+        <Animation Duration="0:0:26"
+                   IterationCount="infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="-360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
     <Style Selector="Border.app-shelf-card">
       <Setter Property="Background" Value="{StaticResource BkeProductBrush}" />
       <Setter Property="BorderBrush" Value="#252C35" />
