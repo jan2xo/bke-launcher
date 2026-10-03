@@ -3109,7 +3109,13 @@ Require(mainWindowSource.Contains("RefreshNotifications", StringComparison.Ordin
     "BKE Notifications refresh click handler is missing.");
 Require(
     mainWindowMarkup.Contains(
-        "Content=\"Browse Store  ›\"",
+        "Classes.active=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ToolTip.Tip=\"Store\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Store\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Click=\"OpenStore\"",
@@ -3117,7 +3123,7 @@ Require(
     mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowStoreModule}\"",
         StringComparison.Ordinal),
-    "BKE Store is no longer reachable from the Library commerce entry point.");
+    "BKE Store is no longer reachable from first-class sidebar navigation.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
 Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
