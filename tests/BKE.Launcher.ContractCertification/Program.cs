@@ -2481,18 +2481,27 @@ Require(
     "Launcher lost the authoritative Digital Solutions yellow accent treatment.");
 Require(
     mainWindowMarkup.Contains(
+        "Background=\"#080A10\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
         "TileMode=\"Tile\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "DestinationRect=\"0,0,64,64\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "#40172947",
+        "Opacity=\"0.28\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "#302A2516",
+        "#70172947",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "#552A2516",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "#24FFD15A",
         StringComparison.Ordinal),
-    "Launcher lost the Digital Solutions atmospheric canvas treatment.");
+    "Launcher lost the strengthened Digital Solutions atmospheric canvas treatment.");
 Require(
     appMarkup.Contains(
         "Style Selector=\"Grid.ds-orbit-clockwise\"",
@@ -2514,8 +2523,14 @@ Require(
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Classes=\"ds-orbit-counter\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "StrokeDashArray=\"15,8,3,10\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "StrokeDashArray=\"10,6,2,8\"",
         StringComparison.Ordinal),
-    "Launcher lost the Digital Solutions native orbit-dot motion.");
+    "Launcher lost the Digital Solutions native orbit-dot / rotating-track motion.");
 Require(!desktopProjectSource.Contains("12.1.1", StringComparison.Ordinal),
     "Launcher still references the superseded Avalonia 12.1.1 baseline.");
 Require(
@@ -2696,28 +2711,25 @@ Require(
         StringComparison.Ordinal),
     "Launcher compact navigation lost its Lucide icon treatment.");
 Require(
-    mainWindowMarkup.Contains(
-        "PointerMoved=\"HeroParallaxPointerMoved\"",
+    !mainWindowMarkup.Contains(
+        "HeroParallaxPointerMoved",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "PointerExited=\"HeroParallaxPointerExited\"",
+    !mainWindowMarkup.Contains(
+        "HeroParallaxPointerExited",
         StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "private readonly TranslateTransform _heroOrbitTransform",
+    !mainWindowSource.Contains(
+        "TranslateTransform",
         StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
+    !mainWindowSource.Contains(
         "args.GetPosition(surface)",
         StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "Math.Clamp(",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "const double Blend = 0.38;",
+    !mainWindowSource.Contains(
+        "ConfigureHeroParallax",
         StringComparison.Ordinal) &&
     !mainWindowSource.Contains(
         "OrbitTimer",
         StringComparison.Ordinal),
-    "Launcher hero parallax is not bounded to pointer-driven render transforms.");
+    "Launcher reintroduced CPU-heavy pointer parallax or a custom orbit timer.");
 Require(
     mainWindowSource.Contains(
         "Interval = TimeSpan.FromSeconds(2)",
