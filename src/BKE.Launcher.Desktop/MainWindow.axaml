@@ -425,10 +425,11 @@
 
       <Grid Grid.Column="1"
             Margin="18,0,0,0"
-            ClipToBounds="True">
+            ClipToBounds="True"
+            Background="#080A10">
 
         <Border IsHitTestVisible="False"
-                Opacity="0.17">
+                Opacity="0.28">
           <Border.Background>
             <VisualBrush TileMode="Tile"
                          DestinationRect="0,0,64,64"
@@ -436,7 +437,7 @@
               <VisualBrush.Visual>
                 <Grid Width="64"
                       Height="64">
-                  <Border BorderBrush="#18FFFFFF"
+                  <Border BorderBrush="#24FFFFFF"
                           BorderThickness="1,1,0,0" />
                 </Grid>
               </VisualBrush.Visual>
@@ -445,42 +446,60 @@
         </Border>
 
         <Ellipse IsHitTestVisible="False"
-                 Width="760"
-                 Height="520"
+                 Width="980"
+                 Height="660"
                  HorizontalAlignment="Right"
                  VerticalAlignment="Top"
-                 Margin="0,-190,-210,0">
+                 Margin="0,-210,-260,0">
           <Ellipse.Fill>
             <RadialGradientBrush Center="50%,50%"
                                  GradientOrigin="50%,50%">
-              <GradientStop Color="#40172947" Offset="0" />
+              <GradientStop Color="#70172947" Offset="0" />
+              <GradientStop Color="#24172947" Offset="0.42" />
               <GradientStop Color="#00172947" Offset="1" />
             </RadialGradientBrush>
           </Ellipse.Fill>
         </Ellipse>
 
         <Ellipse IsHitTestVisible="False"
-                 Width="620"
-                 Height="430"
+                 Width="820"
+                 Height="560"
                  HorizontalAlignment="Left"
                  VerticalAlignment="Bottom"
-                 Margin="-190,0,0,-190">
+                 Margin="-250,0,0,-210">
           <Ellipse.Fill>
             <RadialGradientBrush Center="50%,50%"
                                  GradientOrigin="50%,50%">
-              <GradientStop Color="#302A2516" Offset="0" />
+              <GradientStop Color="#552A2516" Offset="0" />
+              <GradientStop Color="#1A2A2516" Offset="0.48" />
               <GradientStop Color="#002A2516" Offset="1" />
+            </RadialGradientBrush>
+          </Ellipse.Fill>
+        </Ellipse>
+
+        <Ellipse IsHitTestVisible="False"
+                 Width="720"
+                 Height="360"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Bottom"
+                 Margin="0,0,140,-190">
+          <Ellipse.Fill>
+            <RadialGradientBrush Center="50%,50%"
+                                 GradientOrigin="50%,50%">
+              <GradientStop Color="#24FFD15A" Offset="0" />
+              <GradientStop Color="#08FFD15A" Offset="0.52" />
+              <GradientStop Color="#00FFD15A" Offset="1" />
             </RadialGradientBrush>
           </Ellipse.Fill>
         </Ellipse>
 
         <Border IsHitTestVisible="False">
           <Border.Background>
-            <LinearGradientBrush StartPoint="50%,0%"
-                                 EndPoint="50%,100%">
-              <GradientStop Color="#00050608" Offset="0" />
-              <GradientStop Color="#18050608" Offset="0.62" />
-              <GradientStop Color="#B8050608" Offset="1" />
+            <LinearGradientBrush StartPoint="0%,0%"
+                                 EndPoint="100%,100%">
+              <GradientStop Color="#00172947" Offset="0" />
+              <GradientStop Color="#10080A10" Offset="0.5" />
+              <GradientStop Color="#28080A10" Offset="1" />
             </LinearGradientBrush>
           </Border.Background>
         </Border>
@@ -1735,12 +1754,8 @@
               <StackPanel Spacing="26"
                           Margin="2,4,12,14">
 
-                <Grid x:Name="HeroParallaxSurface"
-                      MinHeight="332"
-                      PointerMoved="HeroParallaxPointerMoved"
-                      PointerExited="HeroParallaxPointerExited">
-                  <Border x:Name="HeroDepthLayer"
-                          Classes="obsidian-depth"
+                <Grid MinHeight="332">
+                  <Border Classes="obsidian-depth"
                           Margin="13,17,0,0" />
                   <Border Background="#E00A0C0F"
                           BorderBrush="#1E242B"
@@ -1796,8 +1811,7 @@
                         </StackPanel>
                       </StackPanel>
 
-                      <Grid x:Name="HeroOrbitLayer"
-                            Grid.Column="1"
+                      <Grid Grid.Column="1"
                             Width="208"
                             Height="208"
                             HorizontalAlignment="Center"
@@ -1809,7 +1823,7 @@
                                  Margin="0,0,0,12" />
                         <Ellipse Width="196"
                                  Height="196"
-                                 Stroke="#1B262F"
+                                 Stroke="#182129"
                                  StrokeThickness="1" />
                         <Ellipse Width="170"
                                  Height="170"
@@ -1817,7 +1831,7 @@
                                  StrokeThickness="1" />
                         <Ellipse Width="142"
                                  Height="142"
-                                 Stroke="#355064"
+                                 Stroke="#233A49"
                                  StrokeThickness="1" />
                         <Ellipse Width="112"
                                  Height="112"
@@ -1832,6 +1846,11 @@
                           <Grid.RenderTransform>
                             <RotateTransform Angle="0" />
                           </Grid.RenderTransform>
+                          <Ellipse Width="196"
+                                   Height="196"
+                                   Stroke="#66FFD15A"
+                                   StrokeThickness="1.15"
+                                   StrokeDashArray="15,8,3,10" />
                           <Grid Width="13"
                                 Height="13"
                                 HorizontalAlignment="Center"
@@ -1858,6 +1877,11 @@
                           <Grid.RenderTransform>
                             <RotateTransform Angle="0" />
                           </Grid.RenderTransform>
+                          <Ellipse Width="142"
+                                   Height="142"
+                                   Stroke="#5867D9FF"
+                                   StrokeThickness="1.05"
+                                   StrokeDashArray="10,6,2,8" />
                           <Grid Width="12"
                                 Height="12"
                                 HorizontalAlignment="Center"
@@ -1877,8 +1901,7 @@
                           </Grid>
                         </Grid>
 
-                        <Border x:Name="HeroCoreLayer"
-                                Width="86"
+                        <Border Width="86"
                                 Height="86"
                                 Classes="core-disc"
                                 HorizontalAlignment="Center"
@@ -1907,8 +1930,7 @@
                         </Border>
                       </Grid>
 
-                      <StackPanel x:Name="HeroMetricLayer"
-                                  Grid.Column="2"
+                      <StackPanel Grid.Column="2"
                                   Spacing="10"
                                   VerticalAlignment="Center">
                         <Border Classes="obsidian-metric"
