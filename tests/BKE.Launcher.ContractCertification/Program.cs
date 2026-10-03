@@ -2416,6 +2416,8 @@ var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
 var mainWindowMarkup = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml"));
+var appMarkup = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Desktop", "App.axaml"));
 var desktopProjectSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "BKE.Launcher.Desktop.csproj"));
 var telemetrySamplerSource = File.ReadAllText(
