@@ -3091,10 +3091,23 @@ Require(
     "BKE Notifications Signal navigation/surface is missing.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding Notifications}\"", StringComparison.Ordinal),
     "BKE Notifications are not Agent-projected into the UI.");
-Require(mainWindowMarkup.Contains("Content=\"Refresh notifications\"", StringComparison.Ordinal),
-    "BKE Notifications refresh action is missing.");
-Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRefreshNotifications}\"", StringComparison.Ordinal),
-    "BKE Notifications refresh action is not session-bound.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding NotificationStatus}\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Content=\"Refresh notifications\"",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "private async void RefreshNotifications(",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "case 2:",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "await RefreshNotificationsAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "BKE Notifications must refresh automatically on Notifications navigation without a manual status/refresh control.");
 Require(mainWindowMarkup.Contains("Mark Read and Dismiss are server-authoritative receipt actions.", StringComparison.Ordinal),
     "BKE Notifications UI does not state the server-authoritative receipt boundary.");
 Require(mainWindowMarkup.Contains("Content=\"Mark read\"", StringComparison.Ordinal),
@@ -3105,8 +3118,14 @@ Require(mainWindowSource.Contains("MarkNotificationRead", StringComparison.Ordin
     "BKE Notifications Mark Read click handler is missing.");
 Require(mainWindowSource.Contains("DismissNotification", StringComparison.Ordinal),
     "BKE Notifications Dismiss click handler is missing.");
-Require(mainWindowSource.Contains("RefreshNotifications", StringComparison.Ordinal),
-    "BKE Notifications refresh click handler is missing.");
+Require(
+    registrationViewModelSource.Contains(
+        "await RefreshNotificationsAsync(cancellationToken);",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "await RefreshNotificationsAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "BKE Notifications lost automatic refresh after navigation or receipt mutation.");
 Require(
     mainWindowMarkup.Contains(
         "Classes.active=\"{Binding ShowStoreModule}\"",
