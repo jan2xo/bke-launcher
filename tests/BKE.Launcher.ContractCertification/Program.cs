@@ -2461,6 +2461,11 @@ Require(registrationViewModelSource.Contains(
 
 Require(desktopProjectSource.Contains("Avalonia\" Version=\"12.1.3\"", StringComparison.Ordinal),
     "Launcher Avalonia package baseline is not 12.1.3.");
+Require(
+    desktopProjectSource.Contains(
+        "Lucide.Avalonia\" Version=\"0.2.24\"",
+        StringComparison.Ordinal),
+    "Launcher custom chrome does not pin the Lucide.Avalonia icon package.");
 Require(!desktopProjectSource.Contains("12.1.1", StringComparison.Ordinal),
     "Launcher still references the superseded Avalonia 12.1.1 baseline.");
 Require(
@@ -2521,6 +2526,15 @@ Require(
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "Click=\"CloseWindow\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Minus\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Square\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"X\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
         "WindowState = WindowState.Minimized;",
@@ -2588,6 +2602,14 @@ Require(
         "Text=\"SIGNAL\"",
         StringComparison.Ordinal),
     "Launcher still exposes Signal as a visible product brand instead of BKE.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"Coming later\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"Your software\"",
+        StringComparison.Ordinal),
+    "Launcher compact shell restored deprecated sidebar/dashboard helper headlines.");
 Require(
     mainWindowSource.Contains(
         "Interval = TimeSpan.FromSeconds(2)",
