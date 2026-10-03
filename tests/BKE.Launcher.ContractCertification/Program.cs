@@ -2707,6 +2707,9 @@ Require(
         "<LucideIcon Kind=\"Library\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Store\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
         "<LucideIcon Kind=\"Bell\"",
         StringComparison.Ordinal),
     "Launcher compact navigation lost its Lucide icon treatment.");
@@ -2800,13 +2803,19 @@ Require(
     mainWindowSource.Contains(
         "OpenLibrary",
         StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes.active=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ToolTip.Tip=\"Store\"",
+        StringComparison.Ordinal) &&
     mainWindowSource.Contains(
         "OpenNotifications",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
         "OpenStore",
         StringComparison.Ordinal),
-    "Launcher shell did not preserve explicit Dashboard / Library / Notifications navigation.");
+    "Launcher shell did not preserve explicit Dashboard / Library / Store / Notifications navigation.");
 var dashboardSurfaceStart = mainWindowMarkup.IndexOf(
     "IsVisible=\"{Binding ShowHomeModule}\"",
     StringComparison.Ordinal);
@@ -2871,6 +2880,17 @@ Require(
         "Click=\"OpenProduct\"",
         StringComparison.Ordinal),
     "Launcher Library no longer owns software lifecycle actions.");
+Require(
+    !librarySurface.Contains(
+        "Text=\"{Binding CatalogStatus}\"",
+        StringComparison.Ordinal) &&
+    !librarySurface.Contains(
+        "Content=\"Sync\"",
+        StringComparison.Ordinal) &&
+    !librarySurface.Contains(
+        "Content=\"Browse Store  ›\"",
+        StringComparison.Ordinal),
+    "Launcher Library header restored redundant READY / Sync / Browse Store controls.");
 
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", StringComparison.Ordinal),
     "Launcher Account surface is not explicitly user-selected.");
