@@ -3120,12 +3120,12 @@ Require(mainWindowSource.Contains("DismissNotification", StringComparison.Ordina
     "BKE Notifications Dismiss click handler is missing.");
 Require(
     registrationViewModelSource.Contains(
-        "await RefreshNotificationsAsync(cancellationToken);",
+        "private async Task MutateNotificationAsync(",
         StringComparison.Ordinal) &&
     registrationViewModelSource.Contains(
         "await RefreshNotificationsAsync(cancellationToken);",
         StringComparison.Ordinal),
-    "BKE Notifications lost automatic refresh after navigation or receipt mutation.");
+    "BKE Notifications lost automatic refresh after receipt mutation.");
 Require(
     mainWindowMarkup.Contains(
         "Classes.active=\"{Binding ShowStoreModule}\"",
