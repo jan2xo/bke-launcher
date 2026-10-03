@@ -2364,18 +2364,10 @@
 
           <Grid IsVisible="{Binding ShowStoreModule}">
             <Grid RowDefinitions="Auto,Auto,*" Margin="4,14,4,4">
-              <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Spacing="3">
-                  <TextBlock Text="Store" Classes="section-title" />
-                  <TextBlock Text="{Binding StoreMessage}" TextWrapping="Wrap" Opacity="0.72" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                  <Border Classes="content-card" Padding="10,6" CornerRadius="8">
-                    <TextBlock Text="{Binding StoreStatus}" FontSize="11" FontWeight="SemiBold" />
-                  </Border>
-                  <Button Content="Refresh Store" Click="RefreshStore" />
-                </StackPanel>
-              </Grid>
+              <StackPanel Spacing="3">
+                <TextBlock Text="Store" Classes="section-title" />
+                <TextBlock Text="{Binding StoreMessage}" TextWrapping="Wrap" Opacity="0.72" />
+              </StackPanel>
 
               <StackPanel Grid.Row="1" Spacing="4" Margin="0,12,0,14">
                 <TextBlock Text="{Binding GiftCheckoutLabel}"
