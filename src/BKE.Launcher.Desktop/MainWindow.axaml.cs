@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using BKE.Launcher.Presentation;
 
@@ -12,11 +13,16 @@ public sealed partial class MainWindow : Window
 {
     private readonly SystemTelemetrySampler _telemetrySampler = new();
     private readonly DispatcherTimer _telemetryTimer;
+    private readonly TranslateTransform _heroDepthTransform = new();
+    private readonly TranslateTransform _heroOrbitTransform = new();
+    private readonly TranslateTransform _heroCoreTransform = new();
+    private readonly TranslateTransform _heroMetricTransform = new();
     private bool _startupInitialized;
 
     public MainWindow()
     {
         InitializeComponent();
+        ConfigureHeroParallax();
 
         _telemetryTimer = new DispatcherTimer
         {
@@ -32,6 +38,96 @@ public sealed partial class MainWindow : Window
     private MainWindowViewModel ViewModel =>
         DataContext as MainWindowViewModel
         ?? throw new InvalidOperationException("BKE Launcher view model is unavailable.");
+
+    private void ConfigureHeroParallax()
+    {
+        if (this.FindControl<Border>("HeroDepthLayer") is { } depthLayer)
+        {
+            depthLayer.RenderTransform = _heroDepthTransform;
+        }
+
+        if (this.FindControl<Grid>("HeroOrbitLayer") is { } orbitLayer)
+        {
+            orbitLayer.RenderTransform = _heroOrbitTransform;
+        }
+
+        if (this.FindControl<Border>("HeroCoreLayer") is { } coreLayer)
+        {
+            coreLayer.RenderTransform = _heroCoreTransform;
+        }
+
+        if (this.FindControl<StackPanel>("HeroMetricLayer") is { } metricLayer)
+        {
+            metricLayer.RenderTransform = _heroMetricTransform;
+        }
+    }
+
+    private void HeroParallaxPointerMoved(
+        object? sender,
+        PointerEventArgs args)
+    {
+        if (sender is not Control surface ||
+            WindowState == WindowState.Minimized ||
+            surface.Bounds.Width <= 0 ||
+            surface.Bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var pointer = args.GetPosition(surface);
+        var normalizedX = Math.Clamp(
+            ((pointer.X / surface.Bounds.Width) - 0.5) * 2,
+            -1,
+            1);
+        var normalizedY = Math.Clamp(
+            ((pointer.Y / surface.Bounds.Height) - 0.5) * 2,
+            -1,
+            1);
+
+        NudgeParallax(
+            _heroDepthTransform,
+            normalizedX * 1.6,
+            normalizedY * 1.2);
+        NudgeParallax(
+            _heroOrbitTransform,
+            normalizedX * 5.0,
+            normalizedY * 4.0);
+        NudgeParallax(
+            _heroCoreTransform,
+            normalizedX * -2.5,
+            normalizedY * -2.0);
+        NudgeParallax(
+            _heroMetricTransform,
+            normalizedX * 1.4,
+            normalizedY * 1.0);
+    }
+
+    private void HeroParallaxPointerExited(
+        object? sender,
+        PointerEventArgs args) =>
+        ResetHeroParallax();
+
+    private static void NudgeParallax(
+        TranslateTransform transform,
+        double targetX,
+        double targetY)
+    {
+        const double Blend = 0.38;
+        transform.X += (targetX - transform.X) * Blend;
+        transform.Y += (targetY - transform.Y) * Blend;
+    }
+
+    private void ResetHeroParallax()
+    {
+        _heroDepthTransform.X = 0;
+        _heroDepthTransform.Y = 0;
+        _heroOrbitTransform.X = 0;
+        _heroOrbitTransform.Y = 0;
+        _heroCoreTransform.X = 0;
+        _heroCoreTransform.Y = 0;
+        _heroMetricTransform.X = 0;
+        _heroMetricTransform.Y = 0;
+    }
 
     private async void WindowOpened(object? sender, EventArgs args)
     {
@@ -137,8 +233,11 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
-    private void MinimizeWindow(object? sender, RoutedEventArgs args) =>
+    private void MinimizeWindow(object? sender, RoutedEventArgs args)
+    {
+        ResetHeroParallax();
         WindowState = WindowState.Minimized;
+    }
 
     private void ToggleMaximizeWindow(object? sender, RoutedEventArgs args) =>
         WindowState = WindowState == WindowState.Maximized
