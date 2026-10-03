@@ -26,6 +26,9 @@
     <SolidColorBrush x:Key="BkeSignalBrightBrush">#B7ECFF</SolidColorBrush>
     <SolidColorBrush x:Key="BkeIndigoBrush">#8177FF</SolidColorBrush>
     <SolidColorBrush x:Key="BkeIndigoSoftBrush">#218177FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDigitalYellowBrush">#FFD15A</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDigitalYellowSoftBrush">#24FFD15A</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDigitalYellowBorderBrush">#66FFD15A</SolidColorBrush>
     <SolidColorBrush x:Key="BkeObsidianBrush">#0A0C0F</SolidColorBrush>
     <SolidColorBrush x:Key="BkeObsidianRaisedBrush">#11151A</SolidColorBrush>
     <LinearGradientBrush x:Key="BkeHeroBrush"
@@ -87,7 +90,7 @@
       <Setter Property="FontSize" Value="10" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="LetterSpacing" Value="1.7" />
-      <Setter Property="Foreground" Value="{StaticResource BkeSignalBrightBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource BkeDigitalYellowBrush}" />
     </Style>
 
     <Style Selector="TextBlock.product-title">
@@ -300,6 +303,17 @@
       <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
     </Style>
 
+    <Style Selector="Button.quiet.shelf-link">
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Foreground" Value="{StaticResource BkeDigitalYellowBrush}" />
+    </Style>
+
+    <Style Selector="Button.quiet.shelf-link:pointerover">
+      <Setter Property="Foreground" Value="#FFE28A" />
+      <Setter Property="Background" Value="{StaticResource BkeDigitalYellowSoftBrush}" />
+    </Style>
+
     <Style Selector="Button.nav">
       <Setter Property="MinHeight" Value="36" />
       <Setter Property="Padding" Value="16,7" />
@@ -385,7 +399,7 @@
 
     <Style Selector="Button.sidebar-nav.active">
       <Setter Property="Background" Value="#E6151A21" />
-      <Setter Property="BorderBrush" Value="#343E49" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeDigitalYellowBorderBrush}" />
       <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
     </Style>
 
