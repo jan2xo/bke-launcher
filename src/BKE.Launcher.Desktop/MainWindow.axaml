@@ -305,16 +305,11 @@
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center" />
                 </Border>
-                <StackPanel Grid.Column="1"
-                            IsVisible="{Binding IsSidebarExpanded}"
-                            VerticalAlignment="Center"
-                            Spacing="0">
-                  <TextBlock Text="Future"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="Coming later"
-                             Classes="muted"
-                             FontSize="8" />
-                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Text="Future"
+                           IsVisible="{Binding IsSidebarExpanded}"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
               </Grid>
             </Button>
           </StackPanel>
@@ -1833,14 +1828,10 @@
 
                 <Grid ColumnDefinitions="*,Auto"
                       Margin="3,0,3,0">
-                  <StackPanel Spacing="3">
-                    <TextBlock Text="Your software"
-                               FontSize="20"
-                               FontWeight="SemiBold" />
-                    <TextBlock Text="Only software that is ready to open on this machine."
-                               Classes="muted"
-                               FontSize="10" />
-                  </StackPanel>
+                  <TextBlock Text="Only software that is ready to open on this machine."
+                             Classes="muted"
+                             FontSize="10"
+                             VerticalAlignment="Center" />
                   <Button Grid.Column="1"
                           Content="Library  ›"
                           Classes="quiet"
@@ -2501,21 +2492,36 @@
                   Orientation="Horizontal"
                   Spacing="2"
                   VerticalAlignment="Top">
-        <Button Content="—"
-                Classes="window-control"
+        <Button Classes="window-control"
                 ToolTip.Tip="Minimize"
                 WindowDecorationProperties.ElementRole="MinimizeButton"
-                Click="MinimizeWindow" />
-        <Button Content="□"
-                Classes="window-control"
+                Click="MinimizeWindow">
+          <LucideIcon Kind="Minus"
+                      Size="14"
+                      StrokeWidth="1.8"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center" />
+        </Button>
+        <Button Classes="window-control"
                 ToolTip.Tip="Maximize or restore"
                 WindowDecorationProperties.ElementRole="MaximizeButton"
-                Click="ToggleMaximizeWindow" />
-        <Button Content="×"
-                Classes="window-control window-close"
+                Click="ToggleMaximizeWindow">
+          <LucideIcon Kind="Square"
+                      Size="13"
+                      StrokeWidth="1.7"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center" />
+        </Button>
+        <Button Classes="window-control window-close"
                 ToolTip.Tip="Close BKE"
                 WindowDecorationProperties.ElementRole="CloseButton"
-                Click="CloseWindow" />
+                Click="CloseWindow">
+          <LucideIcon Kind="X"
+                      Size="14"
+                      StrokeWidth="1.8"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center" />
+        </Button>
       </StackPanel>
     </Grid>
   </Grid>
