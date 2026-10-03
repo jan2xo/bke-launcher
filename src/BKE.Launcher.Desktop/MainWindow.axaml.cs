@@ -2,18 +2,30 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Threading;
 using BKE.Launcher.Presentation;
 
 namespace BKE.Launcher.Desktop;
 
 public sealed partial class MainWindow : Window
 {
+    private readonly SystemTelemetrySampler _telemetrySampler = new();
+    private readonly DispatcherTimer _telemetryTimer;
     private bool _startupInitialized;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _telemetryTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2),
+        };
+        _telemetryTimer.Tick += TelemetryTick;
+
         Opened += WindowOpened;
+        Closed += WindowClosed;
+        SizeChanged += WindowSizeChanged;
     }
 
     private MainWindowViewModel ViewModel =>
@@ -29,6 +41,48 @@ public sealed partial class MainWindow : Window
 
         _startupInitialized = true;
         await ViewModel.InitializeAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
+
+        UpdateTelemetry();
+        _telemetryTimer.Start();
+    }
+
+    private void TelemetryTick(object? sender, EventArgs args) =>
+        UpdateTelemetry();
+
+    private void UpdateTelemetry()
+    {
+        if (WindowState == WindowState.Minimized ||
+            DataContext is not MainWindowViewModel viewModel ||
+            !viewModel.ShowAuthenticatedShell)
+        {
+            return;
+        }
+
+        try
+        {
+            viewModel.Telemetry.Apply(_telemetrySampler.Sample());
+        }
+        catch (InvalidOperationException)
+        {
+            // Hardware telemetry is optional. BKE software lifecycle and account
+            // surfaces must remain usable if an OS counter disappears.
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            // Windows performance counters are best-effort presentation data.
+        }
+    }
+
+    private void WindowClosed(object? sender, EventArgs args)
+    {
+        _telemetryTimer.Stop();
+        _telemetrySampler.Dispose();
     }
 
     private async void OpenAccount(object? sender, RoutedEventArgs args)
@@ -40,6 +94,59 @@ public sealed partial class MainWindow : Window
                 CancellationToken.None);
         }
     }
+    private void ToggleSidebar(object? sender, RoutedEventArgs args) =>
+        ViewModel.ToggleSidebar();
+
+    private void WindowSizeChanged(
+        object? sender,
+        SizeChangedEventArgs args)
+    {
+        if (args.NewSize.Width < 900 &&
+            ViewModel.IsSidebarExpanded)
+        {
+            ViewModel.CollapseSidebar();
+        }
+    }
+
+    private async void OpenDashboard(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            0,
+            CancellationToken.None);
+    }
+
+    private async void OpenLibrary(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            1,
+            CancellationToken.None);
+    }
+
+    private async void OpenNotifications(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            2,
+            CancellationToken.None);
+    }
+
+    private async void OpenStore(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.OpenModuleAsync(
+            3,
+            CancellationToken.None);
+    }
+
+    private void MinimizeWindow(object? sender, RoutedEventArgs args) =>
+        WindowState = WindowState.Minimized;
+
+    private void ToggleMaximizeWindow(object? sender, RoutedEventArgs args) =>
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+
+    private void CloseWindow(object? sender, RoutedEventArgs args) =>
+        Close();
+
 
     private async void ModuleChanged(object? sender, SelectionChangedEventArgs args)
     {
@@ -88,11 +195,23 @@ public sealed partial class MainWindow : Window
     private async void NativeSignIn(object? sender, RoutedEventArgs args)
     {
         await ViewModel.NativeSignInAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
     }
 
     private async void VerifyNativeMfa(object? sender, RoutedEventArgs args)
     {
         await ViewModel.VerifyNativeMfaAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
     }
 
     private void DismissMfaRecoveryCodes(object? sender, RoutedEventArgs args)
@@ -795,16 +914,6 @@ public sealed partial class MainWindow : Window
         await ViewModel.RefreshCatalogAsync(CancellationToken.None);
     }
 
-    private async void RefreshStore(object? sender, RoutedEventArgs args)
-    {
-        await ViewModel.RefreshStoreAsync(CancellationToken.None);
-    }
-
-    private async void RefreshNotifications(object? sender, RoutedEventArgs args)
-    {
-        await ViewModel.RefreshNotificationsAsync(CancellationToken.None);
-    }
-
     private async void MarkNotificationRead(object? sender, RoutedEventArgs args)
     {
         if (sender is Button
@@ -972,6 +1081,31 @@ public sealed partial class MainWindow : Window
                 product.ProductId,
                 CancellationToken.None);
         }
+    }
+
+    private async void OpenDashboardProduct(
+        object? sender,
+        RoutedEventArgs args)
+    {
+        if (sender is not Button
+            {
+                DataContext: SoftwareProductViewModel product,
+            })
+        {
+            return;
+        }
+
+        if (product.CanOpen)
+        {
+            await ViewModel.OpenProductAsync(
+                product.ProductId,
+                CancellationToken.None);
+            return;
+        }
+
+        await ViewModel.OpenModuleAsync(
+            1,
+            CancellationToken.None);
     }
 
     private async void RemoveProduct(object? sender, RoutedEventArgs args)

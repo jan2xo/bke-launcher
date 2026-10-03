@@ -2416,8 +2416,14 @@ var mainWindowSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml.cs"));
 var mainWindowMarkup = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "MainWindow.axaml"));
+var appMarkup = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Desktop", "App.axaml"));
 var desktopProjectSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "BKE.Launcher.Desktop.csproj"));
+var telemetrySamplerSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Desktop", "SystemTelemetrySampler.cs"));
+var telemetryViewModelSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.Presentation", "SystemTelemetryViewModel.cs"));
 Require(mainWindowMarkup.Contains(
         "I have reviewed and accept this exact published version.",
         StringComparison.Ordinal),
@@ -2457,14 +2463,435 @@ Require(registrationViewModelSource.Contains(
 
 Require(desktopProjectSource.Contains("Avalonia\" Version=\"12.1.3\"", StringComparison.Ordinal),
     "Launcher Avalonia package baseline is not 12.1.3.");
+Require(
+    desktopProjectSource.Contains(
+        "Lucide.Avalonia\" Version=\"0.2.24\"",
+        StringComparison.Ordinal),
+    "Launcher custom chrome does not pin the Lucide.Avalonia icon package.");
+Require(
+    appMarkup.Contains(
+        "BkeDigitalYellowBrush\">#FFD15A",
+        StringComparison.Ordinal) &&
+    appMarkup.Contains(
+        "BkeDigitalYellowBorderBrush\">#66FFD15A",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes=\"quiet shelf-link\"",
+        StringComparison.Ordinal),
+    "Launcher lost the authoritative Digital Solutions yellow accent treatment.");
+Require(
+    mainWindowMarkup.Contains(
+        "Background=\"#080A10\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "TileMode=\"Tile\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "DestinationRect=\"0,0,64,64\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Opacity=\"0.28\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "#70172947",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "#552A2516",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "#24FFD15A",
+        StringComparison.Ordinal),
+    "Launcher lost the strengthened Digital Solutions atmospheric canvas treatment.");
+Require(
+    appMarkup.Contains(
+        "Style Selector=\"Grid.ds-orbit-clockwise\"",
+        StringComparison.Ordinal) &&
+    appMarkup.Contains(
+        "Animation Duration=\"0:0:18\"",
+        StringComparison.Ordinal) &&
+    appMarkup.Contains(
+        "Style Selector=\"Grid.ds-orbit-counter\"",
+        StringComparison.Ordinal) &&
+    appMarkup.Contains(
+        "Animation Duration=\"0:0:26\"",
+        StringComparison.Ordinal) &&
+    appMarkup.Contains(
+        "IterationCount=\"infinite\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes=\"ds-orbit-clockwise\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes=\"ds-orbit-counter\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "StrokeDashArray=\"15,8,3,10\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "StrokeDashArray=\"10,6,2,8\"",
+        StringComparison.Ordinal),
+    "Launcher lost the Digital Solutions native orbit-dot / rotating-track motion.");
 Require(!desktopProjectSource.Contains("12.1.1", StringComparison.Ordinal),
     "Launcher still references the superseded Avalonia 12.1.1 baseline.");
+Require(
+    desktopProjectSource.Contains(
+        "System.Diagnostics.PerformanceCounter\" Version=\"10.0.0\"",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal GPU telemetry dependency is not pinned.");
+Require(
+    mainWindowMarkup.Contains(
+        "Text=\"Dashboard\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenDashboard\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"Library\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenLibrary\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding AccountGreeting}\"",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "public string AccountGreeting",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"CORE\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Telemetry.CpuLabel",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Telemetry.GpuLabel",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Telemetry.MemoryLabel",
+        StringComparison.Ordinal),
+    "Launcher BKE Obsidian Core Dashboard surface is incomplete.");
+Require(
+    mainWindowMarkup.Contains(
+        "WindowDecorations=\"None\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "CanResize=\"True\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ExtendClientAreaToDecorationsHint=\"True\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "WindowDecorationProperties.ElementRole=\"TitleBar\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "WindowDecorationProperties.ElementRole=\"ResizeSE\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"MinimizeWindow\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"ToggleMaximizeWindow\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"CloseWindow\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Minus\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Square\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"X\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "WindowState = WindowState.Minimized;",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "Close();",
+        StringComparison.Ordinal),
+    "Launcher does not own usable custom window chrome and resize behavior.");
+Require(
+    mainWindowMarkup.Contains(
+        "Width=\"1024\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Height=\"680\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "MinWidth=\"760\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "MinHeight=\"540\"",
+        StringComparison.Ordinal),
+    "Launcher no longer opens as the compact resizable BKE desktop surface.");
+Require(
+    mainWindowMarkup.Contains(
+        "Width=\"{Binding SidebarWidth}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"ToggleSidebar\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding IsSidebarExpanded}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding IsSidebarCollapsed}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes.compact=\"{Binding IsSidebarCollapsed}\"",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "public double SidebarWidth",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "? 208\n            : 68;",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "args.NewSize.Width < 900",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "ViewModel.CollapseSidebar();",
+        StringComparison.Ordinal),
+    "Launcher compact sidebar no longer supports hamburger collapse and narrow-window adaptation.");
+Require(
+    mainWindowMarkup.Contains(
+        "Text=\"Notifications\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"{Binding AccountInitials}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Text=\"Connected\"",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "public string AccountInitials",
+        StringComparison.Ordinal),
+    "Launcher sidebar lost bottom Notifications / Account / Connected identity treatment.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"BKE SIGNAL\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"SIGNAL\"",
+        StringComparison.Ordinal),
+    "Launcher still exposes Signal as a visible product brand instead of BKE.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"Coming later\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"Future\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"Your software\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Only software that is ready to open on this machine.",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"OBSIDIAN\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"SYSTEM\"",
+        StringComparison.Ordinal),
+    "Launcher compact shell restored removed sidebar/dashboard helper content.");
+Require(
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Menu\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"LayoutDashboard\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Library\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Store\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Bell\"",
+        StringComparison.Ordinal),
+    "Launcher compact navigation lost its Lucide icon treatment.");
+Require(
+    !mainWindowMarkup.Contains(
+        "HeroParallaxPointerMoved",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "HeroParallaxPointerExited",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "TranslateTransform",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "args.GetPosition(surface)",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "ConfigureHeroParallax",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "OrbitTimer",
+        StringComparison.Ordinal),
+    "Launcher reintroduced CPU-heavy pointer parallax or a custom orbit timer.");
+Require(
+    mainWindowSource.Contains(
+        "Interval = TimeSpan.FromSeconds(2)",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "WindowState == WindowState.Minimized",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal telemetry is not bounded/throttled by window lifecycle.");
+Require(
+    telemetrySamplerSource.Contains(
+        "GetSystemTimes",
+        StringComparison.Ordinal) &&
+    telemetrySamplerSource.Contains(
+        "GlobalMemoryStatusEx",
+        StringComparison.Ordinal) &&
+    telemetrySamplerSource.Contains(
+        "PerformanceCounterCategory.Exists(\"GPU Engine\")",
+        StringComparison.Ordinal) &&
+    telemetrySamplerSource.Contains(
+        ".Take(64)",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal telemetry lost bounded CPU/memory/GPU sampling.");
+Require(
+    !mainWindowMarkup.Contains(
+        "WebGL",
+        StringComparison.OrdinalIgnoreCase) &&
+    !mainWindowMarkup.Contains(
+        "WebGPU",
+        StringComparison.OrdinalIgnoreCase) &&
+    !telemetrySamplerSource.Contains(
+        "Three.js",
+        StringComparison.OrdinalIgnoreCase),
+    "Launcher BKE Signal introduced an actual 3D rendering dependency.");
+Require(
+    telemetryViewModelSource.Contains(
+        "System healthy",
+        StringComparison.Ordinal) &&
+    telemetryViewModelSource.Contains(
+        "System busy",
+        StringComparison.Ordinal) &&
+    telemetryViewModelSource.Contains(
+        "GpuDetail",
+        StringComparison.Ordinal),
+    "Launcher BKE Signal telemetry projection lost human-readable health/GPU state.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowLoginPage}\"", StringComparison.Ordinal),
     "Launcher does not gate unauthenticated startup on the Login page.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAuthenticatedShell}\"", StringComparison.Ordinal),
     "Launcher does not gate authenticated startup on the BKE shell.");
-Require(mainWindowMarkup.Contains("SelectedIndex=\"{Binding SelectedModuleIndex, Mode=TwoWay}\"", StringComparison.Ordinal),
-    "Launcher shell does not preserve an explicitly unselected module state.");
+Require(
+    !mainWindowMarkup.Contains(
+        "<TabControl",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowHomeModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowLibraryModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowNotificationsModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenDashboard",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenLibrary",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Classes.active=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ToolTip.Tip=\"Store\"",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenNotifications",
+        StringComparison.Ordinal) &&
+    mainWindowSource.Contains(
+        "OpenStore",
+        StringComparison.Ordinal),
+    "Launcher shell did not preserve explicit Dashboard / Library / Store / Notifications navigation.");
+var dashboardSurfaceStart = mainWindowMarkup.IndexOf(
+    "IsVisible=\"{Binding ShowHomeModule}\"",
+    StringComparison.Ordinal);
+var librarySurfaceStart = mainWindowMarkup.IndexOf(
+    "IsVisible=\"{Binding ShowLibraryModule}\"",
+    StringComparison.Ordinal);
+var notificationsSurfaceStart = mainWindowMarkup.IndexOf(
+    "IsVisible=\"{Binding ShowNotificationsModule}\"",
+    StringComparison.Ordinal);
+Require(
+    dashboardSurfaceStart >= 0 &&
+    librarySurfaceStart > dashboardSurfaceStart &&
+    notificationsSurfaceStart > librarySurfaceStart,
+    "Launcher Dashboard/Library surface boundaries are unavailable.");
+var dashboardSurface = mainWindowMarkup[
+    dashboardSurfaceStart..librarySurfaceStart];
+var librarySurface = mainWindowMarkup[
+    librarySurfaceStart..notificationsSurfaceStart];
+Require(
+    dashboardSurface.Contains(
+        "ItemsSource=\"{Binding DashboardProducts}\"",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "public ObservableCollection<SoftwareProductViewModel> DashboardProducts",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "Products.Where(product => product.CanOpen)",
+        StringComparison.Ordinal) &&
+    dashboardSurface.Contains(
+        "Text=\"{Binding DisplayName}\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"InstallProduct\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"UpdateProduct\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"RepairProduct\"",
+        StringComparison.Ordinal) &&
+    !dashboardSurface.Contains(
+        "Click=\"RemoveProduct\"",
+        StringComparison.Ordinal) &&
+    dashboardSurface.Contains(
+        "Click=\"OpenDashboardProduct\"",
+        StringComparison.Ordinal),
+    "Launcher Dashboard software shelf is no longer minimal/clickable.");
+Require(
+    librarySurface.Contains(
+        "Click=\"InstallProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"UpdateProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"RepairProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"RemoveProduct\"",
+        StringComparison.Ordinal) &&
+    librarySurface.Contains(
+        "Click=\"OpenProduct\"",
+        StringComparison.Ordinal),
+    "Launcher Library no longer owns software lifecycle actions.");
+Require(
+    !librarySurface.Contains(
+        "Text=\"{Binding CatalogStatus}\"",
+        StringComparison.Ordinal) &&
+    !librarySurface.Contains(
+        "Content=\"Sync\"",
+        StringComparison.Ordinal) &&
+    !librarySurface.Contains(
+        "Content=\"Browse Store  ›\"",
+        StringComparison.Ordinal),
+    "Launcher Library header restored redundant READY / Sync / Browse Store controls.");
+
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", StringComparison.Ordinal),
     "Launcher Account surface is not explicitly user-selected.");
 Require(
@@ -2651,16 +3078,53 @@ Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanChangePassword}\"", S
     "Launcher Change Password action is not state-bound.");
 Require(mainWindowSource.Contains("ChangePassword", StringComparison.Ordinal),
     "Launcher Change Password click handler is missing.");
-Require(mainWindowMarkup.Contains("Header=\"Notifications\"", StringComparison.Ordinal),
-    "BKE Notifications tab is missing.");
+Require(
+    mainWindowMarkup.Contains(
+        "Text=\"Notifications\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenNotifications\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowNotificationsModule}\"",
+        StringComparison.Ordinal),
+    "BKE Notifications Signal navigation/surface is missing.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"Install, open and maintain software available to this BKE account.\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding CatalogMessage}\"",
+        StringComparison.Ordinal),
+    "Launcher Library restored redundant helper copy above the product list.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding NotificationMessage}\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "This inbox is scoped by Digital Solutions to the selected BKE account",
+        StringComparison.Ordinal),
+    "Launcher Notifications restored redundant helper copy above the notification holder.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding Notifications}\"", StringComparison.Ordinal),
     "BKE Notifications are not Agent-projected into the UI.");
-Require(mainWindowMarkup.Contains("Content=\"Refresh notifications\"", StringComparison.Ordinal),
-    "BKE Notifications refresh action is missing.");
-Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRefreshNotifications}\"", StringComparison.Ordinal),
-    "BKE Notifications refresh action is not session-bound.");
-Require(mainWindowMarkup.Contains("Mark Read and Dismiss are server-authoritative receipt actions.", StringComparison.Ordinal),
-    "BKE Notifications UI does not state the server-authoritative receipt boundary.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding NotificationStatus}\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Content=\"Refresh notifications\"",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "private async void RefreshNotifications(",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "case 2:",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "await RefreshNotificationsAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "BKE Notifications must refresh automatically on Notifications navigation without a manual status/refresh control.");
+
 Require(mainWindowMarkup.Contains("Content=\"Mark read\"", StringComparison.Ordinal),
     "BKE Notifications Mark Read action is missing.");
 Require(mainWindowMarkup.Contains("Content=\"Dismiss\"", StringComparison.Ordinal),
@@ -2669,12 +3133,50 @@ Require(mainWindowSource.Contains("MarkNotificationRead", StringComparison.Ordin
     "BKE Notifications Mark Read click handler is missing.");
 Require(mainWindowSource.Contains("DismissNotification", StringComparison.Ordinal),
     "BKE Notifications Dismiss click handler is missing.");
-Require(mainWindowSource.Contains("RefreshNotifications", StringComparison.Ordinal),
-    "BKE Notifications refresh click handler is missing.");
-Require(mainWindowMarkup.Contains("Header=\"Store\"", StringComparison.Ordinal), "BKE Store tab is missing.");
+Require(
+    registrationViewModelSource.Contains(
+        "private async Task MutateNotificationAsync(",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "await RefreshNotificationsAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "BKE Notifications lost automatic refresh after receipt mutation.");
+Require(
+    mainWindowMarkup.Contains(
+        "Classes.active=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "ToolTip.Tip=\"Store\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "<LucideIcon Kind=\"Store\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "Click=\"OpenStore\"",
+        StringComparison.Ordinal) &&
+    mainWindowMarkup.Contains(
+        "IsVisible=\"{Binding ShowStoreModule}\"",
+        StringComparison.Ordinal),
+    "BKE Store is no longer reachable from first-class sidebar navigation.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
-Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding StoreStatus}\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Content=\"Refresh Store\"",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "private async void RefreshStore(",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "case 3:",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "await RefreshStoreAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "BKE Store must refresh automatically on Store navigation without a manual READY/Refresh control.");
 Require(mainWindowMarkup.Contains("Content=\"Start free 7-day trial\"", StringComparison.Ordinal), "BKE Store trial action is missing.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding StoreTrialStatus}\"", StringComparison.Ordinal), "BKE Store trial status is not presentation-bound.");
 Require(mainWindowMarkup.Contains("Content=\"Refresh trial state\"", StringComparison.Ordinal), "BKE Store trial ambiguity refresh action is missing.");
@@ -2704,6 +3206,17 @@ Require(mainWindowSource.Contains("OpenPurchaseLegalDocument", StringComparison.
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
+Require(
+    normalizedViewModelSource.Contains(
+        "WaitForProductConvergenceAsync(",
+        StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "BKE is watching the Agent for completion.",
+        StringComparison.Ordinal) &&
+    !normalizedViewModelSource.Contains(
+        "Refresh software after the elevation step completes.",
+        StringComparison.Ordinal),
+    "Launcher software lifecycle still requires normal users to manually refresh after verified operations.");
 Require(normalizedViewModelSource.Contains(
     "await _notifications.GetAsync(",
     StringComparison.Ordinal),
@@ -2718,12 +3231,15 @@ Require(normalizedViewModelSource.Contains(
     "Launcher lacks explicit module-open intent.");
 Require(normalizedViewModelSource.Contains(
     "SelectedModuleIndex = -1;",
-    StringComparison.Ordinal),
-    "Launcher does not preserve the naked authenticated shell state.");
+    StringComparison.Ordinal) &&
+    normalizedViewModelSource.Contains(
+        "SelectedModuleIndex = 0;",
+        StringComparison.Ordinal),
+    "Launcher shell no longer resets safely or selects Home after authenticated convergence.");
 Require(normalizedViewModelSource.Contains(
     "ShowAccountSurface = false;",
     StringComparison.Ordinal),
-    "Launcher naked shell does not close the Account surface.");
+    "Launcher authenticated Home convergence does not close the Account surface.");
 
 var nativeSignInStart = normalizedViewModelSource.IndexOf(
     "public async Task NativeSignInAsync(",
@@ -2756,7 +3272,7 @@ Require(
         "private void PrepareAuthenticatedShellSurface()",
         StringComparison.Ordinal) &&
     normalizedViewModelSource.Contains(
-        "Open My Software to load software for this BKE account.",
+        "Home is ready to sync software for this BKE account.",
         StringComparison.Ordinal) &&
     normalizedViewModelSource.Contains(
         "Open Store to browse software for this BKE account.",
@@ -5892,7 +6408,7 @@ static async Task CertifySafeAccountSwitchingAsync()
     Require(
         lockedViewModel.CanLeaveOrganization,
         "Checkout-lock certification did not begin with an otherwise leave-authorized Organization membership.");
-    await lockedViewModel.OpenModuleAsync(2, CancellationToken.None);
+    await lockedViewModel.OpenModuleAsync(3, CancellationToken.None);
     await lockedViewModel.ReviewPurchaseAsync(
         CustomerJourneyAgentClient.PurchasePlanId,
         CancellationToken.None);
@@ -5944,7 +6460,7 @@ static async Task CertifySafeAccountSwitchingAsync()
         "Checkout-lock ownership certification did not begin with an authorized owner.");
 
     await lockedOwnerViewModel.OpenModuleAsync(
-        2,
+        3,
         CancellationToken.None);
     await lockedOwnerViewModel.ReviewPurchaseAsync(
         CustomerJourneyAgentClient.PurchasePlanId,
@@ -6013,7 +6529,7 @@ static async Task CertifySelfServiceTrialRefreshesMySoftwareAsync()
         viewModel.Products.Single().StateLabel == "Not entitled",
         "Trial journey did not begin without entitlement.");
 
-    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    await viewModel.OpenModuleAsync(3, CancellationToken.None);
     var edition = viewModel.StoreProducts.Single().Editions.Single();
     Require(
         edition.EditionId == CustomerJourneyAgentClient.EditionId &&
@@ -6049,7 +6565,7 @@ static async Task CertifySelfServiceTrialRefreshesMySoftwareAsync()
     await uncertainViewModel.InitializeAsync(
         CancellationToken.None);
     await uncertainViewModel.OpenModuleAsync(
-        2,
+        3,
         CancellationToken.None);
     var uncertainEdition =
         uncertainViewModel.StoreProducts.Single().Editions.Single();
@@ -6092,8 +6608,8 @@ static async Task CertifySelfPurchaseRefreshesMySoftwareAsync()
 
     await viewModel.InitializeAsync(CancellationToken.None);
     Require(viewModel.IsAuthenticated, "Customer journey did not enter the authenticated BKE shell.");
-    Require(viewModel.SelectedModuleIndex == -1,
-        "Authenticated startup auto-selected a customer destination.");
+    Require(viewModel.SelectedModuleIndex == 0,
+        "Authenticated startup did not select the BKE Dashboard surface.");
 
     await viewModel.OpenModuleAsync(0, CancellationToken.None);
     Require(viewModel.Products.Count == 1 &&
@@ -6101,7 +6617,7 @@ static async Task CertifySelfPurchaseRefreshesMySoftwareAsync()
             !viewModel.Products[0].CanInstall,
         "SELF journey did not begin without software ownership.");
 
-    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    await viewModel.OpenModuleAsync(3, CancellationToken.None);
     Require(viewModel.StoreProducts.Count == 1,
         "SELF journey could not load the Agent-mediated Store.");
 
@@ -6148,7 +6664,7 @@ static async Task CertifyGiftPurchaseStaysUnboundAsync()
 
     await viewModel.InitializeAsync(CancellationToken.None);
     await viewModel.OpenModuleAsync(0, CancellationToken.None);
-    await viewModel.OpenModuleAsync(2, CancellationToken.None);
+    await viewModel.OpenModuleAsync(3, CancellationToken.None);
     await viewModel.ReviewPurchaseAsync(
         CustomerJourneyAgentClient.PurchasePlanId,
         CancellationToken.None);

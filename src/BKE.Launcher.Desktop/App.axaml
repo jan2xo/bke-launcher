@@ -3,21 +3,68 @@
              x:Class="BKE.Launcher.Desktop.App"
              RequestedThemeVariant="Dark">
   <Application.Resources>
-    <SolidColorBrush x:Key="BkeBackgroundBrush">#0A0E13</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSurfaceBrush">#111821</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeSurfaceRaisedBrush">#151E29</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeBorderBrush">#263241</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeTextBrush">#F4F7FA</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeMutedTextBrush">#91A0AF</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeAccentBrush">#F4F7FA</SolidColorBrush>
-    <SolidColorBrush x:Key="BkeAccentTextBrush">#0A0E13</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeBackgroundBrush">#07090C</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSurfaceBrush">#0C0F13</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSurfaceRaisedBrush">#11151B</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeBorderBrush">#232A33</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeTextBrush">#F3F1EA</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeMutedTextBrush">#8E959E</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeAccentBrush">#F3F1EA</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeAccentTextBrush">#08090B</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBrush">#67D9FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalSoftBrush">#1667D9FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBorderBrush">#4767D9FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSuccessBrush">#86EFAC</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeWarningBrush">#FDE68A</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDangerBrush">#FDA4AF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeInsetBrush">#090B0E</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeQuietBrush">#090B0E</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeCanvasBrush">#050608</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeGlassBrush">#EA0A0C0F</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeGlassRaisedBrush">#F00F1216</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeHairlineBrush">#242A32</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeSignalBrightBrush">#B7ECFF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeIndigoBrush">#8177FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeIndigoSoftBrush">#218177FF</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDigitalYellowBrush">#FFD15A</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDigitalYellowSoftBrush">#24FFD15A</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeDigitalYellowBorderBrush">#66FFD15A</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeObsidianBrush">#0A0C0F</SolidColorBrush>
+    <SolidColorBrush x:Key="BkeObsidianRaisedBrush">#11151A</SolidColorBrush>
+    <LinearGradientBrush x:Key="BkeHeroBrush"
+                         StartPoint="0%,0%"
+                         EndPoint="100%,100%">
+      <GradientStop Color="#FA101317" Offset="0" />
+      <GradientStop Color="#F6090B0E" Offset="0.58" />
+      <GradientStop Color="#EE0B0D13" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="BkeProductBrush"
+                         StartPoint="0%,0%"
+                         EndPoint="100%,100%">
+      <GradientStop Color="#F412161B" Offset="0" />
+      <GradientStop Color="#F00B0D11" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="BkeCoreDiscBrush"
+                         StartPoint="10%,0%"
+                         EndPoint="90%,100%">
+      <GradientStop Color="#283140" Offset="0" />
+      <GradientStop Color="#1B222D" Offset="0.45" />
+      <GradientStop Color="#11141B" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="BkeCoreHighlightBrush"
+                         StartPoint="0%,0%"
+                         EndPoint="100%,100%">
+      <GradientStop Color="#3867D9FF" Offset="0" />
+      <GradientStop Color="#168177FF" Offset="0.55" />
+      <GradientStop Color="#0667D9FF" Offset="1" />
+    </LinearGradientBrush>
   </Application.Resources>
 
   <Application.Styles>
     <FluentTheme DensityStyle="Compact" />
 
     <Style Selector="Window">
-      <Setter Property="Background" Value="{StaticResource BkeBackgroundBrush}" />
+      <Setter Property="Background" Value="{StaticResource BkeCanvasBrush}" />
       <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
     </Style>
 
@@ -26,13 +73,58 @@
     </Style>
 
     <Style Selector="TextBlock.brand">
-      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontSize" Value="25" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="1.2" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.display-title">
+      <Setter Property="FontSize" Value="34" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="-0.6" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.kicker">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="1.7" />
+      <Setter Property="Foreground" Value="{StaticResource BkeDigitalYellowBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.product-title">
+      <Setter Property="FontSize" Value="19" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
     </Style>
 
     <Style Selector="TextBlock.section-title">
       <Setter Property="FontSize" Value="20" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.hero-title">
+      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeSignalBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.metric-label">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.metric-value">
+      <Setter Property="FontSize" Value="24" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
     </Style>
@@ -50,11 +142,164 @@
       <Setter Property="BorderThickness" Value="1" />
     </Style>
 
-    <Style Selector="Border.status-pill">
+    <Style Selector="Border.signal-panel">
+      <Setter Property="Background" Value="{StaticResource BkeGlassBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeHairlineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="20" />
+    </Style>
+
+    <Style Selector="Border.hero-surface">
+      <Setter Property="Background" Value="{StaticResource BkeHeroBrush}" />
+      <Setter Property="BorderBrush" Value="#25394A" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="24" />
+    </Style>
+
+    <Style Selector="Border.machine-card">
+      <Setter Property="Background" Value="{StaticResource BkeGlassBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeHairlineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="20" />
+    </Style>
+
+    <Style Selector="Border.metric-tile">
+      <Setter Property="Background" Value="#8A0A1118" />
+      <Setter Property="BorderBrush" Value="#172738" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="13" />
+    </Style>
+
+    <Style Selector="Border.product-card">
+      <Setter Property="Background" Value="{StaticResource BkeProductBrush}" />
+      <Setter Property="BorderBrush" Value="#203244" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="18" />
+    </Style>
+
+    <Style Selector="Border.product-icon">
+      <Setter Property="Background" Value="#8C101A24" />
+      <Setter Property="BorderBrush" Value="#2F5067" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="16" />
+    </Style>
+
+    <Style Selector="Border.signal-dot">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="CornerRadius" Value="999" />
+      <Setter Property="Background" Value="{StaticResource BkeSignalBrush}" />
+    </Style>
+
+    <Style Selector="Border.obsidian-hero">
+      <Setter Property="Background" Value="{StaticResource BkeHeroBrush}" />
+      <Setter Property="BorderBrush" Value="#313740" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="28" />
+    </Style>
+
+    <Style Selector="Border.obsidian-depth">
+      <Setter Property="Background" Value="#66000000" />
+      <Setter Property="CornerRadius" Value="30" />
+    </Style>
+
+    <Style Selector="Border.obsidian-metric">
+      <Setter Property="Background" Value="#D90A0C0F" />
+      <Setter Property="BorderBrush" Value="#242B35" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="15" />
+    </Style>
+
+    <Style Selector="Border.core-disc">
+      <Setter Property="Background" Value="{StaticResource BkeCoreDiscBrush}" />
+      <Setter Property="BorderBrush" Value="#4A5665" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="999" />
+    </Style>
+
+    <Style Selector="Grid.ds-orbit-clockwise">
+      <Style.Animations>
+        <Animation Duration="0:0:18"
+                   IterationCount="infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
+    <Style Selector="Grid.ds-orbit-counter">
+      <Style.Animations>
+        <Animation Duration="0:0:26"
+                   IterationCount="infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="-360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
+    <Style Selector="Border.app-shelf-card">
+      <Setter Property="Background" Value="{StaticResource BkeProductBrush}" />
+      <Setter Property="BorderBrush" Value="#252C35" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="16" />
+    </Style>
+
+    <Style Selector="Border.app-mark">
+      <Setter Property="Background" Value="#CA0B0E12" />
+      <Setter Property="BorderBrush" Value="#34404C" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="17" />
+    </Style>
+
+    <Style Selector="Border.library-card">
+      <Setter Property="Background" Value="{StaticResource BkeProductBrush}" />
+      <Setter Property="BorderBrush" Value="#252D37" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="20" />
+    </Style>
+
+    <Style Selector="Border.signal-card">
       <Setter Property="Background" Value="{StaticResource BkeSurfaceRaisedBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource BkeBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="14" />
+    </Style>
+
+    <Style Selector="Border.signal-card.active">
+      <Setter Property="Background" Value="{StaticResource BkeQuietBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeSignalBorderBrush}" />
+    </Style>
+
+    <Style Selector="Border.signal-inset">
+      <Setter Property="Background" Value="{StaticResource BkeInsetBrush}" />
+      <Setter Property="BorderBrush" Value="#1B2734" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+
+    <Style Selector="Border.signal-rail">
+      <Setter Property="Background" Value="{StaticResource BkeSignalSoftBrush}" />
       <Setter Property="CornerRadius" Value="999" />
+    </Style>
+
+    <Style Selector="Border.status-pill">
+      <Setter Property="Background" Value="#7A111B26" />
+      <Setter Property="BorderBrush" Value="#223447" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="999" />
+    </Style>
+
+    <Style Selector="Border.status-pill.signal">
+      <Setter Property="Background" Value="{StaticResource BkeSignalSoftBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeSignalBorderBrush}" />
     </Style>
 
     <Style Selector="Button">
@@ -72,6 +317,150 @@
       <Setter Property="Background" Value="{StaticResource BkeAccentBrush}" />
       <Setter Property="Foreground" Value="{StaticResource BkeAccentTextBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource BkeAccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.signal">
+      <Setter Property="Background" Value="{StaticResource BkeSignalSoftBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeSignalBorderBrush}" />
+    </Style>
+
+    <Style Selector="Button.quiet">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.quiet.shelf-link">
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="Foreground" Value="{StaticResource BkeDigitalYellowBrush}" />
+    </Style>
+
+    <Style Selector="Button.quiet.shelf-link:pointerover">
+      <Setter Property="Foreground" Value="#FFE28A" />
+      <Setter Property="Background" Value="{StaticResource BkeDigitalYellowSoftBrush}" />
+    </Style>
+
+    <Style Selector="Button.nav">
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Padding" Value="16,7" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+      <Setter Property="CornerRadius" Value="999" />
+    </Style>
+
+    <Style Selector="Button.nav:pointerover">
+      <Setter Property="Background" Value="#74111B26" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.nav.active">
+      <Setter Property="Background" Value="#E112161C" />
+      <Setter Property="BorderBrush" Value="#353D48" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.icon-button">
+      <Setter Property="MinWidth" Value="40" />
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="10" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Background" Value="#8A101821" />
+    </Style>
+
+    <Style Selector="Button.window-control">
+      <Setter Property="Width" Value="34" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="Button.window-control:pointerover">
+      <Setter Property="Background" Value="#C0182028" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.window-control.window-close:pointerover">
+      <Setter Property="Background" Value="#C03B1720" />
+      <Setter Property="Foreground" Value="#FFF4F6" />
+    </Style>
+
+    <Style Selector="Border.sidebar">
+      <Setter Property="Background" Value="#F20A0C0F" />
+      <Setter Property="BorderBrush" Value="#252B33" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="24" />
+    </Style>
+
+    <Style Selector="Button.sidebar-nav">
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
+      <Setter Property="CornerRadius" Value="11" />
+    </Style>
+
+    <Style Selector="Button.sidebar-nav.compact">
+      <Setter Property="Width" Value="42" />
+      <Setter Property="Height" Value="42" />
+      <Setter Property="MinWidth" Value="42" />
+      <Setter Property="MinHeight" Value="42" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.sidebar-nav:pointerover">
+      <Setter Property="Background" Value="#C011151A" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.sidebar-nav.active">
+      <Setter Property="Background" Value="#E6151A21" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeDigitalYellowBorderBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />
+    </Style>
+
+    <Style Selector="Border.sidebar-glyph">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Background" Value="#B00C1014" />
+      <Setter Property="BorderBrush" Value="#303943" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="9" />
+    </Style>
+
+    <Style Selector="Border.avatar">
+      <Setter Property="Width" Value="38" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="Background" Value="#DC151A20" />
+      <Setter Property="BorderBrush" Value="#40505F" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="999" />
+    </Style>
+
+    <Style Selector="Button.app-tile">
+      <Setter Property="Width" Value="126" />
+      <Setter Property="Height" Value="104" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="CornerRadius" Value="16" />
+    </Style>
+
+    <Style Selector="Button.app-tile:pointerover">
+      <Setter Property="Background" Value="#121820" />
+      <Setter Property="BorderBrush" Value="#34414D" />
     </Style>
 
     <Style Selector="TextBox">

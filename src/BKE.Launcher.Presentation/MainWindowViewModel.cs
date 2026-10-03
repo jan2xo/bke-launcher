@@ -211,6 +211,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _checkoutRecoveryStateBlocked;
     private int _selectedModuleIndex = -1;
     private bool _showAccountSurface;
+    private bool _sidebarExpanded = true;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -285,6 +286,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableCollection<SoftwareProductViewModel> Products { get; } = [];
+    public ObservableCollection<SoftwareProductViewModel> DashboardProducts { get; } = [];
+    public SystemTelemetryViewModel Telemetry { get; } = new();
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
@@ -1631,13 +1634,71 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public int SelectedModuleIndex
     {
         get => _selectedModuleIndex;
-        set => SetField(ref _selectedModuleIndex, value);
+        set
+        {
+            SetField(ref _selectedModuleIndex, value);
+            Raise(nameof(ShowHomeModule));
+            Raise(nameof(ShowLibraryModule));
+            Raise(nameof(ShowNotificationsModule));
+            Raise(nameof(ShowStoreModule));
+        }
     }
+
+    public bool IsSidebarExpanded
+    {
+        get => _sidebarExpanded;
+        private set
+        {
+            SetField(ref _sidebarExpanded, value);
+            Raise(nameof(IsSidebarCollapsed));
+            Raise(nameof(SidebarWidth));
+        }
+    }
+
+    public bool IsSidebarCollapsed => !IsSidebarExpanded;
+
+    public double SidebarWidth =>
+        IsSidebarExpanded
+            ? 208
+            : 68;
+
+    public void ToggleSidebar() =>
+        IsSidebarExpanded = !IsSidebarExpanded;
+
+    public void CollapseSidebar() =>
+        IsSidebarExpanded = false;
+
+    public bool ShowHomeModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 0;
+
+    public bool ShowLibraryModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 1;
+
+    public bool ShowNotificationsModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 2;
+
+    public bool ShowStoreModule =>
+        IsAuthenticated &&
+        !ShowAccountSurface &&
+        SelectedModuleIndex == 3;
 
     public bool ShowAccountSurface
     {
         get => _showAccountSurface;
-        private set => SetField(ref _showAccountSurface, value);
+        private set
+        {
+            SetField(ref _showAccountSurface, value);
+            Raise(nameof(ShowHomeModule));
+            Raise(nameof(ShowLibraryModule));
+            Raise(nameof(ShowNotificationsModule));
+            Raise(nameof(ShowStoreModule));
+        }
     }
 
     public string SessionStatus
@@ -1673,7 +1734,62 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string AccountDisplay
     {
         get => _accountDisplay;
-        private set => SetField(ref _accountDisplay, value);
+        private set
+        {
+            SetField(ref _accountDisplay, value);
+            Raise(nameof(AccountInitials));
+            Raise(nameof(AccountGreeting));
+        }
+    }
+
+    public string AccountGreeting
+    {
+        get
+        {
+            var separatorIndex = AccountDisplay.IndexOf(
+                " · ",
+                StringComparison.Ordinal);
+            var displayName = separatorIndex > 0
+                ? AccountDisplay[..separatorIndex]
+                : AccountDisplay;
+
+            if (string.IsNullOrWhiteSpace(displayName) ||
+                displayName is "Not signed in" or "Not available")
+            {
+                return "Welcome back";
+            }
+
+            return $"Welcome back, {displayName.Trim()}";
+        }
+    }
+
+    public string AccountInitials
+    {
+        get
+        {
+            var parts = AccountDisplay
+                .Split(
+                    [' ', '\t', '\r', '\n'],
+                    StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries);
+
+            if (parts.Length == 0)
+            {
+                return "B";
+            }
+
+            if (parts.Length == 1)
+            {
+                return parts[0].Length == 1
+                    ? parts[0].ToUpperInvariant()
+                    : parts[0][..2].ToUpperInvariant();
+            }
+
+            return string.Concat(
+                parts[0][0],
+                parts[^1][0])
+                .ToUpperInvariant();
+        }
     }
 
     public string AccountTypeLabel =>
@@ -1959,6 +2075,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string.Equals(SessionStatus, "AUTHENTICATED", StringComparison.Ordinal);
 
     public bool ShowEmptyProducts => Products.Count == 0;
+    public bool ShowEmptyDashboardProducts => DashboardProducts.Count == 0;
     public bool ShowEmptyStore => StoreProducts.Count == 0;
     public bool ShowEmptyNotifications => Notifications.Count == 0;
 
@@ -2037,9 +2154,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 await RefreshCatalogAsync(cancellationToken);
                 break;
             case 1:
-                await RefreshNotificationsAsync(cancellationToken);
+                await RefreshCatalogAsync(cancellationToken);
                 break;
             case 2:
+                await RefreshNotificationsAsync(cancellationToken);
+                break;
+            case 3:
                 await RefreshStoreAsync(cancellationToken);
                 break;
         }
@@ -2931,6 +3051,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                         pluginRegistered));
             }
 
+            RefreshDashboardProducts();
             Raise(nameof(ShowEmptyProducts));
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
@@ -3884,8 +4005,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 case "IN_PROGRESS":
                     CatalogStatus = "INSTALLING";
                     CatalogMessage = response.Status == "STARTED"
-                        ? $"Verified installation started for {previous.DisplayName}. Refresh software after the elevation step completes."
-                        : $"Installation is already in progress for {previous.DisplayName}.";
+                        ? $"Verified installation started for {previous.DisplayName}. BKE is watching the Agent for completion."
+                        : $"Installation is already in progress for {previous.DisplayName}. BKE is watching the Agent for completion.";
+                    await WaitForProductConvergenceAsync(
+                        productId,
+                        "INSTALLING",
+                        product => product.CanOpen && !product.CanInstall,
+                        $"{previous.DisplayName} is installed and ready.",
+                        cancellationToken);
                     break;
 
                 case "ALREADY_INSTALLED":
@@ -3983,8 +4110,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 case "IN_PROGRESS":
                     CatalogStatus = "UPDATING";
                     CatalogMessage = response.Status == "STARTED"
-                        ? $"Verified update started for {previous.DisplayName}. Refresh software after the elevation step completes."
-                        : $"An update is already in progress for {previous.DisplayName}.";
+                        ? $"Verified update started for {previous.DisplayName}. BKE is watching the Agent for completion."
+                        : $"An update is already in progress for {previous.DisplayName}. BKE is watching the Agent for completion.";
+                    await WaitForProductConvergenceAsync(
+                        productId,
+                        "UPDATING",
+                        product => product.CanOpen && !product.CanUpdate,
+                        $"{previous.DisplayName} is up to date and ready.",
+                        cancellationToken);
                     return;
 
                 case "UP_TO_DATE":
@@ -4080,8 +4213,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 case "IN_PROGRESS":
                     CatalogStatus = "REPAIRING";
                     CatalogMessage = response.Status == "STARTED"
-                        ? $"Verified Repair started for {previous.DisplayName}. Refresh software after the elevation step completes."
-                        : $"Repair is already in progress for {previous.DisplayName}.";
+                        ? $"Verified Repair started for {previous.DisplayName}. BKE is watching the Agent for completion."
+                        : $"Repair is already in progress for {previous.DisplayName}. BKE is watching the Agent for completion.";
+                    await WaitForProductConvergenceAsync(
+                        productId,
+                        "REPAIRING",
+                        product =>
+                            product.CanOpen &&
+                            !string.Equals(
+                                product.StateLabel,
+                                "Repair required",
+                                StringComparison.Ordinal),
+                        $"{previous.DisplayName} Repair completed and the product is ready.",
+                        cancellationToken);
                     return;
 
                 case "NOT_INSTALLED":
@@ -4340,6 +4484,66 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CatalogMessage =
                 "The BKE Licensing Agent remove capability is unavailable or invalid.";
         }
+    }
+
+    private async Task WaitForProductConvergenceAsync(
+        string productId,
+        string operationStatus,
+        Func<SoftwareProductViewModel, bool> isComplete,
+        string successMessage,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        const int maxAttempts = 80;
+        var terminalObservations = 0;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(1500),
+                cancellationToken);
+            await RefreshCatalogAsync(cancellationToken);
+
+            if (CatalogStatus is "AUTH_REQUIRED" or "AGENT_UNAVAILABLE")
+            {
+                return;
+            }
+
+            var current = Products.FirstOrDefault(product =>
+                string.Equals(
+                    product.ProductId,
+                    productId,
+                    StringComparison.Ordinal));
+
+            var minimumObservationWindowElapsed =
+                DateTimeOffset.UtcNow - startedAt >= TimeSpan.FromSeconds(5);
+
+            if (current is not null &&
+                minimumObservationWindowElapsed &&
+                isComplete(current))
+            {
+                terminalObservations++;
+                if (terminalObservations >= 2)
+                {
+                    CatalogStatus = "READY";
+                    CatalogMessage = successMessage;
+                    await RefreshStoreAsync(cancellationToken);
+                    return;
+                }
+            }
+            else
+            {
+                terminalObservations = 0;
+            }
+
+            CatalogStatus = operationStatus;
+            CatalogMessage =
+                "BKE is waiting for the Licensing Agent to finish the verified operation…";
+        }
+
+        CatalogStatus = operationStatus;
+        CatalogMessage =
+            "The verified operation is still running. BKE will refresh the authoritative state the next time this Home surface is opened.";
     }
 
     public async Task RefreshAccountMfaAsync(CancellationToken cancellationToken)
@@ -6937,13 +7141,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetShellSurface();
         ClearCatalog(
             "IDLE",
-            "Open My Software to load software for this BKE account.");
+            "Home is ready to sync software for this BKE account.");
         ClearStore(
             "IDLE",
             "Open Store to browse software for this BKE account.");
         ClearNotifications(
             "IDLE",
             "Open Notifications to load this BKE account inbox.");
+        SelectedModuleIndex = 0;
     }
 
     private void ResetShellSurface()
@@ -7692,7 +7897,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CatalogStatus = status;
         CatalogMessage = message;
         Products.Clear();
+        DashboardProducts.Clear();
         Raise(nameof(ShowEmptyProducts));
+        Raise(nameof(ShowEmptyDashboardProducts));
+    }
+
+    private void RefreshDashboardProducts()
+    {
+        DashboardProducts.Clear();
+        foreach (var product in Products.Where(product => product.CanOpen))
+        {
+            DashboardProducts.Add(product);
+        }
+
+        Raise(nameof(ShowEmptyDashboardProducts));
     }
 
     private void ClearStore(string status, string message)
