@@ -3089,6 +3089,22 @@ Require(
         "IsVisible=\"{Binding ShowNotificationsModule}\"",
         StringComparison.Ordinal),
     "BKE Notifications Signal navigation/surface is missing.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"Install, open and maintain software available to this BKE account.\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding CatalogMessage}\"",
+        StringComparison.Ordinal),
+    "Launcher Library restored redundant helper copy above the product list.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding NotificationMessage}\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "This inbox is scoped by Digital Solutions to the selected BKE account",
+        StringComparison.Ordinal),
+    "Launcher Notifications restored redundant helper copy above the notification holder.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding Notifications}\"", StringComparison.Ordinal),
     "BKE Notifications are not Agent-projected into the UI.");
 Require(
@@ -3108,8 +3124,7 @@ Require(
         "await RefreshNotificationsAsync(cancellationToken);",
         StringComparison.Ordinal),
     "BKE Notifications must refresh automatically on Notifications navigation without a manual status/refresh control.");
-Require(mainWindowMarkup.Contains("Mark Read and Dismiss are server-authoritative receipt actions.", StringComparison.Ordinal),
-    "BKE Notifications UI does not state the server-authoritative receipt boundary.");
+
 Require(mainWindowMarkup.Contains("Content=\"Mark read\"", StringComparison.Ordinal),
     "BKE Notifications Mark Read action is missing.");
 Require(mainWindowMarkup.Contains("Content=\"Dismiss\"", StringComparison.Ordinal),
