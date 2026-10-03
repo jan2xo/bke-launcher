@@ -241,16 +241,11 @@
                           HorizontalAlignment="Center"
                           VerticalAlignment="Center" />
             </Button>
-            <StackPanel Grid.Column="1"
-                        VerticalAlignment="Center"
-                        Spacing="0">
-              <TextBlock Text="BKE"
-                         Classes="brand"
-                         FontSize="21" />
-              <TextBlock Text="OBSIDIAN"
-                         Classes="kicker"
-                         FontSize="7" />
-            </StackPanel>
+            <TextBlock Grid.Column="1"
+                       Text="BKE"
+                       Classes="brand"
+                       FontSize="21"
+                       VerticalAlignment="Center" />
           </Grid>
 
           <Button IsVisible="{Binding IsSidebarCollapsed}"
@@ -1697,12 +1692,11 @@
 
                       <StackPanel Spacing="10"
                                   VerticalAlignment="Center">
-                        <TextBlock Text="SYSTEM"
-                                   Classes="kicker" />
-                        <TextBlock Text="{Binding Telemetry.HealthLabel}"
+                        <TextBlock Text="{Binding AccountGreeting}"
                                    Classes="display-title"
                                    FontSize="30"
-                                   TextWrapping="Wrap" />
+                                   TextWrapping="Wrap"
+                                   MaxWidth="310" />
                         <TextBlock Text="{Binding Telemetry.HealthDetail}"
                                    Classes="muted"
                                    FontSize="13"
@@ -1802,9 +1796,9 @@
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
                                 Margin="0,36,27,0" />
-                        <Border Width="4"
-                                Height="4"
-                                Background="{StaticResource BkeIndigoBrush}"
+                        <Border Width="5"
+                                Height="5"
+                                Background="{StaticResource BkeDigitalYellowBrush}"
                                 CornerRadius="999"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Bottom"
@@ -1875,11 +1869,18 @@
                   </Border>
                 </Grid>
 
-                <Button Content="Library  ›"
-                        Classes="quiet"
-                        Click="OpenLibrary"
-                        HorizontalAlignment="Right"
-                        Margin="0,0,3,0" />
+                <Grid ColumnDefinitions="*,Auto"
+                      ColumnSpacing="12"
+                      Margin="3,0,3,0">
+                  <Border Height="1"
+                          Background="{StaticResource BkeHairlineBrush}"
+                          VerticalAlignment="Center" />
+                  <Button Grid.Column="1"
+                          Content="Library  ›"
+                          Classes="quiet shelf-link"
+                          Click="OpenLibrary"
+                          VerticalAlignment="Center" />
+                </Grid>
 
                 <ItemsControl ItemsSource="{Binding DashboardProducts}">
                   <ItemsControl.ItemsPanel>
