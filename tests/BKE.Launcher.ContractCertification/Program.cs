@@ -3126,7 +3126,23 @@ Require(
     "BKE Store is no longer reachable from first-class sidebar navigation.");
 Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
-Require(mainWindowSource.Contains("RefreshStore", StringComparison.Ordinal), "BKE Store refresh handler is missing.");
+Require(
+    !mainWindowMarkup.Contains(
+        "Text=\"{Binding StoreStatus}\"",
+        StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains(
+        "Content=\"Refresh Store\"",
+        StringComparison.Ordinal) &&
+    !mainWindowSource.Contains(
+        "private async void RefreshStore(",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "case 3:",
+        StringComparison.Ordinal) &&
+    registrationViewModelSource.Contains(
+        "await RefreshStoreAsync(cancellationToken);",
+        StringComparison.Ordinal),
+    "BKE Store must refresh automatically on Store navigation without a manual READY/Refresh control.");
 Require(mainWindowMarkup.Contains("Content=\"Start free 7-day trial\"", StringComparison.Ordinal), "BKE Store trial action is missing.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding StoreTrialStatus}\"", StringComparison.Ordinal), "BKE Store trial status is not presentation-bound.");
 Require(mainWindowMarkup.Contains("Content=\"Refresh trial state\"", StringComparison.Ordinal), "BKE Store trial ambiguity refresh action is missing.");
