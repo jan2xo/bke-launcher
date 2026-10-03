@@ -359,13 +359,23 @@
     </Style>
 
     <Style Selector="Button.sidebar-nav">
-      <Setter Property="MinHeight" Value="44" />
-      <Setter Property="Padding" Value="12,9" />
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="8,6" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="Foreground" Value="{StaticResource BkeMutedTextBrush}" />
-      <Setter Property="CornerRadius" Value="13" />
+      <Setter Property="CornerRadius" Value="11" />
+    </Style>
+
+    <Style Selector="Button.sidebar-nav.compact">
+      <Setter Property="Width" Value="42" />
+      <Setter Property="Height" Value="42" />
+      <Setter Property="MinWidth" Value="42" />
+      <Setter Property="MinHeight" Value="42" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
     </Style>
 
     <Style Selector="Button.sidebar-nav:pointerover">
@@ -380,12 +390,12 @@
     </Style>
 
     <Style Selector="Border.sidebar-glyph">
-      <Setter Property="Width" Value="30" />
-      <Setter Property="Height" Value="30" />
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
       <Setter Property="Background" Value="#B00C1014" />
       <Setter Property="BorderBrush" Value="#303943" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="CornerRadius" Value="9" />
     </Style>
 
     <Style Selector="Border.avatar">
