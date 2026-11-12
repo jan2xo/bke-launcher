@@ -74,14 +74,7 @@ public sealed class AgentSoftwareCatalogSource : ILauncherCatalogSource
 
         // Missing and fabricated mode values cannot silently become EITHER.
         // Machine rights still belong exclusively to the Licensing Agent.
-        var activationMode = item.ActivationMode switch
-        {
-            "ACCOUNT" => ProductActivationMode.Account,
-            "LICENSE_KEY" => ProductActivationMode.LicenseKey,
-            "EITHER" => ProductActivationMode.Either,
-            _ => throw new InvalidDataException(
-                "BKE Licensing Agent did not supply valid product activation authority."),
-        };
+        var activationMode = ProductActivationModeWire.Parse(item.ActivationMode);
 
         var state = item.State switch
         {
