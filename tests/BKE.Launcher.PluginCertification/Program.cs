@@ -280,7 +280,7 @@ static void CertifyBundledDemoPlugin()
 static void CertifyCustomerCatalogToBundledDemoOpen()
 {
     const string DigitalSolutionsSourceSha =
-        "1778eef839c122d97c37e69f208a7a76312411b5";
+        "083ef5b46765384e8a442c5700a0cfe746d0dc4f";
 
     var pinnedDigitalSolutionsSource =
         File.ReadAllText(
@@ -290,7 +290,7 @@ static void CertifyCustomerCatalogToBundledDemoOpen()
             .Trim();
 
     const string LicensingAgentSourceSha =
-        "6570511cf2701f31a92800c26c2b919528b74c6e";
+        "bff7b9ee7f449089e672e7418d6335114c156c91";
     var pinnedLicensingAgentSource =
         File.ReadAllText(
             Path.Combine(
