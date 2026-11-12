@@ -72,6 +72,10 @@ public sealed class AgentSoftwareCatalogSource : ILauncherCatalogSource
             _ => throw new InvalidDataException("BKE Licensing Agent returned an unknown execution type."),
         };
 
+        // Missing and fabricated mode values cannot silently become EITHER.
+        // Machine rights still belong exclusively to the Licensing Agent.
+        var activationMode = ProductActivationModeWire.Parse(item.ActivationMode);
+
         var state = item.State switch
         {
             "NOT_ENTITLED" => LauncherProductState.NotEntitled,
@@ -108,6 +112,7 @@ public sealed class AgentSoftwareCatalogSource : ILauncherCatalogSource
             executionType,
             state,
             item.InstalledVersion,
-            item.LatestVersion);
+            item.LatestVersion,
+            activationMode);
     }
 }

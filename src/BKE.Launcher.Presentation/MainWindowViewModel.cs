@@ -8715,6 +8715,8 @@ public sealed record SoftwareProductViewModel(
 
         var state = product.State switch
         {
+            _ when product.ActivationMode == ProductActivationMode.LicenseKey =>
+                "License key activation",
             LauncherProductState.NotEntitled => "Not entitled",
             LauncherProductState.Installable
                 when product.ExecutionType == ProductExecutionType.LauncherPlugin &&
@@ -8741,6 +8743,11 @@ public sealed record SoftwareProductViewModel(
                 : product.InstalledVersion
             : product.AvailableVersion ?? "No release";
 
+        // Actual Agent-catalog products always have a validated mode.
+        // Key-only products must use their independent signed license-key path;
+        // disabling buttons here is UX, not the machine security boundary.
+        var accountActionAllowed = product.ActivationMode != ProductActivationMode.LicenseKey;
+
         return new SoftwareProductViewModel(
             product.ProductId,
             product.DisplayName,
@@ -8748,19 +8755,20 @@ public sealed record SoftwareProductViewModel(
             execution,
             state,
             version,
-            product.ExecutionType == ProductExecutionType.Standalone &&
+            accountActionAllowed && product.ExecutionType == ProductExecutionType.Standalone &&
             product.State == LauncherProductState.Installable,
-            product.ExecutionType == ProductExecutionType.Standalone &&
+            accountActionAllowed && product.ExecutionType == ProductExecutionType.Standalone &&
             product.State == LauncherProductState.UpdateAvailable,
-            product.ExecutionType == ProductExecutionType.Standalone &&
+            accountActionAllowed && product.ExecutionType == ProductExecutionType.Standalone &&
             product.State is LauncherProductState.Installed
                 or LauncherProductState.UpdateAvailable
                 or LauncherProductState.RepairRequired,
-            (product.ExecutionType == ProductExecutionType.Standalone &&
-             product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable) ||
-            (product.ExecutionType == ProductExecutionType.LauncherPlugin &&
-             launcherPluginRegistered &&
-             product.State == LauncherProductState.Installable),
+            accountActionAllowed && (
+                (product.ExecutionType == ProductExecutionType.Standalone &&
+                 product.State is LauncherProductState.Installed or LauncherProductState.UpdateAvailable) ||
+                (product.ExecutionType == ProductExecutionType.LauncherPlugin &&
+                 launcherPluginRegistered &&
+                 product.State == LauncherProductState.Installable)),
             product.ExecutionType == ProductExecutionType.Standalone &&
             product.State is LauncherProductState.Installed
                 or LauncherProductState.UpdateAvailable

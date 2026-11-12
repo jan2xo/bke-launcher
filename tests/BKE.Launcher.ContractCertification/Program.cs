@@ -11,6 +11,51 @@ var agentBase = new Uri(AgentLocalContract.DefaultBaseAddress, UriKind.Absolute)
 Require(agentBase.IsLoopback, "Agent default address is not loopback.");
 Require(agentBase.Scheme == Uri.UriSchemeHttp, "Agent default address must use local HTTP.");
 
+// Catalog mode is UI metadata, not machine trust. Unknown/missing must
+// never be projected as dual-path EITHER from a real Agent wire response.
+Require(ProductActivationModeWire.Parse("ACCOUNT") == ProductActivationMode.Account,
+    "Launcher failed to project SQL ACCOUNT activation mode.");
+Require(ProductActivationModeWire.Parse("LICENSE_KEY") == ProductActivationMode.LicenseKey,
+    "Launcher failed to project SQL LICENSE_KEY activation mode.");
+Require(ProductActivationModeWire.Parse("EITHER") == ProductActivationMode.Either,
+    "Launcher failed to project explicitly configured EITHER activation mode.");
+foreach (var badMode in new string?[] { null, "", "UNKNOWN", "GOOGLE_ONLY" })
+{
+    bool rejected = false;
+    try { _ = ProductActivationModeWire.Parse(badMode); }
+    catch (InvalidDataException) { rejected = true; }
+    Require(rejected, "Launcher silently accepted missing/unknown SQL activation mode.");
+}
+
+var keyOnlyFixture = new LauncherProduct(
+    "bke-render-dock", "Render Dock", "Rendering software",
+    ProductExecutionType.Standalone, LauncherProductState.Installed,
+    "1.0.2", "1.0.2", ProductActivationMode.LicenseKey);
+var keyOnlyCard = SoftwareProductViewModel.From(keyOnlyFixture);
+Require(!keyOnlyCard.CanOpen && !keyOnlyCard.CanUpdate &&
+    !keyOnlyCard.CanRepair && keyOnlyCard.CanRemove &&
+    keyOnlyCard.StateLabel == "License key activation",
+    "Launcher exposed an account-owned Open/Update/Repair for key-only software.");
+var keyOnlyInstall = SoftwareProductViewModel.From(keyOnlyFixture with {
+    State = LauncherProductState.Installable, InstalledVersion = null
+});
+Require(!keyOnlyInstall.CanInstall && !keyOnlyInstall.CanOpen,
+    "Launcher offered account install for a LICENSE_KEY-only product.");
+var accountCard = SoftwareProductViewModel.From(keyOnlyFixture with {
+    ActivationMode = ProductActivationMode.Account
+});
+var eitherCard = SoftwareProductViewModel.From(keyOnlyFixture with {
+    ActivationMode = ProductActivationMode.Either
+});
+Require(accountCard.CanOpen && eitherCard.CanOpen,
+    "Launcher incorrectly disabled separately eligible ACCOUNT/EITHER account route.");
+var agentCatalogSource = File.ReadAllText(
+    Path.Combine("src", "BKE.Launcher.AgentClient", "AgentSoftwareCatalogSource.cs"));
+Require(agentCatalogSource.Contains(
+    "ProductActivationModeWire.Parse(item.ActivationMode)",
+    StringComparison.Ordinal),
+    "Launcher skipped strict Agent activation mode wire validation.");
+
 var pluginAbstractionsProject = File.ReadAllText(
     Path.Combine(
         "src",
@@ -1322,7 +1367,7 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "6570511cf2701f31a92800c26c2b919528b74c6e",
+        "bff7b9ee7f449089e672e7418d6335114c156c91",
     "Launcher is not pinned to the merged Agent authority.");
 
 Require(
@@ -3486,12 +3531,12 @@ Require(
     "Launcher Account Privacy desktop handlers are missing.");
 
 Require(normalizedViewModelSource.Contains(
-    "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
+    "accountActionAllowed && product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State == LauncherProductState.UpdateAvailable,",
     StringComparison.Ordinal),
     "Launcher Update action is not restricted to STANDALONE + UPDATE_AVAILABLE.");
 
 Require(normalizedViewModelSource.Contains(
-    "product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State is LauncherProductState.Installed\n                or LauncherProductState.UpdateAvailable\n                or LauncherProductState.RepairRequired,",
+    "accountActionAllowed && product.ExecutionType == ProductExecutionType.Standalone &&\n            product.State is LauncherProductState.Installed\n                or LauncherProductState.UpdateAvailable\n                or LauncherProductState.RepairRequired,",
     StringComparison.Ordinal),
     "Launcher Repair action is not restricted to entitled installed standalone states.");
 Require(!normalizedViewModelSource.Contains(

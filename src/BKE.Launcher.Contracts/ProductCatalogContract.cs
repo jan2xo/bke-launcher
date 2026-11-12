@@ -26,6 +26,33 @@ public static class ProductExecutionTypeWire
     };
 }
 
+/// <summary>
+/// DS SQL ProductActivationPolicy credential mode. This is presentation
+/// metadata only; the Agent owns machine authorization.
+/// </summary>
+public enum ProductActivationMode
+{
+    Account,
+    LicenseKey,
+    Either,
+}
+
+public static class ProductActivationModeWire
+{
+    public const string Account = "ACCOUNT";
+    public const string LicenseKey = "LICENSE_KEY";
+    public const string Either = "EITHER";
+
+    public static ProductActivationMode Parse(string? value) => value switch
+    {
+        Account => ProductActivationMode.Account,
+        LicenseKey => ProductActivationMode.LicenseKey,
+        Either => ProductActivationMode.Either,
+        _ => throw new InvalidDataException(
+            "Agent catalog supplied missing or unknown activation policy."),
+    };
+}
+
 public enum LauncherProductState
 {
     NotEntitled,
@@ -47,4 +74,5 @@ public sealed record LauncherProduct(
     ProductExecutionType? ExecutionType,
     LauncherProductState State,
     string? InstalledVersion = null,
-    string? AvailableVersion = null);
+    string? AvailableVersion = null,
+    ProductActivationMode? ActivationMode = null);
