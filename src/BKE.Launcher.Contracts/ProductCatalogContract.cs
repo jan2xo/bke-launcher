@@ -26,6 +26,17 @@ public static class ProductExecutionTypeWire
     };
 }
 
+/// <summary>
+/// DS SQL ProductActivationPolicy credential mode. This is presentation
+/// metadata only; the Agent owns machine authorization.
+/// </summary>
+public enum ProductActivationMode
+{
+    Account,
+    LicenseKey,
+    Either,
+}
+
 public enum LauncherProductState
 {
     NotEntitled,
@@ -47,4 +58,5 @@ public sealed record LauncherProduct(
     ProductExecutionType? ExecutionType,
     LauncherProductState State,
     string? InstalledVersion = null,
-    string? AvailableVersion = null);
+    string? AvailableVersion = null,
+    ProductActivationMode? ActivationMode = null);
