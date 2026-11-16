@@ -11,11 +11,40 @@ public sealed class LauncherPlatformAuthorityResolver
         _agent = agent;
     }
 
+    public static readonly HashSet<string> ApprovedNonproductionEnvironments =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "development",
+            "certification",
+            "utm",
+            "test",
+        };
+
+    public static bool IsApprovedNonproductionEnvironment(string? environment) =>
+        !string.IsNullOrWhiteSpace(environment) &&
+        !string.Equals(environment.Trim(), "production", StringComparison.OrdinalIgnoreCase) &&
+        ApprovedNonproductionEnvironments.Contains(environment.Trim());
+
     public async Task<Uri> ResolveAsync(CancellationToken cancellationToken)
     {
         var response = await _agent.GetPlatformAuthorityAsync(
             new PlatformAuthorityRequest(Guid.NewGuid().ToString("N")),
             cancellationToken);
+
+        var configuredEnv = Environment.GetEnvironmentVariable("BKE_ENVIRONMENT");
+        var isProductionOverridden = string.Equals(
+            configuredEnv?.Trim(),
+            "production",
+            StringComparison.OrdinalIgnoreCase);
+
+        var isApprovedNonprod =
+            !isProductionOverridden &&
+            IsApprovedNonproductionEnvironment(response.Environment);
+
+        var isLoopbackHttp = isApprovedNonprod &&
+            Uri.TryCreate(response.PlatformBaseUrl, UriKind.Absolute, out var testUri) &&
+            testUri.Scheme == Uri.UriSchemeHttp &&
+            testUri.IsLoopback;
 
         if (response.CapabilityId != AgentLocalContract.PlatformAuthorityCapabilityId ||
             response.ContractVersion != AgentLocalContract.PlatformAuthorityContractVersion ||
@@ -23,7 +52,7 @@ public sealed class LauncherPlatformAuthorityResolver
             string.IsNullOrWhiteSpace(response.Environment) ||
             string.IsNullOrWhiteSpace(response.PlatformBaseUrl) ||
             !Uri.TryCreate(response.PlatformBaseUrl, UriKind.Absolute, out var authority) ||
-            authority.Scheme != Uri.UriSchemeHttps ||
+            (!isLoopbackHttp && authority.Scheme != Uri.UriSchemeHttps) ||
             string.IsNullOrWhiteSpace(authority.Host) ||
             !string.IsNullOrEmpty(authority.UserInfo) ||
             authority.AbsolutePath != "/" ||

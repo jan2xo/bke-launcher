@@ -1367,7 +1367,7 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "bff7b9ee7f449089e672e7418d6335114c156c91",
+        "36a9a588d87d1b80cfb56d709fda7c5383a0abe0",
     "Launcher is not pinned to the merged Agent authority.");
 
 Require(
@@ -3938,6 +3938,39 @@ Require(mainWindowSource.Contains(
         StringComparison.Ordinal),
     "Launcher Legal-document click handler does not await Agent-authority navigation.");
 
+Require(externalNavigatorSource.Contains("OpenVerificationUriAsync", StringComparison.Ordinal) ||
+    externalNavigatorSource.Contains("OpenVerificationUri", StringComparison.Ordinal),
+    "Launcher external navigator lacks OpenVerificationUri.");
+Require(externalNavigatorSource.Contains("ValidateVerificationTarget", StringComparison.Ordinal),
+    "Launcher external navigator lacks ValidateVerificationTarget authority binding.");
+Require(normalizedViewModelSource.Contains(
+        "_externalNavigator.OpenVerificationUriAsync(",
+        StringComparison.Ordinal) ||
+    normalizedViewModelSource.Contains(
+        "_externalNavigator.OpenVerificationUri(response.VerificationUri);",
+        StringComparison.Ordinal),
+    "Launcher Google sign-in does not navigate using Agent-returned verification URI.");
+Require(mainWindowSource.Contains(
+        "await ViewModel.StartGoogleSignInAsync(",
+        StringComparison.Ordinal),
+    "Launcher Google sign-in click handler is missing.");
+Require(mainWindowSource.Contains(
+        "ViewModel.OpenVerificationUriInBrowser();",
+        StringComparison.Ordinal),
+    "Launcher verification re-open click handler is missing.");
+Require(mainWindowSource.Contains(
+        "ViewModel.CancelGoogleSignIn();",
+        StringComparison.Ordinal),
+    "Launcher Google sign-in cancel click handler is missing.");
+Require(mainWindowMarkup.Contains(
+        "Content=\"Continue with Google\"",
+        StringComparison.Ordinal),
+    "Launcher UI is missing 'Continue with Google' button.");
+Require(mainWindowMarkup.Contains(
+        "ShowPendingSignIn",
+        StringComparison.Ordinal),
+    "Launcher UI is missing pending device approval surface.");
+
 Require(normalizedViewModelSource.Contains(
     "await _storeCheckoutStart.StartAsync(",
     StringComparison.Ordinal),
@@ -4431,8 +4464,10 @@ await CertifyAccountLicenseDeviceManagementAsync();
 await CertifyAccountOrganizationSettingsAsync();
 await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
+await CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
+Console.WriteLine("Google sign-in device approval and Agent session custody certified");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
 Console.WriteLine("Native password-reset completion exact-origin, transient-secret, and ambiguity no-replay composition certified");
@@ -6883,12 +6918,395 @@ static async Task CertifyClaimCodeRedemptionRefreshesMySoftwareAsync()
         "Unconfirmed Claim Code mutation retained plaintext, replayed, or skipped authoritative read refresh.");
 }
 
+static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        StartVerificationUri = "https://digital-solutions.example.test/device?code=AUTH-9999",
+        StartUserCode = "AUTH-9999",
+    };
+    var recovery = new CustomerJourneyRecoveryStore();
+    var navigator = new CustomerJourneyNavigator();
+    var viewModel = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator);
+    viewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    Require(!viewModel.IsAuthenticated && viewModel.ShowSignInForm && !viewModel.ShowPendingSignIn,
+        "Launcher did not start in signed-out sign-in form state.");
+
+    // 1. Start Google Sign-In -> Agent StartAsync -> browser handoff
+    await viewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(agent.StartSessionCount == 1,
+        "Launcher did not call Agent StartAccountSessionAsync.");
+    Require(navigator.LastVerificationUrl == "https://digital-solutions.example.test/device?code=AUTH-9999",
+        "Launcher did not open the Agent-supplied verification URI in external browser.");
+    Require(viewModel.SessionStatus == "PENDING",
+        "Launcher session status is not PENDING after Google sign-in start.");
+    Require(viewModel.ShowPendingSignIn && !viewModel.ShowSignInForm,
+        "Launcher did not transition to pending device approval surface.");
+    Require(viewModel.UserCode == "AUTH-9999",
+        "Launcher did not display the expected confirmation code.");
+    Require(viewModel.VerificationUri == "https://digital-solutions.example.test/device?code=AUTH-9999",
+        "Launcher did not store the verification URI.");
+
+    // 2. Re-opening verification URL
+    await viewModel.OpenVerificationUriInBrowserAsync(CancellationToken.None);
+    Require(navigator.LastVerificationUrl == "https://digital-solutions.example.test/device?code=AUTH-9999",
+        "Launcher failed to re-open verification URI on request.");
+
+    // 3. User cancels Google sign-in
+    viewModel.CancelGoogleSignIn();
+    Require(viewModel.SessionStatus == "SIGNED_OUT",
+        "Launcher session status did not revert to SIGNED_OUT after cancel.");
+    Require(!viewModel.ShowPendingSignIn && viewModel.ShowSignInForm,
+        "Launcher did not restore sign-in form after cancel.");
+    Require(string.IsNullOrEmpty(viewModel.UserCode),
+        "Launcher retained user code after cancel.");
+
+    // 4. Stale response from cancelled attempt is dropped
+    agent.OverrideSessionStatus = "AUTHENTICATED";
+    agent.Authenticated = true;
+    await Task.Delay(100);
+    Require(viewModel.SessionStatus == "SIGNED_OUT" && !viewModel.IsAuthenticated,
+        "Launcher accepted late status response from cancelled sign-in generation.");
+
+    // 5. Automatic polling completion: user approves in browser without manual UI refresh
+    agent.OverrideSessionStatus = "PENDING";
+    agent.Authenticated = false;
+    await viewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(viewModel.ShowPendingSignIn,
+        "Launcher did not re-enter pending state on retry.");
+
+    agent.OverrideSessionStatus = "AUTHENTICATED";
+    agent.Authenticated = true;
+    await Task.Delay(250);
+
+    Require(viewModel.IsAuthenticated,
+        "Automatic polling did not complete and mark session authenticated.");
+    Require(viewModel.ShowAuthenticatedShell && !viewModel.ShowLoginPage && !viewModel.ShowPendingSignIn,
+        "Automatic polling did not transition to authenticated shell surface.");
+    Require(viewModel.AccountDisplay.Contains("customer@example.test", StringComparison.Ordinal),
+        "Automatic polling did not display authoritative account context.");
+
+    // 6. Automatic polling denial: fail-closed on rejection without manual UI refresh
+    var deniedAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        OverrideSessionStatus = "PENDING",
+        StartVerificationUri = "https://digital-solutions.example.test/device?code=DENY-0000",
+        StartUserCode = "DENY-0000",
+    };
+    var deniedViewModel = BuildCustomerJourneyViewModel(deniedAgent, catalog, recovery, navigator);
+    deniedViewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
+    await deniedViewModel.InitializeAsync(CancellationToken.None);
+    await deniedViewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(deniedViewModel.SessionStatus == "PENDING",
+        "Denied test did not enter PENDING state.");
+
+    deniedAgent.OverrideSessionStatus = "DENIED";
+    await Task.Delay(250);
+
+    Require(deniedViewModel.SessionStatus == "DENIED" && !deniedViewModel.IsAuthenticated,
+        "Automatic polling did not fail-closed on DENIED session status.");
+
+    // 7. Automatic polling expiry: transition to EXPIRED on timeout
+    var expiredAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        OverrideSessionStatus = "PENDING",
+        StartVerificationUri = "https://digital-solutions.example.test/device?code=EXPIRE-0000",
+        StartUserCode = "EXPIRE-0000",
+    };
+    var expiredViewModel = BuildCustomerJourneyViewModel(expiredAgent, catalog, recovery, navigator);
+    expiredViewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
+    await expiredViewModel.InitializeAsync(CancellationToken.None);
+    await expiredViewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(expiredViewModel.SessionStatus == "PENDING",
+        "Expired test did not enter PENDING state.");
+
+    expiredAgent.OverrideSessionStatus = "EXPIRED";
+    await Task.Delay(250);
+
+    Require(expiredViewModel.SessionStatus == "EXPIRED" && !expiredViewModel.IsAuthenticated,
+        "Automatic polling did not transition to EXPIRED session status.");
+
+    // 8. Authority binding, trusted-origin verification, and loopback HTTP isolation
+    var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
+    var authorityUri = await platformAuthority.ResolveAsync(CancellationToken.None);
+
+    var validTarget = new Uri("https://digital-solutions.example.test/device?code=VALID-1234");
+    ExternalBrowserNavigator.ValidateVerificationTarget(validTarget, authorityUri);
+
+    var rejectedUntrusted = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("https://evil-phishing.test/device?code=EVIL-1234"),
+            authorityUri);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("does not match the trusted Digital Solutions authority", StringComparison.Ordinal))
+    {
+        rejectedUntrusted = true;
+    }
+    Require(rejectedUntrusted,
+        "ValidateVerificationTarget did not reject untrusted origin.");
+
+    var rejectedWrongPath = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("https://digital-solutions.example.test/oauth/callback?code=EVIL-1234"),
+            authorityUri);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("path must be /device", StringComparison.Ordinal))
+    {
+        rejectedWrongPath = true;
+    }
+    Require(rejectedWrongPath,
+        "ValidateVerificationTarget did not reject invalid path.");
+
+    var rejectedInsecure = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://digital-solutions.example.test/device?code=HTTP-1234"),
+            authorityUri);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedInsecure = true;
+    }
+    Require(rejectedInsecure,
+        "ValidateVerificationTarget did not reject non-HTTPS verification target.");
+
+    // 9. Real Queued SynchronizationContext: asynchronous UI-dispatch race prevention
+    using (var queuedContext = new QueuedTestSynchronizationContext())
+    {
+        var queuedAgent = new CustomerJourneyAgentClient(catalog)
+        {
+            Authenticated = false,
+            StartSessionStatus = "PENDING",
+            OverrideSessionStatus = "PENDING",
+            StartVerificationUri = "https://digital-solutions.example.test/device?code=QUEUE-0000",
+            StartUserCode = "QUEUE-0000",
+        };
+        var queuedViewModel = BuildCustomerJourneyViewModel(
+            queuedAgent,
+            catalog,
+            recovery,
+            navigator,
+            uiContext: queuedContext);
+        queuedViewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
+
+        await queuedViewModel.InitializeAsync(CancellationToken.None);
+        await queuedViewModel.StartGoogleSignInAsync(CancellationToken.None);
+
+        Require(queuedViewModel.SessionStatus == "PENDING",
+            "Queued UI context did not receive PENDING state.");
+        Require(queuedViewModel.ShowPendingSignIn,
+            "Queued UI context did not show pending approval view.");
+
+        // Simulate user completing approval in browser
+        queuedAgent.OverrideSessionStatus = "AUTHENTICATED";
+        queuedAgent.Authenticated = true;
+        await Task.Delay(250);
+
+        Require(queuedViewModel.IsAuthenticated,
+            "Automatic polling on queued UI context did not transition to AUTHENTICATED.");
+        Require(queuedViewModel.ShowAuthenticatedShell,
+            "Queued UI context did not transition to authenticated shell.");
+    }
+
+    // 10. UTM cross-process integration & fail-closed containment
+    // 10a. UTM Agent returns approved loopback DS verification URL without any Launcher global environment configuration
+    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", null);
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", null);
+
+    var utmAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        StartVerificationUri = "http://127.0.0.1:8787/device?code=UTM-1234",
+        StartUserCode = "UTM-1234",
+        OverridePlatformEnvironment = "utm",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var utmResolver = new LauncherPlatformAuthorityResolver(utmAgent);
+    var resolvedUtmAuthority = await utmResolver.ResolveAsync(CancellationToken.None);
+    Require(resolvedUtmAuthority == new Uri("http://127.0.0.1:8787/"),
+        "LauncherPlatformAuthorityResolver failed to resolve UTM loopback authority without global env vars.");
+
+    var utmNavigator = new CustomerJourneyNavigator();
+    ExternalBrowserNavigator.ValidateVerificationTarget(
+        new Uri("http://127.0.0.1:8787/device?code=UTM-1234"),
+        resolvedUtmAuthority);
+
+    var utmViewModel = BuildCustomerJourneyViewModel(utmAgent, catalog, recovery, utmNavigator);
+    await utmViewModel.InitializeAsync(CancellationToken.None);
+    await utmViewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(utmViewModel.SessionStatus == "PENDING",
+        "UTM Google Sign-In did not enter PENDING state.");
+    Require(utmNavigator.LastVerificationUrl == "http://127.0.0.1:8787/device?code=UTM-1234",
+        "UTM Google Sign-In did not open the approved loopback verification target.");
+
+    // 10b. Development and certification environments also succeed without Launcher global env vars
+    var devAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "development",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var devResolver = new LauncherPlatformAuthorityResolver(devAgent);
+    var devAuthority = await devResolver.ResolveAsync(CancellationToken.None);
+    Require(devAuthority == new Uri("http://127.0.0.1:8787/"),
+        "Development loopback authority resolution failed without global env vars.");
+
+    // 10c. Production fail-closed: Agent with production environment returning loopback HTTP is strictly rejected
+    var prodHttpAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "production",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var prodResolver = new LauncherPlatformAuthorityResolver(prodHttpAgent);
+    var rejectedProdHttp = false;
+    try
+    {
+        await prodResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedProdHttp = true;
+    }
+    Require(rejectedProdHttp,
+        "LauncherPlatformAuthorityResolver did not reject loopback HTTP in production environment.");
+
+    // 10d. Unset/empty Agent environment is strictly rejected
+    var emptyEnvAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var emptyEnvResolver = new LauncherPlatformAuthorityResolver(emptyEnvAgent);
+    var rejectedEmptyEnv = false;
+    try
+    {
+        await emptyEnvResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedEmptyEnv = true;
+    }
+    Require(rejectedEmptyEnv,
+        "LauncherPlatformAuthorityResolver did not reject empty Agent environment.");
+
+    // 10e. Unknown Agent environment is strictly rejected
+    var unknownEnvAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "staging",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var unknownEnvResolver = new LauncherPlatformAuthorityResolver(unknownEnvAgent);
+    var rejectedUnknownEnv = false;
+    try
+    {
+        await unknownEnvResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedUnknownEnv = true;
+    }
+    Require(rejectedUnknownEnv,
+        "LauncherPlatformAuthorityResolver did not reject unknown Agent environment.");
+
+    // 10f. Explicit BKE_ENVIRONMENT=production in Launcher forces production fail-closed even with UTM agent
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "production");
+    var prodOverriddenResolver = new LauncherPlatformAuthorityResolver(utmAgent);
+    var rejectedProdOverride = false;
+    try
+    {
+        await prodOverriddenResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedProdOverride = true;
+    }
+    Require(rejectedProdOverride,
+        "LauncherPlatformAuthorityResolver did not reject loopback HTTP when BKE_ENVIRONMENT=production.");
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", null);
+
+    // 10g. Browser navigation: Production authority strictly rejects loopback HTTP verification target
+    var productionAuthorityUri = new Uri("https://jl-bke.com/");
+    var rejectedProdLoopbackNav = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://127.0.0.1:8787/device?code=123"),
+            productionAuthorityUri);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedProdLoopbackNav = true;
+    }
+    Require(rejectedProdLoopbackNav,
+        "ExternalBrowserNavigator did not reject loopback HTTP with production authority.");
+
+    // 10h. Browser navigation: Non-loopback HTTP target is rejected even if authority is loopback
+    var rejectedNonLoopbackHttp = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://external-insecure.test/device?code=123"),
+            resolvedUtmAuthority);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedNonLoopbackHttp = true;
+    }
+    Require(rejectedNonLoopbackHttp,
+        "ExternalBrowserNavigator did not reject non-loopback HTTP target.");
+
+    // 10i. Browser navigation: Port mismatch on loopback target is rejected
+    var rejectedPortMismatch = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://127.0.0.1:9999/device?code=123"),
+            resolvedUtmAuthority);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("does not match the trusted Digital Solutions authority", StringComparison.Ordinal))
+    {
+        rejectedPortMismatch = true;
+    }
+    Require(rejectedPortMismatch,
+        "ExternalBrowserNavigator did not reject port mismatch on loopback target.");
+
+    // 10j. Browser navigation: Invalid path on loopback target is rejected
+    var rejectedInvalidPath = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://127.0.0.1:8787/oauth/device?code=123"),
+            resolvedUtmAuthority);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("path must be /device", StringComparison.Ordinal))
+    {
+        rejectedInvalidPath = true;
+    }
+    Require(rejectedInvalidPath,
+        "ExternalBrowserNavigator did not reject invalid path on loopback target.");
+}
+
 static MainWindowViewModel BuildCustomerJourneyViewModel(
     CustomerJourneyAgentClient agent,
     CustomerJourneyCatalogSource catalog,
     CustomerJourneyRecoveryStore recovery,
     CustomerJourneyNavigator navigator,
-    CustomerJourneyIdentityClient? identity = null)
+    CustomerJourneyIdentityClient? identity = null,
+    SynchronizationContext? uiContext = null)
 {
     var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
     identity ??= new CustomerJourneyIdentityClient();
@@ -6933,7 +7351,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountLicenseSeatsController(agent),
         new LauncherAccountLicenseDevicesController(agent),
         new LauncherAccountOrganizationController(agent),
-        new CustomerJourneyPluginRuntime());
+        new CustomerJourneyPluginRuntime(),
+        uiContext);
 }
 
 static void Require(bool condition, string message)
@@ -6941,6 +7360,83 @@ static void Require(bool condition, string message)
     if (!condition)
     {
         throw new InvalidOperationException(message);
+    }
+}
+
+sealed class QueuedTestSynchronizationContext : SynchronizationContext, IDisposable
+{
+    private readonly System.Collections.Concurrent.BlockingCollection<Action> _queue = new();
+    private readonly Thread _workerThread;
+    private volatile bool _disposed;
+
+    public QueuedTestSynchronizationContext()
+    {
+        _workerThread = new Thread(() =>
+        {
+            SetSynchronizationContext(this);
+            foreach (var action in _queue.GetConsumingEnumerable())
+            {
+                try
+                {
+                    action();
+                }
+                catch
+                {
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "QueuedTestSynchronizationContextWorker",
+        };
+        _workerThread.Start();
+    }
+
+    public override void Post(SendOrPostCallback d, object? state)
+    {
+        if (!_disposed)
+        {
+            _queue.Add(() => d(state));
+        }
+    }
+
+    public override void Send(SendOrPostCallback d, object? state)
+    {
+        if (Thread.CurrentThread == _workerThread)
+        {
+            d(state);
+            return;
+        }
+
+        using var done = new ManualResetEventSlim(false);
+        Exception? caught = null;
+        Post(_ =>
+        {
+            try
+            {
+                d(state);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+            finally
+            {
+                done.Set();
+            }
+        }, null);
+        done.Wait();
+        if (caught is not null)
+        {
+            throw new InvalidOperationException("Exception in UI thread callback", caught);
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _queue.CompleteAdding();
+        _workerThread.Join(TimeSpan.FromSeconds(2));
     }
 }
 
@@ -7006,10 +7502,25 @@ sealed class CustomerJourneyRecoveryStore : ILauncherCheckoutRecoveryStore
 sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
 {
     public string? LastCheckoutUrl { get; private set; }
+    public string? LastVerificationUrl { get; private set; }
 
     public void OpenCheckout(string absoluteUrl)
     {
         LastCheckoutUrl = absoluteUrl;
+    }
+
+    public Task OpenVerificationUriAsync(
+        string absoluteUrl,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LastVerificationUrl = absoluteUrl;
+        return Task.CompletedTask;
+    }
+
+    public void OpenVerificationUri(string absoluteUrl)
+    {
+        LastVerificationUrl = absoluteUrl;
     }
 
     public Task OpenLegalDocumentAsync(
@@ -7334,11 +7845,41 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public string PasswordChangeOutcome { get; set; } = "CHANGED";
     public AccountPasswordChangeRequest? LastPasswordChangeRequest { get; private set; }
 
+    public int StartSessionCount { get; private set; }
+    public string StartSessionStatus { get; set; } = "PENDING";
+    public string StartVerificationUri { get; set; } = "https://digital-solutions.example.test/device?code=ABCD-1234";
+    public string StartUserCode { get; set; } = "ABCD-1234";
+    public string? OverrideSessionStatus { get; set; }
+
     public Task<AccountSessionStatusResponse> GetAccountSessionStatusAsync(
         AccountSessionStatusRequest request,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (OverrideSessionStatus is not null)
+        {
+            return Task.FromResult(new AccountSessionStatusResponse(
+                AgentLocalContract.CapabilityId,
+                AgentLocalContract.ContractVersion,
+                OverrideSessionStatus,
+                OverrideSessionStatus == "AUTHENTICATED"
+                    ? new AccountSessionAccount(
+                        "user-cert",
+                        "customer@example.test",
+                        AccountId,
+                        AccountType,
+                        AccountType == "ORGANIZATION"
+                            ? OrganizationDisplayName
+                            : "Certification Customer")
+                    : null,
+                OverrideSessionStatus is "DENIED" or "EXPIRED" or "FAILED"
+                    ? new AccountSessionError(
+                        OverrideSessionStatus,
+                        $"Session was {OverrideSessionStatus.ToLowerInvariant()}.",
+                        false)
+                    : null));
+        }
+
         return Task.FromResult(Authenticated
             ? new AccountSessionStatusResponse(
                 AgentLocalContract.CapabilityId,
@@ -7768,6 +8309,9 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             null));
     }
 
+    public string OverridePlatformEnvironment { get; set; } = "certification";
+    public string OverridePlatformBaseUrl { get; set; } = "https://digital-solutions.example.test/";
+
     public Task<PlatformAuthorityResponse> GetPlatformAuthorityAsync(
         PlatformAuthorityRequest request,
         CancellationToken cancellationToken)
@@ -7778,8 +8322,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             AgentLocalContract.PlatformAuthorityCapabilityId,
             AgentLocalContract.PlatformAuthorityContractVersion,
             "READY",
-            "certification",
-            "https://digital-solutions.example.test/",
+            OverridePlatformEnvironment,
+            OverridePlatformBaseUrl,
             null));
     }
 
@@ -7795,8 +8339,19 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public Task<AccountSessionStartResponse> StartAccountSessionAsync(
         AccountSessionStartRequest request,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        StartSessionCount++;
+        return Task.FromResult(new AccountSessionStartResponse(
+            AgentLocalContract.CapabilityId,
+            AgentLocalContract.ContractVersion,
+            StartSessionStatus,
+            StartVerificationUri,
+            StartUserCode,
+            DateTimeOffset.UtcNow.AddMinutes(10).ToString("O"),
+            null));
+    }
 
     public Task<AccountSessionLogoutResponse> LogoutAccountSessionAsync(
         AccountSessionLogoutRequest request,
