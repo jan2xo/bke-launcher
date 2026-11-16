@@ -25,7 +25,9 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
         Open(uri);
     }
 
-    public void OpenVerificationUri(string absoluteUrl)
+    public async Task OpenVerificationUriAsync(
+        string absoluteUrl,
+        CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(absoluteUrl, UriKind.Absolute, out var uri))
         {
@@ -33,8 +35,35 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
                 "Device verification navigation target is invalid.");
         }
 
-        ValidateHttpsUri(uri, requireOrigin: false);
+        var platformBaseUri =
+            await _platformAuthority.ResolveAsync(cancellationToken);
+
+        ValidateVerificationTarget(uri, platformBaseUri);
         Open(uri);
+    }
+
+    public void OpenVerificationUri(string absoluteUrl)
+    {
+        OpenVerificationUriAsync(absoluteUrl, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    public static void ValidateVerificationTarget(Uri uri, Uri platformAuthority)
+    {
+        ValidateHttpsUri(uri, requireOrigin: false);
+
+        if (!string.Equals(uri.Scheme, platformAuthority.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(uri.Host, platformAuthority.Host, StringComparison.OrdinalIgnoreCase) ||
+            uri.Port != platformAuthority.Port)
+        {
+            throw new InvalidDataException(
+                "Device verification navigation target does not match the trusted Digital Solutions authority.");
+        }
+
+        if (!uri.AbsolutePath.Equals("/device", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                "Device verification path must be /device.");
+        }
     }
 
     public async Task OpenLegalDocumentAsync(

@@ -41,6 +41,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LauncherAccountLicenseSeatsController _accountLicenseSeats;
     private readonly LauncherAccountLicenseDevicesController _accountLicenseDevices;
     private readonly LauncherAccountOrganizationController _accountOrganization;
+    private readonly SynchronizationContext? _uiContext;
+    private int _signInGeneration;
+    private CancellationTokenSource? _signInCts;
+    private TimeSpan _googleSignInPollInterval = TimeSpan.FromSeconds(3);
+
+    public TimeSpan GoogleSignInPollInterval
+    {
+        get => _googleSignInPollInterval;
+        set => _googleSignInPollInterval = value;
+    }
+
+    private void RunOnUi(Action action)
+    {
+        if (_uiContext is not null && SynchronizationContext.Current != _uiContext)
+        {
+            _uiContext.Post(_ => action(), null);
+        }
+        else
+        {
+            action();
+        }
+    }
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
@@ -245,7 +267,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountLicenseSeatsController accountLicenseSeats,
         LauncherAccountLicenseDevicesController accountLicenseDevices,
         LauncherAccountOrganizationController accountOrganization,
-        ILauncherPluginRuntime pluginRuntime)
+        ILauncherPluginRuntime pluginRuntime,
+        SynchronizationContext? uiContext = null)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -280,6 +303,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _accountOrganization = accountOrganization;
         _pluginRuntime = pluginRuntime ??
             throw new ArgumentNullException(nameof(pluginRuntime));
+        _uiContext = uiContext ?? SynchronizationContext.Current;
         RestoreCheckoutRecoveryState();
     }
 
@@ -2732,67 +2756,115 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         CancelGoogleSignInPoll();
+        var generation = Interlocked.Increment(ref _signInGeneration);
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _signInCts = cts;
+        var token = cts.Token;
 
         try
         {
-            SessionStatus = "STARTING_SIGN_IN";
-            Message = "Starting device authorization through BKE Licensing Agent…";
-
-            var response = await _accountSession.StartAsync(cancellationToken);
-            SessionStatus = response.Status;
-            UserCode = response.UserCode ?? string.Empty;
-            VerificationUri = response.VerificationUri ?? string.Empty;
-            Message = response.Status switch
+            RunOnUi(() =>
             {
-                "AUTHENTICATED" => "This machine already has an authenticated BKE account session.",
-                "PENDING" => "Complete sign-in in your browser. BKE Launcher will update automatically.",
-                _ => response.Error?.Message ?? "BKE account sign-in could not be started.",
-            };
+                if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+                {
+                    return;
+                }
+                SessionStatus = "STARTING_SIGN_IN";
+                Message = "Starting device authorization through BKE Licensing Agent…";
+            });
+
+            var response = await _accountSession.StartAsync(token).ConfigureAwait(false);
+
+            if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            RunOnUi(() =>
+            {
+                if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                SessionStatus = response.Status;
+                UserCode = response.UserCode ?? string.Empty;
+                VerificationUri = response.VerificationUri ?? string.Empty;
+                Message = response.Status switch
+                {
+                    "AUTHENTICATED" => "This machine already has an authenticated BKE account session.",
+                    "PENDING" => "Complete sign-in in your browser. BKE Launcher will update automatically.",
+                    _ => response.Error?.Message ?? "BKE account sign-in could not be started.",
+                };
+
+                if (response.Status == "AUTHENTICATED")
+                {
+                    PrepareAuthenticatedShellSurface();
+                    return;
+                }
+
+                ClearNotifications(
+                    "AUTH_REQUIRED",
+                    "Sign in to view BKE notifications.");
+            });
 
             if (response.Status == "AUTHENTICATED")
             {
-                PrepareAuthenticatedShellSurface();
                 return;
             }
 
             if (response.Status == "PENDING")
             {
-                ClearNotifications(
-                    "AUTH_REQUIRED",
-                    "Sign in to view BKE notifications.");
-
                 if (!string.IsNullOrWhiteSpace(response.VerificationUri))
                 {
                     try
                     {
-                        _externalNavigator.OpenVerificationUri(response.VerificationUri);
+                        await _externalNavigator.OpenVerificationUriAsync(
+                            response.VerificationUri,
+                            token).ConfigureAwait(false);
                     }
                     catch (Exception navError) when (
                         navError is InvalidDataException or
                         System.ComponentModel.Win32Exception or
                         InvalidOperationException)
                     {
-                        Message = "Could not open your default browser automatically. Open the verification URL manually.";
+                        RunOnUi(() =>
+                        {
+                            if (generation == Volatile.Read(ref _signInGeneration) && !token.IsCancellationRequested)
+                            {
+                                Message = "Could not open your default browser automatically. Open the verification URL manually.";
+                            }
+                        });
                     }
                 }
 
-                StartGoogleSignInPolling();
-            }
-            else
-            {
-                ClearNotifications(
-                    "AUTH_REQUIRED",
-                    "Sign in to view BKE notifications.");
+                StartGoogleSignInPolling(generation, token);
             }
         }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
+        catch (Exception error) when (
+            error is HttpRequestException or
+            TaskCanceledException or
+            OperationCanceledException or
+            InvalidDataException)
         {
-            SessionStatus = "AGENT_UNAVAILABLE";
-            Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
+            if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            RunOnUi(() =>
+            {
+                if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+                {
+                    return;
+                }
+                SessionStatus = "AGENT_UNAVAILABLE";
+                Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
+            });
         }
     }
 
-    public void OpenVerificationUriInBrowser()
+    public async Task OpenVerificationUriInBrowserAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(VerificationUri))
         {
@@ -2801,51 +2873,57 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            _externalNavigator.OpenVerificationUri(VerificationUri);
+            await _externalNavigator.OpenVerificationUriAsync(
+                VerificationUri,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (Exception error) when (
             error is InvalidDataException or
             System.ComponentModel.Win32Exception or
             InvalidOperationException)
         {
-            Message = "Could not open your default browser. Please open the verification URL manually.";
+            RunOnUi(() =>
+            {
+                Message = "Could not open your default browser. Please open the verification URL manually.";
+            });
         }
+    }
+
+    public void OpenVerificationUriInBrowser()
+    {
+        _ = OpenVerificationUriInBrowserAsync(CancellationToken.None);
     }
 
     public void CancelGoogleSignIn()
     {
         CancelGoogleSignInPoll();
-        if (SessionStatus is "PENDING" or "STARTING_SIGN_IN")
+        RunOnUi(() =>
         {
-            SessionStatus = "SIGNED_OUT";
-            UserCode = string.Empty;
-            VerificationUri = string.Empty;
-            Message = "BKE account sign-in was cancelled.";
-        }
+            if (SessionStatus is "PENDING" or "STARTING_SIGN_IN")
+            {
+                SessionStatus = "SIGNED_OUT";
+                UserCode = string.Empty;
+                VerificationUri = string.Empty;
+                Message = "BKE account sign-in was cancelled.";
+            }
+        });
     }
 
-    private CancellationTokenSource? _googleSignInPollCts;
-
-    private void StartGoogleSignInPolling()
+    private void StartGoogleSignInPolling(int generation, CancellationToken token)
     {
-        CancelGoogleSignInPoll();
-        var cts = new CancellationTokenSource();
-        _googleSignInPollCts = cts;
-        var token = cts.Token;
-
         _ = Task.Run(async () =>
         {
             var timeout = DateTimeOffset.UtcNow.AddMinutes(10);
-            var pollInterval = TimeSpan.FromSeconds(3);
 
             try
             {
-                while (!token.IsCancellationRequested &&
+                while (generation == Volatile.Read(ref _signInGeneration) &&
+                       !token.IsCancellationRequested &&
                        SessionStatus == "PENDING" &&
                        DateTimeOffset.UtcNow < timeout)
                 {
-                    await Task.Delay(pollInterval, token).ConfigureAwait(false);
-                    if (token.IsCancellationRequested)
+                    await Task.Delay(_googleSignInPollInterval, token).ConfigureAwait(false);
+                    if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                     {
                         break;
                     }
@@ -2858,36 +2936,59 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     catch (Exception ex) when (
                         ex is HttpRequestException or
                         TaskCanceledException or
+                        OperationCanceledException or
                         InvalidDataException)
                     {
                         continue;
                     }
 
-                    if (token.IsCancellationRequested)
+                    if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                     {
                         break;
                     }
 
                     if (statusResponse.Status == "AUTHENTICATED")
                     {
-                        ApplyStatus(statusResponse);
-                        PrepareAuthenticatedShellSurface();
+                        RunOnUi(() =>
+                        {
+                            if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+                            {
+                                return;
+                            }
+                            ApplyStatus(statusResponse);
+                            PrepareAuthenticatedShellSurface();
+                        });
                         break;
                     }
 
                     if (statusResponse.Status is "DENIED" or "EXPIRED" or "FAILED" or "SIGNED_OUT")
                     {
-                        ApplyStatus(statusResponse);
+                        RunOnUi(() =>
+                        {
+                            if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+                            {
+                                return;
+                            }
+                            ApplyStatus(statusResponse);
+                        });
                         break;
                     }
                 }
 
-                if (!token.IsCancellationRequested &&
+                if (generation == Volatile.Read(ref _signInGeneration) &&
+                    !token.IsCancellationRequested &&
                     SessionStatus == "PENDING" &&
                     DateTimeOffset.UtcNow >= timeout)
                 {
-                    SessionStatus = "EXPIRED";
-                    Message = "BKE account authorization timed out. Please try again.";
+                    RunOnUi(() =>
+                    {
+                        if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                        SessionStatus = "EXPIRED";
+                        Message = "BKE account authorization timed out. Please try again.";
+                    });
                 }
             }
             catch (OperationCanceledException)
@@ -2898,7 +2999,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void CancelGoogleSignInPoll()
     {
-        var existing = Interlocked.Exchange(ref _googleSignInPollCts, null);
+        Interlocked.Increment(ref _signInGeneration);
+        var existing = Interlocked.Exchange(ref _signInCts, null);
         if (existing is not null)
         {
             try

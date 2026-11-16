@@ -45,7 +45,7 @@
 
             <Grid ColumnDefinitions="*,Auto,*" Margin="0,4,0,4">
               <Border Grid.Column="0" Height="1" Background="{DynamicResource BkeBorderBrush}" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="or sign in with BKE account" Classes="muted" Margin="10,0" FontSize="12" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="or sign in with existing BKE password" Classes="muted" Margin="10,0" FontSize="12" VerticalAlignment="Center" />
               <Border Grid.Column="2" Height="1" Background="{DynamicResource BkeBorderBrush}" VerticalAlignment="Center" />
             </Grid>
 
@@ -73,7 +73,6 @@
             </StackPanel>
 
             <Button Content="Sign in with BKE"
-                    Classes="primary"
                     HorizontalAlignment="Stretch"
                     Click="NativeSignIn" />
 

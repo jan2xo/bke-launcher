@@ -3938,9 +3938,15 @@ Require(mainWindowSource.Contains(
         StringComparison.Ordinal),
     "Launcher Legal-document click handler does not await Agent-authority navigation.");
 
-Require(externalNavigatorSource.Contains("OpenVerificationUri", StringComparison.Ordinal),
+Require(externalNavigatorSource.Contains("OpenVerificationUriAsync", StringComparison.Ordinal) ||
+    externalNavigatorSource.Contains("OpenVerificationUri", StringComparison.Ordinal),
     "Launcher external navigator lacks OpenVerificationUri.");
+Require(externalNavigatorSource.Contains("ValidateVerificationTarget", StringComparison.Ordinal),
+    "Launcher external navigator lacks ValidateVerificationTarget authority binding.");
 Require(normalizedViewModelSource.Contains(
+        "_externalNavigator.OpenVerificationUriAsync(",
+        StringComparison.Ordinal) ||
+    normalizedViewModelSource.Contains(
         "_externalNavigator.OpenVerificationUri(response.VerificationUri);",
         StringComparison.Ordinal),
     "Launcher Google sign-in does not navigate using Agent-returned verification URI.");
@@ -6925,6 +6931,7 @@ static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
     var recovery = new CustomerJourneyRecoveryStore();
     var navigator = new CustomerJourneyNavigator();
     var viewModel = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator);
+    viewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
 
     await viewModel.InitializeAsync(CancellationToken.None);
     Require(!viewModel.IsAuthenticated && viewModel.ShowSignInForm && !viewModel.ShowPendingSignIn,
@@ -6946,7 +6953,7 @@ static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
         "Launcher did not store the verification URI.");
 
     // 2. Re-opening verification URL
-    viewModel.OpenVerificationUriInBrowser();
+    await viewModel.OpenVerificationUriInBrowserAsync(CancellationToken.None);
     Require(navigator.LastVerificationUrl == "https://digital-solutions.example.test/device?code=AUTH-9999",
         "Launcher failed to re-open verification URI on request.");
 
@@ -6959,52 +6966,148 @@ static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
     Require(string.IsNullOrEmpty(viewModel.UserCode),
         "Launcher retained user code after cancel.");
 
-    // 4. Successful approval via Agent custody
+    // 4. Stale response from cancelled attempt is dropped
+    agent.OverrideSessionStatus = "AUTHENTICATED";
+    agent.Authenticated = true;
+    await Task.Delay(100);
+    Require(viewModel.SessionStatus == "SIGNED_OUT" && !viewModel.IsAuthenticated,
+        "Launcher accepted late status response from cancelled sign-in generation.");
+
+    // 5. Automatic polling completion: user approves in browser without manual UI refresh
+    agent.OverrideSessionStatus = "PENDING";
+    agent.Authenticated = false;
     await viewModel.StartGoogleSignInAsync(CancellationToken.None);
     Require(viewModel.ShowPendingSignIn,
         "Launcher did not re-enter pending state on retry.");
 
     agent.OverrideSessionStatus = "AUTHENTICATED";
     agent.Authenticated = true;
-    await viewModel.RefreshStatusAsync(CancellationToken.None);
+    await Task.Delay(250);
 
     Require(viewModel.IsAuthenticated,
-        "Launcher is not marked authenticated after Agent confirms active session.");
+        "Automatic polling did not complete and mark session authenticated.");
     Require(viewModel.ShowAuthenticatedShell && !viewModel.ShowLoginPage && !viewModel.ShowPendingSignIn,
-        "Launcher did not transition to authenticated shell surface.");
+        "Automatic polling did not transition to authenticated shell surface.");
     Require(viewModel.AccountDisplay.Contains("customer@example.test", StringComparison.Ordinal),
-        "Launcher did not display authoritative account context.");
+        "Automatic polling did not display authoritative account context.");
 
-    // 5. Fail-closed on authorization denial
+    // 6. Automatic polling denial: fail-closed on rejection without manual UI refresh
     var deniedAgent = new CustomerJourneyAgentClient(catalog)
     {
         Authenticated = false,
         StartSessionStatus = "PENDING",
+        OverrideSessionStatus = "PENDING",
         StartVerificationUri = "https://digital-solutions.example.test/device?code=DENY-0000",
         StartUserCode = "DENY-0000",
     };
     var deniedViewModel = BuildCustomerJourneyViewModel(deniedAgent, catalog, recovery, navigator);
+    deniedViewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
     await deniedViewModel.InitializeAsync(CancellationToken.None);
     await deniedViewModel.StartGoogleSignInAsync(CancellationToken.None);
-    deniedAgent.OverrideSessionStatus = "DENIED";
-    await deniedViewModel.RefreshStatusAsync(CancellationToken.None);
-    Require(deniedViewModel.SessionStatus == "DENIED" && !deniedViewModel.IsAuthenticated,
-        "Launcher did not fail-closed on DENIED session status.");
+    Require(deniedViewModel.SessionStatus == "PENDING",
+        "Denied test did not enter PENDING state.");
 
-    // 6. ExternalBrowserNavigator HTTPS validation test
+    deniedAgent.OverrideSessionStatus = "DENIED";
+    await Task.Delay(250);
+
+    Require(deniedViewModel.SessionStatus == "DENIED" && !deniedViewModel.IsAuthenticated,
+        "Automatic polling did not fail-closed on DENIED session status.");
+
+    // 7. Automatic polling expiry: transition to EXPIRED on timeout
+    var expiredAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        OverrideSessionStatus = "PENDING",
+        StartVerificationUri = "https://digital-solutions.example.test/device?code=EXPIRE-0000",
+        StartUserCode = "EXPIRE-0000",
+    };
+    var expiredViewModel = BuildCustomerJourneyViewModel(expiredAgent, catalog, recovery, navigator);
+    expiredViewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
+    await expiredViewModel.InitializeAsync(CancellationToken.None);
+    await expiredViewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(expiredViewModel.SessionStatus == "PENDING",
+        "Expired test did not enter PENDING state.");
+
+    expiredAgent.OverrideSessionStatus = "EXPIRED";
+    await Task.Delay(250);
+
+    Require(expiredViewModel.SessionStatus == "EXPIRED" && !expiredViewModel.IsAuthenticated,
+        "Automatic polling did not transition to EXPIRED session status.");
+
+    // 8. Authority binding, trusted-origin verification, and loopback HTTP isolation
     var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
-    var realNavigator = new ExternalBrowserNavigator(platformAuthority);
-    var rejectedHttp = false;
+    var authorityUri = await platformAuthority.ResolveAsync(CancellationToken.None);
+
+    var validTarget = new Uri("https://digital-solutions.example.test/device?code=VALID-1234");
+    ExternalBrowserNavigator.ValidateVerificationTarget(validTarget, authorityUri);
+
+    var rejectedUntrusted = false;
     try
     {
-        realNavigator.OpenVerificationUri("http://insecure.example.com/device");
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("https://evil-phishing.test/device?code=EVIL-1234"),
+            authorityUri);
     }
-    catch (InvalidDataException)
+    catch (InvalidDataException ex) when (ex.Message.Contains("does not match the trusted Digital Solutions authority", StringComparison.Ordinal))
     {
-        rejectedHttp = true;
+        rejectedUntrusted = true;
     }
-    Require(rejectedHttp,
-        "ExternalBrowserNavigator did not reject non-HTTPS verification target.");
+    Require(rejectedUntrusted,
+        "ValidateVerificationTarget did not reject untrusted origin.");
+
+    var rejectedWrongPath = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("https://digital-solutions.example.test/oauth/callback?code=EVIL-1234"),
+            authorityUri);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("path must be /device", StringComparison.Ordinal))
+    {
+        rejectedWrongPath = true;
+    }
+    Require(rejectedWrongPath,
+        "ValidateVerificationTarget did not reject invalid path.");
+
+    var rejectedInsecure = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://digital-solutions.example.test/device?code=HTTP-1234"),
+            authorityUri);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedInsecure = true;
+    }
+    Require(rejectedInsecure,
+        "ValidateVerificationTarget did not reject non-HTTPS verification target.");
+
+    var loopbackTarget = new Uri("http://127.0.0.1:8787/device?code=LOOP-1234");
+    var loopbackAuth = new Uri("http://127.0.0.1:8787");
+
+    var rejectedLoopbackNoEnv = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedLoopbackNoEnv = true;
+    }
+    Require(rejectedLoopbackNoEnv,
+        "ValidateVerificationTarget did not reject loopback HTTP when env flag is unset.");
+
+    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", "1");
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", null);
+    }
 }
 
 static MainWindowViewModel BuildCustomerJourneyViewModel(
@@ -7135,6 +7238,15 @@ sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
     public void OpenCheckout(string absoluteUrl)
     {
         LastCheckoutUrl = absoluteUrl;
+    }
+
+    public Task OpenVerificationUriAsync(
+        string absoluteUrl,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LastVerificationUrl = absoluteUrl;
+        return Task.CompletedTask;
     }
 
     public void OpenVerificationUri(string absoluteUrl)

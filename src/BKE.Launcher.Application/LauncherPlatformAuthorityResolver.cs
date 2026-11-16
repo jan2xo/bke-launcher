@@ -17,13 +17,23 @@ public sealed class LauncherPlatformAuthorityResolver
             new PlatformAuthorityRequest(Guid.NewGuid().ToString("N")),
             cancellationToken);
 
+        var allowInsecureLoopback = string.Equals(
+            Environment.GetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK"),
+            "1",
+            StringComparison.Ordinal);
+
+        var isLoopbackHttp = allowInsecureLoopback &&
+            Uri.TryCreate(response.PlatformBaseUrl, UriKind.Absolute, out var testUri) &&
+            testUri.Scheme == Uri.UriSchemeHttp &&
+            testUri.IsLoopback;
+
         if (response.CapabilityId != AgentLocalContract.PlatformAuthorityCapabilityId ||
             response.ContractVersion != AgentLocalContract.PlatformAuthorityContractVersion ||
             response.Status != "READY" ||
             string.IsNullOrWhiteSpace(response.Environment) ||
             string.IsNullOrWhiteSpace(response.PlatformBaseUrl) ||
             !Uri.TryCreate(response.PlatformBaseUrl, UriKind.Absolute, out var authority) ||
-            authority.Scheme != Uri.UriSchemeHttps ||
+            (!isLoopbackHttp && authority.Scheme != Uri.UriSchemeHttps) ||
             string.IsNullOrWhiteSpace(authority.Host) ||
             !string.IsNullOrEmpty(authority.UserInfo) ||
             authority.AbsolutePath != "/" ||
