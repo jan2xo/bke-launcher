@@ -364,7 +364,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _registrationMessage, value);
     }
 
-    public bool ShowSignInForm => ShowLoginPage && !_showRegistration;
+    public bool ShowPendingSignIn => ShowLoginPage && SessionStatus == "PENDING";
+    public bool ShowSignInForm => ShowLoginPage && !_showRegistration && SessionStatus != "PENDING";
     public bool ShowRegistration => ShowLoginPage && _showRegistration;
     public bool ShowRegistrationEntry =>
         ShowRegistration && RegistrationStatus != "VERIFICATION_REQUIRED";
@@ -1709,6 +1710,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             SetField(ref _sessionStatus, value);
             Raise(nameof(IsAuthenticated));
             Raise(nameof(ShowLoginPage));
+            Raise(nameof(ShowPendingSignIn));
+            Raise(nameof(ShowSignInForm));
             Raise(nameof(ShowAuthenticatedShell));
             RaiseRegistrationCapabilities();
             Raise(nameof(CanRequestPasswordReset));
@@ -2525,6 +2528,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task NativeSignInAsync(CancellationToken cancellationToken)
     {
+        CancelGoogleSignInPoll();
+
         if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrEmpty(Password))
         {
             SessionStatus = "SIGNED_OUT";
@@ -2716,10 +2721,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearNotifications("AUTH_REQUIRED", "Sign in to view BKE notifications.");
     }
 
-    public async Task StartSignInAsync(CancellationToken cancellationToken)
+    public async Task StartSignInAsync(CancellationToken cancellationToken) =>
+        await StartGoogleSignInAsync(cancellationToken);
+
+    public async Task StartGoogleSignInAsync(CancellationToken cancellationToken = default)
     {
+        if (IsAuthenticated)
+        {
+            return;
+        }
+
+        CancelGoogleSignInPoll();
+
         try
         {
+            SessionStatus = "STARTING_SIGN_IN";
+            Message = "Starting device authorization through BKE Licensing Agent…";
+
             var response = await _accountSession.StartAsync(cancellationToken);
             SessionStatus = response.Status;
             UserCode = response.UserCode ?? string.Empty;
@@ -2727,13 +2745,38 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Message = response.Status switch
             {
                 "AUTHENTICATED" => "This machine already has an authenticated BKE account session.",
-                "PENDING" => "Complete sign-in in your browser, then refresh account status.",
+                "PENDING" => "Complete sign-in in your browser. BKE Launcher will update automatically.",
                 _ => response.Error?.Message ?? "BKE account sign-in could not be started.",
             };
 
             if (response.Status == "AUTHENTICATED")
             {
                 PrepareAuthenticatedShellSurface();
+                return;
+            }
+
+            if (response.Status == "PENDING")
+            {
+                ClearNotifications(
+                    "AUTH_REQUIRED",
+                    "Sign in to view BKE notifications.");
+
+                if (!string.IsNullOrWhiteSpace(response.VerificationUri))
+                {
+                    try
+                    {
+                        _externalNavigator.OpenVerificationUri(response.VerificationUri);
+                    }
+                    catch (Exception navError) when (
+                        navError is InvalidDataException or
+                        System.ComponentModel.Win32Exception or
+                        InvalidOperationException)
+                    {
+                        Message = "Could not open your default browser automatically. Open the verification URL manually.";
+                    }
+                }
+
+                StartGoogleSignInPolling();
             }
             else
             {
@@ -2746,6 +2789,126 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SessionStatus = "AGENT_UNAVAILABLE";
             Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
+        }
+    }
+
+    public void OpenVerificationUriInBrowser()
+    {
+        if (string.IsNullOrWhiteSpace(VerificationUri))
+        {
+            return;
+        }
+
+        try
+        {
+            _externalNavigator.OpenVerificationUri(VerificationUri);
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or
+            System.ComponentModel.Win32Exception or
+            InvalidOperationException)
+        {
+            Message = "Could not open your default browser. Please open the verification URL manually.";
+        }
+    }
+
+    public void CancelGoogleSignIn()
+    {
+        CancelGoogleSignInPoll();
+        if (SessionStatus is "PENDING" or "STARTING_SIGN_IN")
+        {
+            SessionStatus = "SIGNED_OUT";
+            UserCode = string.Empty;
+            VerificationUri = string.Empty;
+            Message = "BKE account sign-in was cancelled.";
+        }
+    }
+
+    private CancellationTokenSource? _googleSignInPollCts;
+
+    private void StartGoogleSignInPolling()
+    {
+        CancelGoogleSignInPoll();
+        var cts = new CancellationTokenSource();
+        _googleSignInPollCts = cts;
+        var token = cts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            var timeout = DateTimeOffset.UtcNow.AddMinutes(10);
+            var pollInterval = TimeSpan.FromSeconds(3);
+
+            try
+            {
+                while (!token.IsCancellationRequested &&
+                       SessionStatus == "PENDING" &&
+                       DateTimeOffset.UtcNow < timeout)
+                {
+                    await Task.Delay(pollInterval, token).ConfigureAwait(false);
+                    if (token.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    AccountSessionStatusResponse statusResponse;
+                    try
+                    {
+                        statusResponse = await _accountSession.StatusAsync(token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (
+                        ex is HttpRequestException or
+                        TaskCanceledException or
+                        InvalidDataException)
+                    {
+                        continue;
+                    }
+
+                    if (token.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    if (statusResponse.Status == "AUTHENTICATED")
+                    {
+                        ApplyStatus(statusResponse);
+                        PrepareAuthenticatedShellSurface();
+                        break;
+                    }
+
+                    if (statusResponse.Status is "DENIED" or "EXPIRED" or "FAILED" or "SIGNED_OUT")
+                    {
+                        ApplyStatus(statusResponse);
+                        break;
+                    }
+                }
+
+                if (!token.IsCancellationRequested &&
+                    SessionStatus == "PENDING" &&
+                    DateTimeOffset.UtcNow >= timeout)
+                {
+                    SessionStatus = "EXPIRED";
+                    Message = "BKE account authorization timed out. Please try again.";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, token);
+    }
+
+    private void CancelGoogleSignInPoll()
+    {
+        var existing = Interlocked.Exchange(ref _googleSignInPollCts, null);
+        if (existing is not null)
+        {
+            try
+            {
+                existing.Cancel();
+                existing.Dispose();
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -7087,6 +7250,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LogoutAsync(CancellationToken cancellationToken)
     {
+        CancelGoogleSignInPoll();
+
         var preserveCheckoutRecovery =
             _purchaseAttemptLocked &&
             !string.IsNullOrWhiteSpace(_checkoutRecoveryCorrelationId);

@@ -25,6 +25,18 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
         Open(uri);
     }
 
+    public void OpenVerificationUri(string absoluteUrl)
+    {
+        if (!Uri.TryCreate(absoluteUrl, UriKind.Absolute, out var uri))
+        {
+            throw new InvalidDataException(
+                "Device verification navigation target is invalid.");
+        }
+
+        ValidateHttpsUri(uri, requireOrigin: false);
+        Open(uri);
+    }
+
     public async Task OpenLegalDocumentAsync(
         string slug,
         CancellationToken cancellationToken)
@@ -51,8 +63,17 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
 
     private static void ValidateHttpsUri(Uri uri, bool requireOrigin)
     {
+        var allowInsecureLoopback = string.Equals(
+            Environment.GetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK"),
+            "1",
+            StringComparison.Ordinal);
+
+        var isLoopbackHttp = allowInsecureLoopback &&
+            uri.Scheme == Uri.UriSchemeHttp &&
+            uri.IsLoopback;
+
         if (!uri.IsAbsoluteUri ||
-            uri.Scheme != Uri.UriSchemeHttps ||
+            (!isLoopbackHttp && uri.Scheme != Uri.UriSchemeHttps) ||
             string.IsNullOrWhiteSpace(uri.Host) ||
             !string.IsNullOrEmpty(uri.UserInfo) ||
             !string.IsNullOrEmpty(uri.Fragment) ||

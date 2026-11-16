@@ -287,6 +287,7 @@ public interface ILauncherExternalNavigator
     Task OpenLegalDocumentAsync(
         string slug,
         CancellationToken cancellationToken);
+    void OpenVerificationUri(string absoluteUrl);
 }
 
 public sealed record LauncherCheckoutRecoveryState(

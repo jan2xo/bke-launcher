@@ -1367,7 +1367,7 @@ Require(
 Require(
     File.ReadAllText(
         Path.Combine("eng", "licensing-agent-source.sha")).Trim() ==
-        "bff7b9ee7f449089e672e7418d6335114c156c91",
+        "36a9a588d87d1b80cfb56d709fda7c5383a0abe0",
     "Launcher is not pinned to the merged Agent authority.");
 
 Require(
@@ -3938,6 +3938,33 @@ Require(mainWindowSource.Contains(
         StringComparison.Ordinal),
     "Launcher Legal-document click handler does not await Agent-authority navigation.");
 
+Require(externalNavigatorSource.Contains("OpenVerificationUri", StringComparison.Ordinal),
+    "Launcher external navigator lacks OpenVerificationUri.");
+Require(normalizedViewModelSource.Contains(
+        "_externalNavigator.OpenVerificationUri(response.VerificationUri);",
+        StringComparison.Ordinal),
+    "Launcher Google sign-in does not navigate using Agent-returned verification URI.");
+Require(mainWindowSource.Contains(
+        "await ViewModel.StartGoogleSignInAsync(",
+        StringComparison.Ordinal),
+    "Launcher Google sign-in click handler is missing.");
+Require(mainWindowSource.Contains(
+        "ViewModel.OpenVerificationUriInBrowser();",
+        StringComparison.Ordinal),
+    "Launcher verification re-open click handler is missing.");
+Require(mainWindowSource.Contains(
+        "ViewModel.CancelGoogleSignIn();",
+        StringComparison.Ordinal),
+    "Launcher Google sign-in cancel click handler is missing.");
+Require(mainWindowMarkup.Contains(
+        "Content=\"Continue with Google\"",
+        StringComparison.Ordinal),
+    "Launcher UI is missing 'Continue with Google' button.");
+Require(mainWindowMarkup.Contains(
+        "ShowPendingSignIn",
+        StringComparison.Ordinal),
+    "Launcher UI is missing pending device approval surface.");
+
 Require(normalizedViewModelSource.Contains(
     "await _storeCheckoutStart.StartAsync(",
     StringComparison.Ordinal),
@@ -4431,8 +4458,10 @@ await CertifyAccountLicenseDeviceManagementAsync();
 await CertifyAccountOrganizationSettingsAsync();
 await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
+await CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
+Console.WriteLine("Google sign-in device approval and Agent session custody certified");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
 Console.WriteLine("Native password-reset completion exact-origin, transient-secret, and ambiguity no-replay composition certified");
@@ -6883,6 +6912,101 @@ static async Task CertifyClaimCodeRedemptionRefreshesMySoftwareAsync()
         "Unconfirmed Claim Code mutation retained plaintext, replayed, or skipped authoritative read refresh.");
 }
 
+static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        StartVerificationUri = "https://digital-solutions.example.test/device?code=AUTH-9999",
+        StartUserCode = "AUTH-9999",
+    };
+    var recovery = new CustomerJourneyRecoveryStore();
+    var navigator = new CustomerJourneyNavigator();
+    var viewModel = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator);
+
+    await viewModel.InitializeAsync(CancellationToken.None);
+    Require(!viewModel.IsAuthenticated && viewModel.ShowSignInForm && !viewModel.ShowPendingSignIn,
+        "Launcher did not start in signed-out sign-in form state.");
+
+    // 1. Start Google Sign-In -> Agent StartAsync -> browser handoff
+    await viewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(agent.StartSessionCount == 1,
+        "Launcher did not call Agent StartAccountSessionAsync.");
+    Require(navigator.LastVerificationUrl == "https://digital-solutions.example.test/device?code=AUTH-9999",
+        "Launcher did not open the Agent-supplied verification URI in external browser.");
+    Require(viewModel.SessionStatus == "PENDING",
+        "Launcher session status is not PENDING after Google sign-in start.");
+    Require(viewModel.ShowPendingSignIn && !viewModel.ShowSignInForm,
+        "Launcher did not transition to pending device approval surface.");
+    Require(viewModel.UserCode == "AUTH-9999",
+        "Launcher did not display the expected confirmation code.");
+    Require(viewModel.VerificationUri == "https://digital-solutions.example.test/device?code=AUTH-9999",
+        "Launcher did not store the verification URI.");
+
+    // 2. Re-opening verification URL
+    viewModel.OpenVerificationUriInBrowser();
+    Require(navigator.LastVerificationUrl == "https://digital-solutions.example.test/device?code=AUTH-9999",
+        "Launcher failed to re-open verification URI on request.");
+
+    // 3. User cancels Google sign-in
+    viewModel.CancelGoogleSignIn();
+    Require(viewModel.SessionStatus == "SIGNED_OUT",
+        "Launcher session status did not revert to SIGNED_OUT after cancel.");
+    Require(!viewModel.ShowPendingSignIn && viewModel.ShowSignInForm,
+        "Launcher did not restore sign-in form after cancel.");
+    Require(string.IsNullOrEmpty(viewModel.UserCode),
+        "Launcher retained user code after cancel.");
+
+    // 4. Successful approval via Agent custody
+    await viewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(viewModel.ShowPendingSignIn,
+        "Launcher did not re-enter pending state on retry.");
+
+    agent.OverrideSessionStatus = "AUTHENTICATED";
+    agent.Authenticated = true;
+    await viewModel.RefreshStatusAsync(CancellationToken.None);
+
+    Require(viewModel.IsAuthenticated,
+        "Launcher is not marked authenticated after Agent confirms active session.");
+    Require(viewModel.ShowAuthenticatedShell && !viewModel.ShowLoginPage && !viewModel.ShowPendingSignIn,
+        "Launcher did not transition to authenticated shell surface.");
+    Require(viewModel.AccountDisplay.Contains("customer@example.test", StringComparison.Ordinal),
+        "Launcher did not display authoritative account context.");
+
+    // 5. Fail-closed on authorization denial
+    var deniedAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        StartVerificationUri = "https://digital-solutions.example.test/device?code=DENY-0000",
+        StartUserCode = "DENY-0000",
+    };
+    var deniedViewModel = BuildCustomerJourneyViewModel(deniedAgent, catalog, recovery, navigator);
+    await deniedViewModel.InitializeAsync(CancellationToken.None);
+    await deniedViewModel.StartGoogleSignInAsync(CancellationToken.None);
+    deniedAgent.OverrideSessionStatus = "DENIED";
+    await deniedViewModel.RefreshStatusAsync(CancellationToken.None);
+    Require(deniedViewModel.SessionStatus == "DENIED" && !deniedViewModel.IsAuthenticated,
+        "Launcher did not fail-closed on DENIED session status.");
+
+    // 6. ExternalBrowserNavigator HTTPS validation test
+    var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
+    var realNavigator = new ExternalBrowserNavigator(platformAuthority);
+    var rejectedHttp = false;
+    try
+    {
+        realNavigator.OpenVerificationUri("http://insecure.example.com/device");
+    }
+    catch (InvalidDataException)
+    {
+        rejectedHttp = true;
+    }
+    Require(rejectedHttp,
+        "ExternalBrowserNavigator did not reject non-HTTPS verification target.");
+}
+
 static MainWindowViewModel BuildCustomerJourneyViewModel(
     CustomerJourneyAgentClient agent,
     CustomerJourneyCatalogSource catalog,
@@ -7006,10 +7130,16 @@ sealed class CustomerJourneyRecoveryStore : ILauncherCheckoutRecoveryStore
 sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
 {
     public string? LastCheckoutUrl { get; private set; }
+    public string? LastVerificationUrl { get; private set; }
 
     public void OpenCheckout(string absoluteUrl)
     {
         LastCheckoutUrl = absoluteUrl;
+    }
+
+    public void OpenVerificationUri(string absoluteUrl)
+    {
+        LastVerificationUrl = absoluteUrl;
     }
 
     public Task OpenLegalDocumentAsync(
@@ -7334,11 +7464,41 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public string PasswordChangeOutcome { get; set; } = "CHANGED";
     public AccountPasswordChangeRequest? LastPasswordChangeRequest { get; private set; }
 
+    public int StartSessionCount { get; private set; }
+    public string StartSessionStatus { get; set; } = "PENDING";
+    public string StartVerificationUri { get; set; } = "https://digital-solutions.example.test/device?code=ABCD-1234";
+    public string StartUserCode { get; set; } = "ABCD-1234";
+    public string? OverrideSessionStatus { get; set; }
+
     public Task<AccountSessionStatusResponse> GetAccountSessionStatusAsync(
         AccountSessionStatusRequest request,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (OverrideSessionStatus is not null)
+        {
+            return Task.FromResult(new AccountSessionStatusResponse(
+                AgentLocalContract.CapabilityId,
+                AgentLocalContract.ContractVersion,
+                OverrideSessionStatus,
+                OverrideSessionStatus == "AUTHENTICATED"
+                    ? new AccountSessionAccount(
+                        "user-cert",
+                        "customer@example.test",
+                        AccountId,
+                        AccountType,
+                        AccountType == "ORGANIZATION"
+                            ? OrganizationDisplayName
+                            : "Certification Customer")
+                    : null,
+                OverrideSessionStatus is "DENIED" or "EXPIRED" or "FAILED"
+                    ? new AccountSessionError(
+                        OverrideSessionStatus,
+                        $"Session was {OverrideSessionStatus.ToLowerInvariant()}.",
+                        false)
+                    : null));
+        }
+
         return Task.FromResult(Authenticated
             ? new AccountSessionStatusResponse(
                 AgentLocalContract.CapabilityId,
@@ -7795,8 +7955,19 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
 
     public Task<AccountSessionStartResponse> StartAccountSessionAsync(
         AccountSessionStartRequest request,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        StartSessionCount++;
+        return Task.FromResult(new AccountSessionStartResponse(
+            AgentLocalContract.CapabilityId,
+            AgentLocalContract.ContractVersion,
+            StartSessionStatus,
+            StartVerificationUri,
+            StartUserCode,
+            DateTimeOffset.UtcNow.AddMinutes(10).ToString("O"),
+            null));
+    }
 
     public Task<AccountSessionLogoutResponse> LogoutAccountSessionAsync(
         AccountSessionLogoutRequest request,

@@ -192,6 +192,38 @@ public sealed partial class MainWindow : Window
             CancellationToken.None);
     }
 
+    private async void ContinueWithGoogle(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.StartGoogleSignInAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
+    }
+
+    private void OpenVerificationPage(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.OpenVerificationUriInBrowser();
+    }
+
+    private async void RefreshSessionStatus(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.RefreshStatusAsync(CancellationToken.None);
+        if (ViewModel.ShowAuthenticatedShell)
+        {
+            await ViewModel.OpenModuleAsync(
+                0,
+                CancellationToken.None);
+        }
+    }
+
+    private void CancelGoogleSignIn(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.CancelGoogleSignIn();
+    }
+
     private async void NativeSignIn(object? sender, RoutedEventArgs args)
     {
         await ViewModel.NativeSignInAsync(CancellationToken.None);
