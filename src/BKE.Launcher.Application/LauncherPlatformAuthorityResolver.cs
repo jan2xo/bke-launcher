@@ -11,6 +11,20 @@ public sealed class LauncherPlatformAuthorityResolver
         _agent = agent;
     }
 
+    public static readonly HashSet<string> ApprovedNonproductionEnvironments =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "development",
+            "certification",
+            "utm",
+            "test",
+        };
+
+    public static bool IsApprovedNonproductionEnvironment(string? environment) =>
+        !string.IsNullOrWhiteSpace(environment) &&
+        !string.Equals(environment.Trim(), "production", StringComparison.OrdinalIgnoreCase) &&
+        ApprovedNonproductionEnvironments.Contains(environment.Trim());
+
     public async Task<Uri> ResolveAsync(CancellationToken cancellationToken)
     {
         var response = await _agent.GetPlatformAuthorityAsync(
@@ -22,7 +36,17 @@ public sealed class LauncherPlatformAuthorityResolver
             "1",
             StringComparison.Ordinal);
 
+        var configuredEnv = Environment.GetEnvironmentVariable("BKE_ENVIRONMENT");
+        var effectiveEnv = !string.IsNullOrWhiteSpace(configuredEnv)
+            ? configuredEnv
+            : response.Environment;
+
+        var isApprovedNonprod =
+            IsApprovedNonproductionEnvironment(response.Environment) &&
+            IsApprovedNonproductionEnvironment(effectiveEnv);
+
         var isLoopbackHttp = allowInsecureLoopback &&
+            isApprovedNonprod &&
             Uri.TryCreate(response.PlatformBaseUrl, UriKind.Absolute, out var testUri) &&
             testUri.Scheme == Uri.UriSchemeHttp &&
             testUri.IsLoopback;

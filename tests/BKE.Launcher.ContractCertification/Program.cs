@@ -7084,30 +7084,193 @@ static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
     Require(rejectedInsecure,
         "ValidateVerificationTarget did not reject non-HTTPS verification target.");
 
+    // 9. Real Queued SynchronizationContext: asynchronous UI-dispatch race prevention
+    using (var queuedContext = new QueuedTestSynchronizationContext())
+    {
+        var queuedAgent = new CustomerJourneyAgentClient(catalog)
+        {
+            Authenticated = false,
+            StartSessionStatus = "PENDING",
+            OverrideSessionStatus = "PENDING",
+            StartVerificationUri = "https://digital-solutions.example.test/device?code=QUEUE-0000",
+            StartUserCode = "QUEUE-0000",
+        };
+        var queuedViewModel = BuildCustomerJourneyViewModel(
+            queuedAgent,
+            catalog,
+            recovery,
+            navigator,
+            uiContext: queuedContext);
+        queuedViewModel.GoogleSignInPollInterval = TimeSpan.FromMilliseconds(40);
+
+        await queuedViewModel.InitializeAsync(CancellationToken.None);
+        await queuedViewModel.StartGoogleSignInAsync(CancellationToken.None);
+
+        Require(queuedViewModel.SessionStatus == "PENDING",
+            "Queued UI context did not receive PENDING state.");
+        Require(queuedViewModel.ShowPendingSignIn,
+            "Queued UI context did not show pending approval view.");
+
+        // Simulate user completing approval in browser
+        queuedAgent.OverrideSessionStatus = "AUTHENTICATED";
+        queuedAgent.Authenticated = true;
+        await Task.Delay(250);
+
+        Require(queuedViewModel.IsAuthenticated,
+            "Automatic polling on queued UI context did not transition to AUTHENTICATED.");
+        Require(queuedViewModel.ShowAuthenticatedShell,
+            "Queued UI context did not transition to authenticated shell.");
+    }
+
+    // 10. Loopback HTTP containment: require BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1 AND an explicitly approved nonproduction environment
     var loopbackTarget = new Uri("http://127.0.0.1:8787/device?code=LOOP-1234");
     var loopbackAuth = new Uri("http://127.0.0.1:8787");
 
-    var rejectedLoopbackNoEnv = false;
+    // 10a. Browser navigation: Rejection when BKE_AGENT_ALLOW_INSECURE_LOOPBACK is unset
+    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", null);
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
+    var rejectedNoLoopbackFlag = false;
     try
     {
         ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
     }
     catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
     {
-        rejectedLoopbackNoEnv = true;
+        rejectedNoLoopbackFlag = true;
     }
-    Require(rejectedLoopbackNoEnv,
-        "ValidateVerificationTarget did not reject loopback HTTP when env flag is unset.");
+    Require(rejectedNoLoopbackFlag,
+        "ValidateVerificationTarget did not reject loopback HTTP when BKE_AGENT_ALLOW_INSECURE_LOOPBACK is unset.");
 
+    // 10b. Browser navigation: Rejection when environment is unset (null / empty) even with BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1
     Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", "1");
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", null);
+    var rejectedUnsetEnv = false;
     try
     {
         ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
     }
-    finally
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
     {
-        Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", null);
+        rejectedUnsetEnv = true;
     }
+    Require(rejectedUnsetEnv,
+        "ValidateVerificationTarget did not reject loopback HTTP when BKE_ENVIRONMENT is unset.");
+
+    // 10c. Browser navigation: Rejection when environment is explicitly production even with BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "production");
+    var rejectedProductionEnv = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedProductionEnv = true;
+    }
+    Require(rejectedProductionEnv,
+        "ValidateVerificationTarget did not reject loopback HTTP when BKE_ENVIRONMENT is production.");
+
+    // 10d. Browser navigation: Direct environment argument rejection tests
+    var rejectedDirectProd = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "production");
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedDirectProd = true;
+    }
+    Require(rejectedDirectProd,
+        "ValidateVerificationTarget did not reject loopback HTTP with direct production environment.");
+
+    var rejectedDirectUnset = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "");
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedDirectUnset = true;
+    }
+    Require(rejectedDirectUnset,
+        "ValidateVerificationTarget did not reject loopback HTTP with direct empty environment.");
+
+    // 10e. Browser navigation: Permitted when BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1 AND environment is approved nonproduction
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
+    ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
+    ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "utm");
+    ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "development");
+
+    // 10f. Launcher authority resolution: Rejection when Agent environment is production
+    var prodAuthorityAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "production",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var prodResolver = new LauncherPlatformAuthorityResolver(prodAuthorityAgent);
+    var rejectedProdResolver = false;
+    try
+    {
+        await prodResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedProdResolver = true;
+    }
+    Require(rejectedProdResolver,
+        "LauncherPlatformAuthorityResolver did not reject loopback HTTP in production environment.");
+
+    // 10g. Launcher authority resolution: Rejection when BKE_ENVIRONMENT is production
+    var certAuthorityAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "certification",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "production");
+    var certResolverWithProdEnv = new LauncherPlatformAuthorityResolver(certAuthorityAgent);
+    var rejectedCertWithProdEnv = false;
+    try
+    {
+        await certResolverWithProdEnv.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedCertWithProdEnv = true;
+    }
+    Require(rejectedCertWithProdEnv,
+        "LauncherPlatformAuthorityResolver did not reject loopback HTTP when BKE_ENVIRONMENT is production.");
+
+    // 10h. Launcher authority resolution: Rejection when Agent environment is unset / empty
+    var emptyEnvAuthorityAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
+    var emptyEnvResolver = new LauncherPlatformAuthorityResolver(emptyEnvAuthorityAgent);
+    var rejectedEmptyEnvResolver = false;
+    try
+    {
+        await emptyEnvResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedEmptyEnvResolver = true;
+    }
+    Require(rejectedEmptyEnvResolver,
+        "LauncherPlatformAuthorityResolver did not reject loopback HTTP with empty Agent environment.");
+
+    // 10i. Launcher authority resolution: Permitted when BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1 AND both environments are approved nonproduction
+    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", "1");
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
+    var validCertResolver = new LauncherPlatformAuthorityResolver(certAuthorityAgent);
+    var resolvedLoopbackUri = await validCertResolver.ResolveAsync(CancellationToken.None);
+    Require(resolvedLoopbackUri == new Uri("http://127.0.0.1:8787/"),
+        "LauncherPlatformAuthorityResolver failed to resolve approved nonproduction loopback authority.");
+
+    // Cleanup environment variables
+    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", null);
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", null);
 }
 
 static MainWindowViewModel BuildCustomerJourneyViewModel(
@@ -7115,7 +7278,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
     CustomerJourneyCatalogSource catalog,
     CustomerJourneyRecoveryStore recovery,
     CustomerJourneyNavigator navigator,
-    CustomerJourneyIdentityClient? identity = null)
+    CustomerJourneyIdentityClient? identity = null,
+    SynchronizationContext? uiContext = null)
 {
     var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
     identity ??= new CustomerJourneyIdentityClient();
@@ -7160,7 +7324,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountLicenseSeatsController(agent),
         new LauncherAccountLicenseDevicesController(agent),
         new LauncherAccountOrganizationController(agent),
-        new CustomerJourneyPluginRuntime());
+        new CustomerJourneyPluginRuntime(),
+        uiContext);
 }
 
 static void Require(bool condition, string message)
@@ -7168,6 +7333,83 @@ static void Require(bool condition, string message)
     if (!condition)
     {
         throw new InvalidOperationException(message);
+    }
+}
+
+sealed class QueuedTestSynchronizationContext : SynchronizationContext, IDisposable
+{
+    private readonly System.Collections.Concurrent.BlockingCollection<Action> _queue = new();
+    private readonly Thread _workerThread;
+    private volatile bool _disposed;
+
+    public QueuedTestSynchronizationContext()
+    {
+        _workerThread = new Thread(() =>
+        {
+            SetSynchronizationContext(this);
+            foreach (var action in _queue.GetConsumingEnumerable())
+            {
+                try
+                {
+                    action();
+                }
+                catch
+                {
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "QueuedTestSynchronizationContextWorker",
+        };
+        _workerThread.Start();
+    }
+
+    public override void Post(SendOrPostCallback d, object? state)
+    {
+        if (!_disposed)
+        {
+            _queue.Add(() => d(state));
+        }
+    }
+
+    public override void Send(SendOrPostCallback d, object? state)
+    {
+        if (Thread.CurrentThread == _workerThread)
+        {
+            d(state);
+            return;
+        }
+
+        using var done = new ManualResetEventSlim(false);
+        Exception? caught = null;
+        Post(_ =>
+        {
+            try
+            {
+                d(state);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+            finally
+            {
+                done.Set();
+            }
+        }, null);
+        done.Wait();
+        if (caught is not null)
+        {
+            throw new InvalidOperationException("Exception in UI thread callback", caught);
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _queue.CompleteAdding();
+        _workerThread.Join(TimeSpan.FromSeconds(2));
     }
 }
 
@@ -8040,6 +8282,9 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             null));
     }
 
+    public string OverridePlatformEnvironment { get; set; } = "certification";
+    public string OverridePlatformBaseUrl { get; set; } = "https://digital-solutions.example.test/";
+
     public Task<PlatformAuthorityResponse> GetPlatformAuthorityAsync(
         PlatformAuthorityRequest request,
         CancellationToken cancellationToken)
@@ -8050,8 +8295,8 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
             AgentLocalContract.PlatformAuthorityCapabilityId,
             AgentLocalContract.PlatformAuthorityContractVersion,
             "READY",
-            "certification",
-            "https://digital-solutions.example.test/",
+            OverridePlatformEnvironment,
+            OverridePlatformBaseUrl,
             null));
     }
 

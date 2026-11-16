@@ -63,6 +63,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             action();
         }
     }
+
+    private Task RunOnUiAsync(Action action)
+    {
+        if (_uiContext is null || SynchronizationContext.Current == _uiContext)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _uiContext.Post(_ =>
+        {
+            try
+            {
+                action();
+                tcs.SetResult();
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        }, null);
+        return tcs.Task;
+    }
     private string _sessionStatus = "SIGNED_OUT";
     private string _email = string.Empty;
     private string _password = string.Empty;
@@ -1728,7 +1752,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string SessionStatus
     {
-        get => _sessionStatus;
+        get => Volatile.Read(ref _sessionStatus);
         private set
         {
             SetField(ref _sessionStatus, value);
@@ -2763,7 +2787,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                 {
@@ -2771,7 +2795,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 }
                 SessionStatus = "STARTING_SIGN_IN";
                 Message = "Starting device authorization through BKE Licensing Agent…";
-            });
+            }).ConfigureAwait(false);
 
             var response = await _accountSession.StartAsync(token).ConfigureAwait(false);
 
@@ -2780,7 +2804,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                 {
@@ -2806,7 +2830,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 ClearNotifications(
                     "AUTH_REQUIRED",
                     "Sign in to view BKE notifications.");
-            });
+            }).ConfigureAwait(false);
 
             if (response.Status == "AUTHENTICATED")
             {
@@ -2828,13 +2852,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                         System.ComponentModel.Win32Exception or
                         InvalidOperationException)
                     {
-                        RunOnUi(() =>
+                        await RunOnUiAsync(() =>
                         {
                             if (generation == Volatile.Read(ref _signInGeneration) && !token.IsCancellationRequested)
                             {
                                 Message = "Could not open your default browser automatically. Open the verification URL manually.";
                             }
-                        });
+                        }).ConfigureAwait(false);
                     }
                 }
 
@@ -2852,7 +2876,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                 {
@@ -2860,7 +2884,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 }
                 SessionStatus = "AGENT_UNAVAILABLE";
                 Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
-            });
+            }).ConfigureAwait(false);
         }
     }
 
@@ -2882,10 +2906,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             System.ComponentModel.Win32Exception or
             InvalidOperationException)
         {
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 Message = "Could not open your default browser. Please open the verification URL manually.";
-            });
+            }).ConfigureAwait(false);
         }
     }
 
@@ -2917,6 +2941,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             try
             {
+                var initialStatusDeadline = DateTimeOffset.UtcNow.AddSeconds(5);
+                while (generation == Volatile.Read(ref _signInGeneration) &&
+                       !token.IsCancellationRequested &&
+                       SessionStatus != "PENDING" &&
+                       DateTimeOffset.UtcNow < initialStatusDeadline)
+                {
+                    await Task.Delay(10, token).ConfigureAwait(false);
+                }
+
                 while (generation == Volatile.Read(ref _signInGeneration) &&
                        !token.IsCancellationRequested &&
                        SessionStatus == "PENDING" &&
@@ -2949,7 +2982,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
                     if (statusResponse.Status == "AUTHENTICATED")
                     {
-                        RunOnUi(() =>
+                        await RunOnUiAsync(() =>
                         {
                             if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                             {
@@ -2957,20 +2990,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                             }
                             ApplyStatus(statusResponse);
                             PrepareAuthenticatedShellSurface();
-                        });
+                        }).ConfigureAwait(false);
                         break;
                     }
 
                     if (statusResponse.Status is "DENIED" or "EXPIRED" or "FAILED" or "SIGNED_OUT")
                     {
-                        RunOnUi(() =>
+                        await RunOnUiAsync(() =>
                         {
                             if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                             {
                                 return;
                             }
                             ApplyStatus(statusResponse);
-                        });
+                        }).ConfigureAwait(false);
                         break;
                     }
                 }
@@ -2980,7 +3013,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     SessionStatus == "PENDING" &&
                     DateTimeOffset.UtcNow >= timeout)
                 {
-                    RunOnUi(() =>
+                    await RunOnUiAsync(() =>
                     {
                         if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
                         {
@@ -2988,7 +3021,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                         }
                         SessionStatus = "EXPIRED";
                         Message = "BKE account authorization timed out. Please try again.";
-                    });
+                    }).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException)

@@ -47,9 +47,12 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
         OpenVerificationUriAsync(absoluteUrl, CancellationToken.None).GetAwaiter().GetResult();
     }
 
-    public static void ValidateVerificationTarget(Uri uri, Uri platformAuthority)
+    public static void ValidateVerificationTarget(
+        Uri uri,
+        Uri platformAuthority,
+        string? environment = null)
     {
-        ValidateHttpsUri(uri, requireOrigin: false);
+        ValidateHttpsUri(uri, requireOrigin: false, environment);
 
         if (!string.Equals(uri.Scheme, platformAuthority.Scheme, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(uri.Host, platformAuthority.Host, StringComparison.OrdinalIgnoreCase) ||
@@ -90,14 +93,25 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
             $"/legal/{Uri.EscapeDataString(slug)}"));
     }
 
-    private static void ValidateHttpsUri(Uri uri, bool requireOrigin)
+    private static void ValidateHttpsUri(
+        Uri uri,
+        bool requireOrigin,
+        string? environment = null)
     {
         var allowInsecureLoopback = string.Equals(
             Environment.GetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK"),
             "1",
             StringComparison.Ordinal);
 
+        var configuredEnv = !string.IsNullOrWhiteSpace(environment)
+            ? environment
+            : Environment.GetEnvironmentVariable("BKE_ENVIRONMENT");
+
+        var isApprovedNonprod =
+            LauncherPlatformAuthorityResolver.IsApprovedNonproductionEnvironment(configuredEnv);
+
         var isLoopbackHttp = allowInsecureLoopback &&
+            isApprovedNonprod &&
             uri.Scheme == Uri.UriSchemeHttp &&
             uri.IsLoopback;
 
