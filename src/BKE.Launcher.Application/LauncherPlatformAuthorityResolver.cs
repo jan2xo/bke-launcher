@@ -31,22 +31,17 @@ public sealed class LauncherPlatformAuthorityResolver
             new PlatformAuthorityRequest(Guid.NewGuid().ToString("N")),
             cancellationToken);
 
-        var allowInsecureLoopback = string.Equals(
-            Environment.GetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK"),
-            "1",
-            StringComparison.Ordinal);
-
         var configuredEnv = Environment.GetEnvironmentVariable("BKE_ENVIRONMENT");
-        var effectiveEnv = !string.IsNullOrWhiteSpace(configuredEnv)
-            ? configuredEnv
-            : response.Environment;
+        var isProductionOverridden = string.Equals(
+            configuredEnv?.Trim(),
+            "production",
+            StringComparison.OrdinalIgnoreCase);
 
         var isApprovedNonprod =
-            IsApprovedNonproductionEnvironment(response.Environment) &&
-            IsApprovedNonproductionEnvironment(effectiveEnv);
+            !isProductionOverridden &&
+            IsApprovedNonproductionEnvironment(response.Environment);
 
-        var isLoopbackHttp = allowInsecureLoopback &&
-            isApprovedNonprod &&
+        var isLoopbackHttp = isApprovedNonprod &&
             Uri.TryCreate(response.PlatformBaseUrl, UriKind.Absolute, out var testUri) &&
             testUri.Scheme == Uri.UriSchemeHttp &&
             testUri.IsLoopback;

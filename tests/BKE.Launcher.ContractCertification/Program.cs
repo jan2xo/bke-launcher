@@ -7122,155 +7122,182 @@ static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
             "Queued UI context did not transition to authenticated shell.");
     }
 
-    // 10. Loopback HTTP containment: require BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1 AND an explicitly approved nonproduction environment
-    var loopbackTarget = new Uri("http://127.0.0.1:8787/device?code=LOOP-1234");
-    var loopbackAuth = new Uri("http://127.0.0.1:8787");
-
-    // 10a. Browser navigation: Rejection when BKE_AGENT_ALLOW_INSECURE_LOOPBACK is unset
+    // 10. UTM cross-process integration & fail-closed containment
+    // 10a. UTM Agent returns approved loopback DS verification URL without any Launcher global environment configuration
     Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", null);
-    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
-    var rejectedNoLoopbackFlag = false;
-    try
-    {
-        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
-    }
-    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
-    {
-        rejectedNoLoopbackFlag = true;
-    }
-    Require(rejectedNoLoopbackFlag,
-        "ValidateVerificationTarget did not reject loopback HTTP when BKE_AGENT_ALLOW_INSECURE_LOOPBACK is unset.");
-
-    // 10b. Browser navigation: Rejection when environment is unset (null / empty) even with BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1
-    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", "1");
     Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", null);
-    var rejectedUnsetEnv = false;
-    try
-    {
-        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
-    }
-    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
-    {
-        rejectedUnsetEnv = true;
-    }
-    Require(rejectedUnsetEnv,
-        "ValidateVerificationTarget did not reject loopback HTTP when BKE_ENVIRONMENT is unset.");
 
-    // 10c. Browser navigation: Rejection when environment is explicitly production even with BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1
-    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "production");
-    var rejectedProductionEnv = false;
-    try
+    var utmAgent = new CustomerJourneyAgentClient(catalog)
     {
-        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
-    }
-    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
-    {
-        rejectedProductionEnv = true;
-    }
-    Require(rejectedProductionEnv,
-        "ValidateVerificationTarget did not reject loopback HTTP when BKE_ENVIRONMENT is production.");
+        Authenticated = false,
+        StartSessionStatus = "PENDING",
+        StartVerificationUri = "http://127.0.0.1:8787/device?code=UTM-1234",
+        StartUserCode = "UTM-1234",
+        OverridePlatformEnvironment = "utm",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var utmResolver = new LauncherPlatformAuthorityResolver(utmAgent);
+    var resolvedUtmAuthority = await utmResolver.ResolveAsync(CancellationToken.None);
+    Require(resolvedUtmAuthority == new Uri("http://127.0.0.1:8787/"),
+        "LauncherPlatformAuthorityResolver failed to resolve UTM loopback authority without global env vars.");
 
-    // 10d. Browser navigation: Direct environment argument rejection tests
-    var rejectedDirectProd = false;
-    try
-    {
-        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "production");
-    }
-    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
-    {
-        rejectedDirectProd = true;
-    }
-    Require(rejectedDirectProd,
-        "ValidateVerificationTarget did not reject loopback HTTP with direct production environment.");
+    var utmNavigator = new CustomerJourneyNavigator();
+    ExternalBrowserNavigator.ValidateVerificationTarget(
+        new Uri("http://127.0.0.1:8787/device?code=UTM-1234"),
+        resolvedUtmAuthority);
 
-    var rejectedDirectUnset = false;
-    try
-    {
-        ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "");
-    }
-    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
-    {
-        rejectedDirectUnset = true;
-    }
-    Require(rejectedDirectUnset,
-        "ValidateVerificationTarget did not reject loopback HTTP with direct empty environment.");
+    var utmViewModel = BuildCustomerJourneyViewModel(utmAgent, catalog, recovery, utmNavigator);
+    await utmViewModel.InitializeAsync(CancellationToken.None);
+    await utmViewModel.StartGoogleSignInAsync(CancellationToken.None);
+    Require(utmViewModel.SessionStatus == "PENDING",
+        "UTM Google Sign-In did not enter PENDING state.");
+    Require(utmNavigator.LastVerificationUrl == "http://127.0.0.1:8787/device?code=UTM-1234",
+        "UTM Google Sign-In did not open the approved loopback verification target.");
 
-    // 10e. Browser navigation: Permitted when BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1 AND environment is approved nonproduction
-    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
-    ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth);
-    ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "utm");
-    ExternalBrowserNavigator.ValidateVerificationTarget(loopbackTarget, loopbackAuth, environment: "development");
+    // 10b. Development and certification environments also succeed without Launcher global env vars
+    var devAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "development",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var devResolver = new LauncherPlatformAuthorityResolver(devAgent);
+    var devAuthority = await devResolver.ResolveAsync(CancellationToken.None);
+    Require(devAuthority == new Uri("http://127.0.0.1:8787/"),
+        "Development loopback authority resolution failed without global env vars.");
 
-    // 10f. Launcher authority resolution: Rejection when Agent environment is production
-    var prodAuthorityAgent = new CustomerJourneyAgentClient(catalog)
+    // 10c. Production fail-closed: Agent with production environment returning loopback HTTP is strictly rejected
+    var prodHttpAgent = new CustomerJourneyAgentClient(catalog)
     {
         OverridePlatformEnvironment = "production",
         OverridePlatformBaseUrl = "http://127.0.0.1:8787",
     };
-    var prodResolver = new LauncherPlatformAuthorityResolver(prodAuthorityAgent);
-    var rejectedProdResolver = false;
+    var prodResolver = new LauncherPlatformAuthorityResolver(prodHttpAgent);
+    var rejectedProdHttp = false;
     try
     {
         await prodResolver.ResolveAsync(CancellationToken.None);
     }
     catch (InvalidDataException)
     {
-        rejectedProdResolver = true;
+        rejectedProdHttp = true;
     }
-    Require(rejectedProdResolver,
+    Require(rejectedProdHttp,
         "LauncherPlatformAuthorityResolver did not reject loopback HTTP in production environment.");
 
-    // 10g. Launcher authority resolution: Rejection when BKE_ENVIRONMENT is production
-    var certAuthorityAgent = new CustomerJourneyAgentClient(catalog)
-    {
-        OverridePlatformEnvironment = "certification",
-        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
-    };
-    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "production");
-    var certResolverWithProdEnv = new LauncherPlatformAuthorityResolver(certAuthorityAgent);
-    var rejectedCertWithProdEnv = false;
-    try
-    {
-        await certResolverWithProdEnv.ResolveAsync(CancellationToken.None);
-    }
-    catch (InvalidDataException)
-    {
-        rejectedCertWithProdEnv = true;
-    }
-    Require(rejectedCertWithProdEnv,
-        "LauncherPlatformAuthorityResolver did not reject loopback HTTP when BKE_ENVIRONMENT is production.");
-
-    // 10h. Launcher authority resolution: Rejection when Agent environment is unset / empty
-    var emptyEnvAuthorityAgent = new CustomerJourneyAgentClient(catalog)
+    // 10d. Unset/empty Agent environment is strictly rejected
+    var emptyEnvAgent = new CustomerJourneyAgentClient(catalog)
     {
         OverridePlatformEnvironment = "",
         OverridePlatformBaseUrl = "http://127.0.0.1:8787",
     };
-    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
-    var emptyEnvResolver = new LauncherPlatformAuthorityResolver(emptyEnvAuthorityAgent);
-    var rejectedEmptyEnvResolver = false;
+    var emptyEnvResolver = new LauncherPlatformAuthorityResolver(emptyEnvAgent);
+    var rejectedEmptyEnv = false;
     try
     {
         await emptyEnvResolver.ResolveAsync(CancellationToken.None);
     }
     catch (InvalidDataException)
     {
-        rejectedEmptyEnvResolver = true;
+        rejectedEmptyEnv = true;
     }
-    Require(rejectedEmptyEnvResolver,
-        "LauncherPlatformAuthorityResolver did not reject loopback HTTP with empty Agent environment.");
+    Require(rejectedEmptyEnv,
+        "LauncherPlatformAuthorityResolver did not reject empty Agent environment.");
 
-    // 10i. Launcher authority resolution: Permitted when BKE_AGENT_ALLOW_INSECURE_LOOPBACK=1 AND both environments are approved nonproduction
-    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", "1");
-    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "certification");
-    var validCertResolver = new LauncherPlatformAuthorityResolver(certAuthorityAgent);
-    var resolvedLoopbackUri = await validCertResolver.ResolveAsync(CancellationToken.None);
-    Require(resolvedLoopbackUri == new Uri("http://127.0.0.1:8787/"),
-        "LauncherPlatformAuthorityResolver failed to resolve approved nonproduction loopback authority.");
+    // 10e. Unknown Agent environment is strictly rejected
+    var unknownEnvAgent = new CustomerJourneyAgentClient(catalog)
+    {
+        OverridePlatformEnvironment = "staging",
+        OverridePlatformBaseUrl = "http://127.0.0.1:8787",
+    };
+    var unknownEnvResolver = new LauncherPlatformAuthorityResolver(unknownEnvAgent);
+    var rejectedUnknownEnv = false;
+    try
+    {
+        await unknownEnvResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedUnknownEnv = true;
+    }
+    Require(rejectedUnknownEnv,
+        "LauncherPlatformAuthorityResolver did not reject unknown Agent environment.");
 
-    // Cleanup environment variables
-    Environment.SetEnvironmentVariable("BKE_AGENT_ALLOW_INSECURE_LOOPBACK", null);
+    // 10f. Explicit BKE_ENVIRONMENT=production in Launcher forces production fail-closed even with UTM agent
+    Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", "production");
+    var prodOverriddenResolver = new LauncherPlatformAuthorityResolver(utmAgent);
+    var rejectedProdOverride = false;
+    try
+    {
+        await prodOverriddenResolver.ResolveAsync(CancellationToken.None);
+    }
+    catch (InvalidDataException)
+    {
+        rejectedProdOverride = true;
+    }
+    Require(rejectedProdOverride,
+        "LauncherPlatformAuthorityResolver did not reject loopback HTTP when BKE_ENVIRONMENT=production.");
     Environment.SetEnvironmentVariable("BKE_ENVIRONMENT", null);
+
+    // 10g. Browser navigation: Production authority strictly rejects loopback HTTP verification target
+    var productionAuthorityUri = new Uri("https://jl-bke.com/");
+    var rejectedProdLoopbackNav = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://127.0.0.1:8787/device?code=123"),
+            productionAuthorityUri);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedProdLoopbackNav = true;
+    }
+    Require(rejectedProdLoopbackNav,
+        "ExternalBrowserNavigator did not reject loopback HTTP with production authority.");
+
+    // 10h. Browser navigation: Non-loopback HTTP target is rejected even if authority is loopback
+    var rejectedNonLoopbackHttp = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://external-insecure.test/device?code=123"),
+            resolvedUtmAuthority);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("requires a trusted HTTPS target", StringComparison.Ordinal))
+    {
+        rejectedNonLoopbackHttp = true;
+    }
+    Require(rejectedNonLoopbackHttp,
+        "ExternalBrowserNavigator did not reject non-loopback HTTP target.");
+
+    // 10i. Browser navigation: Port mismatch on loopback target is rejected
+    var rejectedPortMismatch = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://127.0.0.1:9999/device?code=123"),
+            resolvedUtmAuthority);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("does not match the trusted Digital Solutions authority", StringComparison.Ordinal))
+    {
+        rejectedPortMismatch = true;
+    }
+    Require(rejectedPortMismatch,
+        "ExternalBrowserNavigator did not reject port mismatch on loopback target.");
+
+    // 10j. Browser navigation: Invalid path on loopback target is rejected
+    var rejectedInvalidPath = false;
+    try
+    {
+        ExternalBrowserNavigator.ValidateVerificationTarget(
+            new Uri("http://127.0.0.1:8787/oauth/device?code=123"),
+            resolvedUtmAuthority);
+    }
+    catch (InvalidDataException ex) when (ex.Message.Contains("path must be /device", StringComparison.Ordinal))
+    {
+        rejectedInvalidPath = true;
+    }
+    Require(rejectedInvalidPath,
+        "ExternalBrowserNavigator did not reject invalid path on loopback target.");
 }
 
 static MainWindowViewModel BuildCustomerJourneyViewModel(
