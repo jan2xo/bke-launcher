@@ -216,7 +216,7 @@ public sealed class LauncherAccountPurchasesController
     }
 
     private static bool ValidPlanType(string? value) =>
-        value is null or "PERPETUAL" or "MONTHLY" or "ANNUAL";
+        value is null or "PERPETUAL" or "MONTHLY" or "SEMI_ANNUAL" or "ANNUAL";
 
     private static bool ValidStatus(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&

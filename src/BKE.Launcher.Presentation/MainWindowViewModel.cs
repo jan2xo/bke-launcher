@@ -9269,6 +9269,7 @@ public sealed record StorePlanViewModel(
         {
             "PERPETUAL" => "Perpetual",
             "MONTHLY" => "Monthly",
+            "SEMI_ANNUAL" => "Semi-annual",
             "ANNUAL" => "Annual",
             _ => plan.Type,
         };

@@ -787,7 +787,7 @@
                           Background="{StaticResource BkeHairlineBrush}"
                           VerticalAlignment="Center" />
                   <Button Grid.Column="1"
-                          Content="Library  â€º"
+                          Content="Library &#x203A;"
                           Classes="quiet shelf-link"
                           Click="OpenLibrary"
                           VerticalAlignment="Center" />
@@ -859,8 +859,9 @@
 
                 <Border IsVisible="{Binding ShowEmptyDashboardProducts}"
                         Classes="content-card"
-                        Padding="12"
-                        MaxWidth="420"
+                        CornerRadius="12"
+                        Padding="14,12"
+                        MaxWidth="460"
                         HorizontalAlignment="Left">
                   <TextBlock Text="No software is ready to open yet. Use Library to install software available to this account."
                              Classes="muted"
@@ -930,7 +931,7 @@
                                   <TextBlock Text="{Binding ExecutionLabel}"
                                              Classes="muted"
                                              FontSize="10" />
-                                  <TextBlock Text="Â·"
+                                  <TextBlock Text="&#x00B7;"
                                              Classes="muted"
                                              FontSize="10" />
                                   <TextBlock Text="{Binding VersionLabel}"
@@ -1057,7 +1058,7 @@
                               <TextBlock Text="{Binding BkeCurrentVersion, StringFormat='Installed v{0}'}"
                                          Classes="muted"
                                          FontSize="12" />
-                              <TextBlock Text="â€¢" Classes="muted" FontSize="12" />
+                              <TextBlock Text="&#x2022;" Classes="muted" FontSize="12" />
                               <TextBlock Text="BKE Digital Solutions"
                                          Classes="muted"
                                          FontSize="12" />
@@ -1125,7 +1126,7 @@
                                       Size="15"
                                       StrokeWidth="1.8"
                                       Foreground="{StaticResource BkeSignalBrush}" />
-                          <TextBlock Text="Verified publisher: BKE Digital Solutions â€¢ Windows x64"
+                          <TextBlock Text="Verified publisher: BKE Digital Solutions &#x2022; Windows x64"
                                      Classes="muted"
                                      FontSize="11"
                                      VerticalAlignment="Center" />
@@ -1237,7 +1238,7 @@
                                     <TextBlock Text="{Binding VersionLabel}"
                                                Classes="muted"
                                                FontSize="11" />
-                                    <TextBlock Text="{Binding AvailableVersion, StringFormat='âž” Available: v{0}'}"
+                                    <TextBlock Text="{Binding AvailableVersion, StringFormat='&#x2794; Available: v{0}'}"
                                                Foreground="{StaticResource BkeDigitalYellowBrush}"
                                                FontWeight="SemiBold"
                                                FontSize="11" />
@@ -1445,7 +1446,7 @@
                     <TextBlock Text="{Binding PurchaseReviewLegalLabel}"
                                TextWrapping="Wrap"
                                Opacity="0.78" />
-                    <TextBlock Text="Review only â€” no order, payment, or checkout has been created yet."
+                    <TextBlock Text="Review only &#x2014; no order, payment, or checkout has been created yet."
                                TextWrapping="Wrap"
                                FontSize="11"
                                Opacity="0.62" />
