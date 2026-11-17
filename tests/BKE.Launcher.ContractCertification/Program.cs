@@ -7337,6 +7337,18 @@ static async Task CertifyParentInstallerAgentCompatibilityAsync()
     Require(scriptContent.Contains("Preserving newer Agent to prevent unsafe downgrade", StringComparison.Ordinal),
         "Parent installer script missing downgrade prevention logging.");
 
+    // Ensure the real BKE parent does not silently keep a healthy old 2.0.0
+    // Agent while its new DS public-issuer source has changed.
+    Require(scriptContent.Contains("#define AgentVersion \"2.0.1\"", StringComparison.Ordinal),
+        "BKE direct parent build must default to newer Agent 2.0.1.");
+    var repoRoot = Path.GetFullPath(Path.Combine(
+        Path.GetDirectoryName(scriptPath)!, "..", ".."));
+    var parentWorkflow = File.ReadAllText(Path.Combine(repoRoot,
+        ".github", "workflows", "windows-parent-installer.yml"));
+    Require(parentWorkflow.Contains("AGENT_VERSION: \"2.0.1\"", StringComparison.Ordinal) &&
+            parentWorkflow.Contains("\"/DAppVersion=$env:AGENT_VERSION\"", StringComparison.Ordinal),
+        "BKE parent CI must embed and label the new Agent version consistently.");
+
     // Direct semver parity verification matching Inno Setup CompareVersions algorithm
     int CompareSemver(string v1, string v2)
     {

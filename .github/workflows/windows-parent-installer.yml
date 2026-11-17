@@ -31,7 +31,7 @@ concurrency:
 
 env:
   BKE_VERSION: "0.1.0"
-  AGENT_VERSION: "2.0.0"
+  AGENT_VERSION: "2.0.1"
   AGENT_SOURCE_SHA: ${{ inputs.agent_source_sha }}
   AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
   SOURCE_SHA: ${{ inputs.source_sha }}
@@ -172,7 +172,7 @@ jobs:
         working-directory: agent-src
         run: |
           $iscc = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "Inno Setup 6\ISCC.exe"
-          & $iscc packaging/windows/bke-licensing-agent.iss
+          & $iscc "/DAppVersion=$env:AGENT_VERSION" packaging/windows/bke-licensing-agent.iss
           if ($LASTEXITCODE -ne 0) { throw "Agent x64 installer compile failed." }
 
       - name: Verify Windows x64 component architecture
