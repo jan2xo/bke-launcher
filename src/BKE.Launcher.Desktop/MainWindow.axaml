@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:BKE.Launcher.Presentation"
         xmlns:contracts="using:BKE.Launcher.Contracts"
@@ -17,7 +17,7 @@
   <Grid>
     <Border IsVisible="{Binding ShowLoginPage}"
             Classes="surface"
-            Width="680"
+            Width="560"
             Padding="34"
             CornerRadius="18"
             HorizontalAlignment="Center"
@@ -37,91 +37,20 @@
                      TextWrapping="Wrap"
                      TextAlignment="Center" />
 
+          <!-- GOOGLE SIGN-IN ENTRY (Only login path) -->
           <StackPanel IsVisible="{Binding ShowSignInForm}" Spacing="14">
             <Button Content="Continue with Google"
                     Classes="primary"
                     HorizontalAlignment="Stretch"
                     Click="ContinueWithGoogle" />
-
-            <Grid ColumnDefinitions="*,Auto,*" Margin="0,4,0,4">
-              <Border Grid.Column="0" Height="1" Background="{DynamicResource BkeBorderBrush}" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="or sign in with existing BKE password" Classes="muted" Margin="10,0" FontSize="12" VerticalAlignment="Center" />
-              <Border Grid.Column="2" Height="1" Background="{DynamicResource BkeBorderBrush}" VerticalAlignment="Center" />
-            </Grid>
-
-            <TextBlock Text="Email"
-                       FontWeight="SemiBold"
-                       Margin="0,4,0,0" />
-            <TextBox Text="{Binding Email, Mode=TwoWay}"
-                     Watermark="you@example.com" />
-
-            <TextBlock Text="Password"
-                       FontWeight="SemiBold" />
-            <TextBox Text="{Binding Password, Mode=TwoWay}"
-                     PasswordChar="●" />
-
-            <StackPanel IsVisible="{Binding HasAccountChoices}" Spacing="6">
-              <TextBlock Text="Account" FontWeight="SemiBold" />
-              <ComboBox ItemsSource="{Binding AvailableAccounts}"
-                        SelectedItem="{Binding SelectedAccount, Mode=TwoWay}">
-                <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="contracts:NativeBkeAccountChoice">
-                    <TextBlock Text="{Binding AccountDisplayName}" />
-                  </DataTemplate>
-                </ComboBox.ItemTemplate>
-              </ComboBox>
-            </StackPanel>
-
-            <Button Content="Sign in with BKE"
-                    HorizontalAlignment="Stretch"
-                    Click="NativeSignIn" />
-
-            <StackPanel IsVisible="{Binding ShowNativeMfaChallenge}" Spacing="8">
-              <TextBlock Text="Multi-factor verification"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="{Binding NativeMfaMessage}"
-                         Classes="muted"
-                         TextWrapping="Wrap"
-                         TextAlignment="Center" />
-              <TextBlock Text="{Binding NativeMfaReference}"
-                         FontWeight="SemiBold"
-                         TextAlignment="Center" />
-              <TextBox Text="{Binding NativeMfaCode, Mode=TwoWay}"
-                       Watermark="Verification code" />
-              <Button Content="Verify and sign in"
-                      Classes="primary"
-                      IsEnabled="{Binding CanVerifyNativeMfa}"
-                      Click="VerifyNativeMfa" />
-            </StackPanel>
-
-            <Button Content="Create a BKE account"
-                    HorizontalAlignment="Stretch"
-                    Click="OpenRegistration" />
-            <Button Content="Forgot password?"
-                    HorizontalAlignment="Stretch"
-                    IsEnabled="{Binding CanRequestPasswordReset}"
-                    Click="RequestPasswordReset" />
-            <TextBlock Text="{Binding PasswordResetMessage}"
+            <TextBlock Text="Sign in with your Google account in your default browser to connect this device."
                        Classes="muted"
+                       FontSize="12"
                        TextWrapping="Wrap"
                        TextAlignment="Center" />
-            <StackPanel IsVisible="{Binding ShowPasswordResetCompletion}"
-                        Spacing="10">
-              <TextBox Text="{Binding PasswordResetProof, Mode=TwoWay}"
-                       Watermark="Paste reset link or one-time token" />
-              <TextBox Text="{Binding PasswordResetNewPassword, Mode=TwoWay}"
-                       Watermark="New password"
-                       PasswordChar="●" />
-              <TextBox Text="{Binding PasswordResetConfirmPassword, Mode=TwoWay}"
-                       Watermark="Confirm new password"
-                       PasswordChar="●" />
-              <Button Content="Reset password"
-                      Classes="primary"
-                      IsEnabled="{Binding CanCompletePasswordReset}"
-                      Click="CompletePasswordReset" />
-            </StackPanel>
           </StackPanel>
 
+          <!-- PENDING DEVICE APPROVAL (Google device approval in browser) -->
           <StackPanel IsVisible="{Binding ShowPendingSignIn}" Spacing="14">
             <TextBlock Text="Approve BKE Device"
                        FontWeight="Bold"
@@ -166,109 +95,37 @@
                     Click="CancelGoogleSignIn" />
           </StackPanel>
 
-          <StackPanel IsVisible="{Binding ShowRegistration}" Spacing="14">
-            <TextBlock Text="Create your BKE account"
-                       FontSize="24"
-                       FontWeight="SemiBold"
-                       HorizontalAlignment="Center" />
-            <TextBlock Text="{Binding RegistrationMessage}"
-                       Classes="muted"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center" />
+          <!-- AGENT UNAVAILABLE / CONNECTION RECOVERY (Dedicated recoverable state) -->
+          <StackPanel IsVisible="{Binding ShowAgentUnavailableRecovery}" Spacing="14">
+            <Border Background="#1C1315"
+                    BorderBrush="#FF5252"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16"
+                    HorizontalAlignment="Stretch">
+              <StackPanel Spacing="8" HorizontalAlignment="Center">
+                <TextBlock Text="Licensing Agent Unavailable"
+                           FontWeight="Bold"
+                           FontSize="18"
+                           Foreground="#FF6B6B"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="BKE cannot connect to the local Licensing Agent at 127.0.0.1:43873. The background service is required for device authorization and software licensing."
+                           Classes="muted"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center" />
+                <TextBlock Text="{Binding Message}"
+                           Classes="muted"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center" />
+              </StackPanel>
+            </Border>
 
-            <StackPanel IsVisible="{Binding ShowRegistrationEntry}" Spacing="12">
-              <TextBlock Text="Name" FontWeight="SemiBold" />
-              <TextBox Text="{Binding RegistrationName, Mode=TwoWay}"
-                       Watermark="Your name" />
-              <TextBlock Text="Email" FontWeight="SemiBold" />
-              <TextBox Text="{Binding RegistrationEmail, Mode=TwoWay}"
-                       Watermark="you@example.com" />
-              <TextBlock Text="Password" FontWeight="SemiBold" />
-              <TextBox Text="{Binding RegistrationPassword, Mode=TwoWay}"
-                       PasswordChar="●" />
-
-              <TextBlock Text="Current legal documents"
-                         FontSize="18"
-                         FontWeight="SemiBold"
-                         Margin="0,8,0,0" />
-              <TextBlock Text="These exact published versions come from BKE Digital Solutions. Review both before accepting."
-                         Classes="muted"
-                         TextWrapping="Wrap" />
-
-              <ItemsControl ItemsSource="{Binding RegistrationLegalDocuments}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:RegistrationLegalDocumentViewModel">
-                    <Border Classes="content-card"
-                            Padding="14"
-                            Margin="0,0,0,10">
-                      <StackPanel Spacing="8">
-                        <TextBlock Text="{Binding Title}"
-                                   FontWeight="SemiBold"
-                                   FontSize="16" />
-                        <TextBlock Text="{Binding VersionLabel}"
-                                   Classes="muted" />
-                        <TextBox Text="{Binding ContentMarkdown}"
-                                 IsReadOnly="True"
-                                 AcceptsReturn="True"
-                                 TextWrapping="Wrap"
-                                 MinHeight="120"
-                                 MaxHeight="190"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                        <CheckBox IsChecked="{Binding IsAccepted, Mode=TwoWay}"
-                                  Content="I have reviewed and accept this exact published version." />
-                      </StackPanel>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-
-              <Button Content="Create account"
-                      Classes="primary"
-                      IsEnabled="{Binding CanCreateAccount}"
-                      Click="CreateNativeAccount" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ShowRegistrationVerification}" Spacing="10">
-              <TextBlock Text="Verify your email"
-                         FontSize="18"
-                         FontWeight="SemiBold"
-                         HorizontalAlignment="Center" />
-              <TextBlock Text="{Binding RegistrationEmail}"
-                         FontWeight="SemiBold"
-                         TextAlignment="Center" />
-              <TextBox Text="{Binding RegistrationCode, Mode=TwoWay}"
-                       Watermark="8-character verification code" />
-              <Button Content="Verify email"
-                      Classes="primary"
-                      IsEnabled="{Binding CanVerifyRegistrationEmail}"
-                      Click="VerifyRegistrationEmail" />
-              <Button Content="Resend verification code"
-                      IsEnabled="{Binding CanResendRegistrationEmail}"
-                      Click="ResendRegistrationVerification" />
-            </StackPanel>
-
-            <Button Content="Back to sign in"
+            <Button Content="Retry connection"
+                    Classes="primary"
                     HorizontalAlignment="Stretch"
-                    Click="CancelRegistration" />
+                    Click="RefreshSessionStatus" />
           </StackPanel>
-
-          <Border IsVisible="{Binding HasMfaRecoveryCodes}"
-                  Classes="content-card"
-                  Padding="12">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Save your recovery codes"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="These codes are shown only from the authoritative MFA operation. Save them somewhere secure before dismissing this message."
-                         Classes="muted"
-                         TextWrapping="Wrap" />
-              <TextBox Text="{Binding AccountMfaRecoveryCodes}"
-                       IsReadOnly="True"
-                       AcceptsReturn="True"
-                       MinHeight="100" />
-              <Button Content="I saved these codes"
-                      Click="DismissMfaRecoveryCodes" />
-            </StackPanel>
-          </Border>
         </StackPanel>
       </ScrollViewer>
     </Border>
@@ -614,1245 +471,64 @@
           </Border.Background>
         </Border>
 
-        <Border MaxWidth="620"
+        <Border MaxWidth="480"
                 HorizontalAlignment="Left"
                 Classes="signal-panel"
                 Padding="22"
                 IsVisible="{Binding ShowAccountSurface}">
           <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="14">
+            <StackPanel Spacing="16">
               <TextBlock Text="Account" Classes="section-title" />
-              <TextBlock Text="{Binding AccountDisplay}" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding AccountTypeLabel}"
-                         FontSize="11"
-                         FontWeight="SemiBold"
-                         Opacity="0.72" />
+
+              <Border Classes="content-card" Padding="14">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="{Binding AccountDisplay}"
+                             FontWeight="SemiBold"
+                             FontSize="16"
+                             TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding AccountTypeLabel}"
+                             FontSize="12"
+                             Opacity="0.72" />
+                  <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                    <Border Width="8" Height="8" Classes="signal-dot" VerticalAlignment="Center" />
+                    <TextBlock Text="Session active via Licensing Agent"
+                               Classes="muted"
+                               FontSize="11"
+                               VerticalAlignment="Center" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
               <TextBlock Text="{Binding Message}" Classes="muted" TextWrapping="Wrap" />
 
-              <Button Content="Refresh account status" Click="RefreshStatus" />
+              <Button Content="Manage account in Digital Solutions"
+                      Classes="primary"
+                      HorizontalAlignment="Stretch"
+                      Click="OpenAccountManagement" />
+
+              <TextBlock Text="Account profile, organizations, commercial seats, billing, and gift claims are managed directly on the Digital Solutions platform."
+                         Classes="muted"
+                         FontSize="11"
+                         TextWrapping="Wrap" />
+
+              <Border Height="1" Background="{DynamicResource BkeBorderBrush}" Margin="0,4" />
+
+              <Button Content="Refresh account status"
+                      HorizontalAlignment="Stretch"
+                      Click="RefreshStatus" />
+
               <Button Content="Switch BKE account"
+                      HorizontalAlignment="Stretch"
                       IsEnabled="{Binding CanSwitchAccount}"
                       Click="SwitchAccount" />
               <TextBlock Text="{Binding SwitchAccountHint}"
                          FontSize="11"
                          TextWrapping="Wrap"
                          Opacity="0.68" />
-              <Button Content="Sign out on this machine" Click="Logout" />
 
-              <Border Classes="content-card"
-                      Padding="14"
-                      Margin="0,8,0,0">
-                <StackPanel Spacing="8">
-                  <TextBlock Text="Purchases &amp; licenses"
-                             FontSize="18"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="Read-only account history from BKE Digital Solutions through the Licensing Agent. BKE does not store a separate local purchase or license record."
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                  <TextBlock Text="{Binding AccountPurchasesStatus}"
-                             FontSize="11"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding AccountPurchasesMessage}"
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                  <Button Content="Refresh purchases &amp; licenses"
-                          IsEnabled="{Binding CanRefreshAccountPurchases}"
-                          Click="RefreshAccountPurchases" />
-
-                  <StackPanel IsVisible="{Binding AccountPurchasesReady}"
-                              Spacing="8">
-                    <TextBlock Text="{Binding AccountPurchasesAccountSummary}"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding AccountLicenseScopeLabel}"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Opacity="0.68" />
-
-                    <TextBlock Text="Licenses"
-                               FontWeight="SemiBold"
-                               Margin="0,4,0,0" />
-                    <ItemsControl ItemsSource="{Binding AccountLicenses}">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:AccountLicenseViewModel">
-                          <Border Classes="content-card"
-                                  Padding="10"
-                                  Margin="0,0,0,5">
-                            <StackPanel Spacing="3">
-                              <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="{Binding ProductLabel}"
-                                           FontWeight="SemiBold"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding Status}"
-                                           FontSize="11"
-                                           FontWeight="SemiBold" />
-                              </Grid>
-                              <TextBlock Text="{Binding PlanLabel}"
-                                         FontSize="11"
-                                         Opacity="0.72" />
-                              <TextBlock Text="{Binding LicenseKeyLabel}"
-                                         TextWrapping="Wrap" />
-                              <TextBlock Text="{Binding DeviceLabel}"
-                                         FontSize="11"
-                                         Opacity="0.72" />
-                              <TextBlock Text="{Binding SeatLabel}"
-                                         FontSize="11"
-                                         Opacity="0.72" />
-                              <TextBlock Text="{Binding ExpiryLabel}"
-                                         FontSize="11"
-                                         Opacity="0.72" />
-                              <StackPanel Orientation="Horizontal"
-                                          Spacing="6">
-                                <Button Content="Manage seats"
-                                        IsVisible="{Binding CanManageSeats}"
-                                        Click="OpenAccountLicenseSeats" />
-                                <Button Content="Manage devices"
-                                        IsVisible="{Binding CanManageDevices}"
-                                        Click="OpenAccountLicenseDevices" />
-                              </StackPanel>
-                            </StackPanel>
-                          </Border>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <TextBlock Text="No licenses are visible for the selected account and identity."
-                               IsVisible="{Binding ShowEmptyAccountLicenses}"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Opacity="0.68" />
-
-                    <Border Classes="content-card"
-                            IsVisible="{Binding ShowAccountLicenseSeatManagement}"
-                            Padding="12"
-                            Margin="0,6,0,0">
-                      <StackPanel Spacing="7">
-                        <TextBlock Text="License seats"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding AccountLicenseSeatProductLabel}"
-                                   FontSize="16"
-                                   FontWeight="SemiBold"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding AccountLicenseSeatSummary}"
-                                   IsVisible="{Binding AccountLicenseSeatsReady}"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding AccountLicenseSeatsStatus}"
-                                   FontSize="11"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding AccountLicenseSeatsMessage}"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.72" />
-                        <Button Content="Refresh seats"
-                                IsEnabled="{Binding CanRefreshAccountLicenseSeats}"
-                                Click="RefreshAccountLicenseSeats" />
-
-                        <StackPanel IsVisible="{Binding AccountLicenseSeatsReady}"
-                                    IsEnabled="{Binding CanMutateAccountLicenseSeats}"
-                                    Spacing="5">
-                          <ItemsControl ItemsSource="{Binding AccountLicenseSeatTargets}">
-                            <ItemsControl.ItemTemplate>
-                              <DataTemplate x:DataType="vm:AccountLicenseSeatTargetViewModel">
-                                <Border Classes="content-card"
-                                        Padding="10"
-                                        Margin="0,0,0,5">
-                                  <StackPanel Spacing="3">
-                                    <TextBlock Text="{Binding DisplayLabel}"
-                                               FontWeight="SemiBold"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding Email}"
-                                               FontSize="11"
-                                               TextWrapping="Wrap"
-                                               Opacity="0.72" />
-                                    <TextBlock Text="{Binding AssignmentLabel}"
-                                               FontSize="11" />
-                                    <TextBlock Text="{Binding EligibilityLabel}"
-                                               FontSize="11"
-                                               TextWrapping="Wrap"
-                                               Opacity="0.72" />
-                                    <Button Content="{Binding ActionLabel}"
-                                            IsEnabled="{Binding CanChange}"
-                                            Click="ChangeAccountLicenseSeat" />
-                                  </StackPanel>
-                                </Border>
-                              </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                          </ItemsControl>
-                        </StackPanel>
-
-                        <TextBlock Text="No eligible or currently assigned seat targets are visible for this license."
-                                   IsVisible="{Binding ShowEmptyAccountLicenseSeatTargets}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.68" />
-                      </StackPanel>
-                    </Border>
-
-                    <Border Classes="content-card"
-                            IsVisible="{Binding ShowAccountLicenseDeviceManagement}"
-                            Padding="12"
-                            Margin="0,6,0,0">
-                      <StackPanel Spacing="7">
-                        <TextBlock Text="Authorized devices"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding AccountLicenseDeviceProductLabel}"
-                                   FontSize="16"
-                                   FontWeight="SemiBold"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding AccountLicenseDeviceSummary}"
-                                   IsVisible="{Binding AccountLicenseDevicesReady}"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding AccountLicenseDevicesStatus}"
-                                   FontSize="11"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding AccountLicenseDevicesMessage}"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.72" />
-                        <Button Content="Refresh devices"
-                                IsEnabled="{Binding CanRefreshAccountLicenseDevices}"
-                                Click="RefreshAccountLicenseDevices" />
-
-                        <StackPanel IsVisible="{Binding AccountLicenseDevicesReady}"
-                                    IsEnabled="{Binding CanMutateAccountLicenseDevices}"
-                                    Spacing="5">
-                          <ItemsControl ItemsSource="{Binding AccountAuthorizedDevices}">
-                            <ItemsControl.ItemTemplate>
-                              <DataTemplate x:DataType="vm:AccountAuthorizedDeviceViewModel">
-                                <Border Classes="content-card"
-                                        Padding="10"
-                                        Margin="0,0,0,5">
-                                  <StackPanel Spacing="3">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                      <TextBlock Text="{Binding DisplayLabel}"
-                                                 FontWeight="SemiBold"
-                                                 TextWrapping="Wrap" />
-                                      <TextBlock Grid.Column="1"
-                                                 Text="{Binding StatusLabel}"
-                                                 FontSize="11"
-                                                 FontWeight="SemiBold" />
-                                    </Grid>
-                                    <TextBlock Text="{Binding PlatformLabel}"
-                                               FontSize="11"
-                                               TextWrapping="Wrap"
-                                               Opacity="0.72" />
-                                    <TextBlock Text="{Binding ActivityLabel}"
-                                               FontSize="11"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding ActivatedLabel}"
-                                               FontSize="11"
-                                               TextWrapping="Wrap"
-                                               Opacity="0.72" />
-                                    <Button Content="Deactivate device"
-                                            IsVisible="{Binding CanDeactivate}"
-                                            IsEnabled="{Binding CanDeactivate}"
-                                            Click="DeactivateAccountLicenseDevice" />
-                                  </StackPanel>
-                                </Border>
-                              </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                          </ItemsControl>
-                        </StackPanel>
-
-                        <TextBlock Text="No authorized devices are recorded for this license."
-                                   IsVisible="{Binding ShowEmptyAccountAuthorizedDevices}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.68" />
-                      </StackPanel>
-                    </Border>
-
-                    <StackPanel IsVisible="{Binding ShowAccountSubscriptions}"
-                                Spacing="5">
-                      <TextBlock Text="Subscriptions"
-                                 FontWeight="SemiBold"
-                                 Margin="0,4,0,0" />
-                      <ItemsControl ItemsSource="{Binding AccountSubscriptions}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:AccountSubscriptionViewModel">
-                            <Border Classes="content-card"
-                                    Padding="10"
-                                    Margin="0,0,0,5">
-                              <StackPanel Spacing="3">
-                                <Grid ColumnDefinitions="*,Auto">
-                                  <TextBlock Text="{Binding ProductLabel}"
-                                             FontWeight="SemiBold"
-                                             TextWrapping="Wrap" />
-                                  <TextBlock Grid.Column="1"
-                                             Text="{Binding Status}"
-                                             FontSize="11"
-                                             FontWeight="SemiBold" />
-                                </Grid>
-                                <TextBlock Text="{Binding PlanLabel}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <TextBlock Text="{Binding SeatsLabel}" />
-                                <TextBlock Text="{Binding PeriodEndLabel}"
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           Opacity="0.72" />
-                              </StackPanel>
-                            </Border>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="No subscriptions are recorded for the selected account."
-                                 IsVisible="{Binding ShowEmptyAccountSubscriptions}"
-                                 FontSize="11"
-                                 TextWrapping="Wrap"
-                                 Opacity="0.68" />
-                    </StackPanel>
-                    <TextBlock Text="Subscriptions are not visible to this selected-account role."
-                               IsVisible="{Binding ShowAccountSubscriptionsUnavailable}"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Opacity="0.68" />
-
-                    <StackPanel IsVisible="{Binding ShowAccountOrders}"
-                                Spacing="5">
-                      <TextBlock Text="Orders"
-                                 FontWeight="SemiBold"
-                                 Margin="0,4,0,0" />
-                      <TextBlock Text="{Binding AccountPendingOrderStatus}"
-                                 FontSize="11"
-                                 FontWeight="SemiBold" />
-                      <TextBlock Text="{Binding AccountPendingOrderMessage}"
-                                 FontSize="11"
-                                 TextWrapping="Wrap"
-                                 Opacity="0.72" />
-                      <ItemsControl ItemsSource="{Binding AccountOrders}"
-                                    IsEnabled="{Binding CanMutateAccountPendingOrders}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:AccountOrderViewModel">
-                            <Border Classes="content-card"
-                                    Padding="10"
-                                    Margin="0,0,0,5">
-                              <StackPanel Spacing="3">
-                                <Grid ColumnDefinitions="*,Auto">
-                                  <TextBlock Text="{Binding Number}"
-                                             FontWeight="SemiBold"
-                                             TextWrapping="Wrap" />
-                                  <TextBlock Grid.Column="1"
-                                             Text="{Binding Status}"
-                                             FontSize="11"
-                                             FontWeight="SemiBold" />
-                                </Grid>
-                                <TextBlock Text="{Binding TotalLabel}" />
-                                <TextBlock Text="{Binding ItemsLabel}"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding CreatedLabel}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <TextBlock Text="{Binding InvoiceLabel}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="6">
-                                  <Button Content="Continue payment"
-                                          IsVisible="{Binding CanContinuePayment}"
-                                          Click="ContinueAccountPendingOrder" />
-                                  <Button Content="Cancel order"
-                                          IsVisible="{Binding CanCancelOrder}"
-                                          Click="CancelAccountPendingOrder" />
-                                </StackPanel>
-                              </StackPanel>
-                            </Border>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="No orders are recorded for the selected account."
-                                 IsVisible="{Binding ShowEmptyAccountOrders}"
-                                 FontSize="11"
-                                 TextWrapping="Wrap"
-                                 Opacity="0.68" />
-                    </StackPanel>
-                    <TextBlock Text="Orders are not visible to this selected-account role."
-                               IsVisible="{Binding ShowAccountOrdersUnavailable}"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Opacity="0.68" />
-                  </StackPanel>
-                </StackPanel>
-              </Border>
-
-              <Border Classes="content-card"
-                      Padding="14"
-                      Margin="0,8,0,0">
-                <StackPanel Spacing="8">
-                  <TextBlock Text="Gift Claim Codes"
-                             FontSize="18"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="Recover Gift Claim Codes you purchased earlier. The list contains metadata only; revealing the plaintext code requires recent authentication and is never persisted by Launcher."
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                  <TextBlock Text="{Binding GiftClaimsStatus}"
-                             FontSize="11"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding GiftClaimsMessage}"
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                  <Button Content="Refresh Gift Claim Codes"
-                          IsEnabled="{Binding CanRefreshGiftClaims}"
-                          Click="RefreshPersistentGiftClaims" />
-
-                  <ItemsControl ItemsSource="{Binding PersistentGiftClaims}"
-                                IsVisible="{Binding GiftClaimsReady}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:PersistentGiftClaimViewModel">
-                        <Border Classes="content-card"
-                                Padding="10"
-                                Margin="0,0,0,5">
-                          <StackPanel Spacing="3">
-                            <Grid ColumnDefinitions="*,Auto">
-                              <TextBlock Text="{Binding ProductLabel}"
-                                         FontWeight="SemiBold"
-                                         TextWrapping="Wrap" />
-                              <TextBlock Grid.Column="1"
-                                         Text="{Binding Status}"
-                                         FontSize="11"
-                                         FontWeight="SemiBold" />
-                            </Grid>
-                            <TextBlock Text="{Binding OrderNumber}"
-                                       FontSize="11"
-                                       Opacity="0.72" />
-                            <TextBlock Text="{Binding LastFourLabel}"
-                                       FontSize="11"
-                                       Opacity="0.72" />
-                            <TextBlock Text="{Binding CreatedLabel}"
-                                       FontSize="11"
-                                       Opacity="0.72" />
-                            <TextBlock Text="{Binding ExpiryLabel}"
-                                       FontSize="11"
-                                       Opacity="0.72" />
-                            <Button Content="Reveal Claim Code"
-                                    IsVisible="{Binding CanReveal}"
-                                    Click="RevealPersistentGiftClaim" />
-                          </StackPanel>
-                        </Border>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-
-                  <TextBlock Text="No purchased Gift Claim Codes are recorded for this account."
-                             IsVisible="{Binding ShowEmptyGiftClaims}"
-                             FontSize="11"
-                             TextWrapping="Wrap"
-                             Opacity="0.68" />
-
-                  <TextBlock Text="{Binding GiftClaimRevealStatus}"
-                             FontSize="11"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding GiftClaimRevealMessage}"
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-
-                  <StackPanel IsVisible="{Binding ShowGiftClaimRecentAuth}"
-                              Spacing="5">
-                    <TextBlock Text="Current password"
-                               FontWeight="SemiBold" />
-                    <TextBox Text="{Binding GiftClaimRecentPassword, Mode=TwoWay}"
-                             PasswordChar="●"
-                             MaxLength="128"
-                             Watermark="Current BKE password" />
-                    <Button Content="Confirm recent authentication"
-                            IsEnabled="{Binding CanStartGiftClaimRecentAuth}"
-                            Click="StartPersistentGiftClaimRecentAuth" />
-                  </StackPanel>
-
-                  <StackPanel IsVisible="{Binding ShowGiftClaimMfaChallenge}"
-                              Spacing="5">
-                    <TextBlock Text="{Binding GiftClaimMfaReference}"
-                               FontSize="11"
-                               Opacity="0.72" />
-                    <TextBox Text="{Binding GiftClaimMfaCode, Mode=TwoWay}"
-                             PasswordChar="●"
-                             MaxLength="32"
-                             Watermark="MFA or recovery code" />
-                    <Button Content="Verify MFA and reveal"
-                            IsEnabled="{Binding CanCompleteGiftClaimRecentAuth}"
-                            Click="CompletePersistentGiftClaimRecentAuth" />
-                  </StackPanel>
-
-                  <StackPanel IsVisible="{Binding HasRevealedPersistentGiftClaimCode}"
-                              Spacing="5">
-                    <TextBlock Text="Revealed Claim Code"
-                               FontWeight="SemiBold" />
-                    <TextBox Text="{Binding RevealedPersistentGiftClaimCode, Mode=OneWay}"
-                             IsReadOnly="True" />
-                    <TextBlock Text="This plaintext exists only in Launcher memory. Save it securely before clearing it."
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Opacity="0.68" />
-                    <Button Content="I've saved this Claim Code"
-                            Click="CompletePersistentGiftClaimReveal" />
-                  </StackPanel>
-                </StackPanel>
-              </Border>
-
-              <Border Classes="content-card"
-                      Padding="14"
-                      Margin="0,8,0,0">
-                <StackPanel Spacing="8">
-                  <TextBlock Text="Billing history"
-                             FontSize="18"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="Commercial invoices and payment history from BKE Digital Solutions through the Licensing Agent. Provider IDs, raw payment payloads, and cloud billing identifiers are not stored or displayed by Launcher."
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                  <TextBlock Text="{Binding AccountBillingStatus}"
-                             FontSize="11"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding AccountBillingMessage}"
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                  <Button Content="Refresh billing history"
-                          IsEnabled="{Binding CanRefreshAccountBilling}"
-                          Click="RefreshAccountBilling" />
-
-                  <StackPanel IsVisible="{Binding AccountBillingReady}"
-                              Spacing="8">
-                    <TextBlock Text="{Binding AccountBillingAccountSummary}"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap" />
-
-                    <TextBlock Text="Billing history is not visible to this selected-account role."
-                               IsVisible="{Binding ShowAccountBillingUnavailable}"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Opacity="0.68" />
-
-                    <StackPanel IsVisible="{Binding ShowAccountInvoices}"
-                                Spacing="5">
-                      <TextBlock Text="Commercial invoices"
-                                 FontWeight="SemiBold"
-                                 Margin="0,4,0,0" />
-                      <ItemsControl ItemsSource="{Binding AccountInvoices}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:AccountInvoiceViewModel">
-                            <Border Classes="content-card"
-                                    Padding="10"
-                                    Margin="0,0,0,5">
-                              <StackPanel Spacing="3">
-                                <Grid ColumnDefinitions="*,Auto">
-                                  <TextBlock Text="{Binding Number}"
-                                             FontWeight="SemiBold"
-                                             TextWrapping="Wrap" />
-                                  <TextBlock Grid.Column="1"
-                                             Text="{Binding Status}"
-                                             FontSize="11"
-                                             FontWeight="SemiBold" />
-                                </Grid>
-                                <TextBlock Text="{Binding OrderLabel}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <TextBlock Text="{Binding TotalLabel}"
-                                           FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding TaxLabel}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <TextBlock Text="{Binding IssuedLabel}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <TextBlock Text="{Binding LinesLabel}"
-                                           TextWrapping="Wrap"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                              </StackPanel>
-                            </Border>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="No commercial invoices are recorded for the selected account."
-                                 IsVisible="{Binding ShowEmptyAccountInvoices}"
-                                 FontSize="11"
-                                 TextWrapping="Wrap"
-                                 Opacity="0.68" />
-                    </StackPanel>
-
-                    <StackPanel IsVisible="{Binding ShowAccountPayments}"
-                                Spacing="5">
-                      <TextBlock Text="Payments"
-                                 FontWeight="SemiBold"
-                                 Margin="0,4,0,0" />
-                      <ItemsControl ItemsSource="{Binding AccountPayments}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:AccountPaymentViewModel">
-                            <Border Classes="content-card"
-                                    Padding="10"
-                                    Margin="0,0,0,5">
-                              <StackPanel Spacing="3">
-                                <Grid ColumnDefinitions="*,Auto">
-                                  <TextBlock Text="{Binding OrderLabel}"
-                                             FontWeight="SemiBold"
-                                             TextWrapping="Wrap" />
-                                  <TextBlock Grid.Column="1"
-                                             Text="{Binding Status}"
-                                             FontSize="11"
-                                             FontWeight="SemiBold" />
-                                </Grid>
-                                <TextBlock Text="{Binding AmountLabel}"
-                                           FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding PaidLabel}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                              </StackPanel>
-                            </Border>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="No payments are recorded for the selected account."
-                                 IsVisible="{Binding ShowEmptyAccountPayments}"
-                                 FontSize="11"
-                                 TextWrapping="Wrap"
-                                 Opacity="0.68" />
-                    </StackPanel>
-                  </StackPanel>
-                </StackPanel>
-              </Border>
-
-              <Border IsVisible="{Binding ShowOrganizationInvitationAcceptanceSection}"
-                      Classes="content-card"
-                      Padding="14"
-                      Margin="0,8,0,0">
-                <StackPanel Spacing="8">
-                  <TextBlock Text="Join organization"
-                             FontSize="18"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="Paste the one-time invitation code you received. BKE sends only that transient code and a fresh correlation ID to the Licensing Agent; account identity and membership authority remain server-side."
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-
-                  <TextBlock Text="Invitation code"
-                             FontWeight="SemiBold" />
-                  <TextBox Text="{Binding OrganizationInvitationAcceptanceCode, Mode=TwoWay}"
-                           MaxLength="1024"
-                           PasswordChar="●"
-                           Watermark="Paste invitation code" />
-
-                  <Button Content="Accept invitation"
-                          IsEnabled="{Binding CanAcceptOrganizationInvitation}"
-                          Click="AcceptAccountOrganizationInvitation" />
-
-                  <TextBlock Text="{Binding OrganizationInvitationAcceptanceStatus}"
-                             FontSize="11"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding OrganizationInvitationAcceptanceMessage}"
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-
-                  <StackPanel IsVisible="{Binding OrganizationInvitationAccepted}"
-                              Spacing="3">
-                    <TextBlock Text="Accepted membership role"
-                               FontSize="11"
-                               Opacity="0.68" />
-                    <TextBlock Text="{Binding OrganizationInvitationAcceptedRole}"
-                               FontWeight="SemiBold" />
-                  </StackPanel>
-
-                  <StackPanel IsVisible="{Binding ShowOrganizationInvitationAcceptanceSwitch}"
-                              Spacing="5"
-                              Margin="0,4,0,0">
-                    <Button Content="Switch BKE account"
-                            IsEnabled="{Binding CanSwitchAccount}"
-                            Click="SwitchAccount" />
-                    <TextBlock Text="{Binding SwitchAccountHint}"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Opacity="0.68" />
-                  </StackPanel>
-                </StackPanel>
-              </Border>
-
-              <Border IsVisible="{Binding ShowOrganizationCreateSection}"
-                      Classes="content-card"
-                      Padding="14"
-                      Margin="0,8,0,0">
-                <StackPanel Spacing="8">
-                  <TextBlock Text="Create organization"
-                             FontSize="18"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="Create a new BKE Organization under this authenticated identity. Creation does not switch the current account automatically."
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-
-                  <TextBlock Text="Display name" FontWeight="SemiBold" />
-                  <TextBox Text="{Binding OrganizationCreateDisplayName, Mode=TwoWay}"
-                           MaxLength="120"
-                           Watermark="Organization name" />
-
-                  <TextBlock Text="Legal name" FontWeight="SemiBold" />
-                  <TextBox Text="{Binding OrganizationCreateLegalName, Mode=TwoWay}"
-                           MaxLength="180"
-                           Watermark="Registered legal name" />
-
-                  <TextBlock Text="Billing email" FontWeight="SemiBold" />
-                  <TextBox Text="{Binding OrganizationCreateBillingEmail, Mode=TwoWay}"
-                           MaxLength="320"
-                           Watermark="billing@example.com" />
-
-                  <TextBlock Text="Registration number (optional)"
-                             FontWeight="SemiBold" />
-                  <TextBox Text="{Binding OrganizationCreateRegistrationNumber, Mode=TwoWay}"
-                           MaxLength="80" />
-
-                  <TextBlock Text="Tax ID (optional)"
-                             FontWeight="SemiBold" />
-                  <TextBox Text="{Binding OrganizationCreateTaxId, Mode=TwoWay}"
-                           MaxLength="80" />
-
-                  <Button Content="Create organization"
-                          IsEnabled="{Binding CanCreateOrganization}"
-                          Click="CreateAccountOrganization" />
-                  <TextBlock Text="{Binding OrganizationCreateStatus}"
-                             FontSize="11"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding OrganizationCreateMessage}"
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                </StackPanel>
-              </Border>
-
-              <Border IsVisible="{Binding ShowOrganizationSection}"
-                      Classes="content-card"
-                      Padding="14"
-                      Margin="0,8,0,0">
-                <StackPanel Spacing="9">
-                  <TextBlock Text="Organization"
-                             FontSize="18"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding AccountOrganizationStatus}"
-                             FontSize="11"
-                             FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding AccountOrganizationMessage}"
-                             TextWrapping="Wrap"
-                             Opacity="0.72" />
-                  <Button Content="Refresh organization"
-                          IsEnabled="{Binding CanRefreshAccountOrganization}"
-                          Click="RefreshAccountOrganization" />
-
-                  <StackPanel IsVisible="{Binding OrganizationReady}"
-                              Spacing="7">
-                    <TextBlock Text="{Binding OrganizationDisplayName}"
-                               FontSize="17"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding OrganizationLegalName}"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding OrganizationRole}"
-                               FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding OrganizationLifecycle}"
-                               FontSize="11"
-                               Opacity="0.72" />
-
-                    <StackPanel IsVisible="{Binding HasOrganizationRegistrationNumber}"
-                                Spacing="2">
-                      <TextBlock Text="Registration"
-                                 FontWeight="SemiBold" />
-                      <TextBlock Text="{Binding OrganizationRegistrationNumber}"
-                                 TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <StackPanel IsVisible="{Binding ShowOrganizationBilling}"
-                                Spacing="4"
-                                Margin="0,6,0,0">
-                      <TextBlock Text="Billing"
-                                 FontWeight="SemiBold" />
-                      <StackPanel IsVisible="{Binding HasOrganizationBillingEmail}"
-                                  Spacing="2">
-                        <TextBlock Text="Billing email"
-                                   FontSize="11"
-                                   Opacity="0.68" />
-                        <TextBlock Text="{Binding OrganizationBillingEmail}"
-                                   TextWrapping="Wrap" />
-                      </StackPanel>
-                      <StackPanel IsVisible="{Binding HasOrganizationTaxId}"
-                                  Spacing="2">
-                        <TextBlock Text="Tax ID"
-                                   FontSize="11"
-                                   Opacity="0.68" />
-                        <TextBlock Text="{Binding OrganizationTaxId}"
-                                   TextWrapping="Wrap" />
-                      </StackPanel>
-                    </StackPanel>
-
-                    <Border IsVisible="{Binding ShowOrganizationProfileEditor}"
-                            Classes="content-card"
-                            Padding="12"
-                            Margin="0,6,0,0">
-                      <StackPanel Spacing="7">
-                        <TextBlock Text="Edit organization"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Only fields authorized for the selected Organization role are editable."
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.68" />
-
-                        <StackPanel IsVisible="{Binding CanEditOrganizationIdentity}"
-                                    Spacing="5">
-                          <TextBlock Text="Organization profile"
-                                     FontWeight="SemiBold" />
-                          <TextBlock Text="Display name"
-                                     FontSize="11"
-                                     Opacity="0.68" />
-                          <TextBox Text="{Binding OrganizationEditDisplayName, Mode=TwoWay}"
-                                   MaxLength="120" />
-                          <TextBlock Text="Legal name"
-                                     FontSize="11"
-                                     Opacity="0.68" />
-                          <TextBox Text="{Binding OrganizationEditLegalName, Mode=TwoWay}"
-                                   MaxLength="180" />
-                          <TextBlock Text="Registration number"
-                                     FontSize="11"
-                                     Opacity="0.68" />
-                          <TextBox Text="{Binding OrganizationEditRegistrationNumber, Mode=TwoWay}"
-                                   MaxLength="80"
-                                   Watermark="Optional" />
-                        </StackPanel>
-
-                        <StackPanel IsVisible="{Binding CanEditOrganizationBilling}"
-                                    Spacing="5"
-                                    Margin="0,4,0,0">
-                          <TextBlock Text="Billing profile"
-                                     FontWeight="SemiBold" />
-                          <TextBlock Text="Billing email"
-                                     FontSize="11"
-                                     Opacity="0.68" />
-                          <TextBox Text="{Binding OrganizationEditBillingEmail, Mode=TwoWay}"
-                                   MaxLength="320" />
-                          <TextBlock Text="Tax ID"
-                                     FontSize="11"
-                                     Opacity="0.68" />
-                          <TextBox Text="{Binding OrganizationEditTaxId, Mode=TwoWay}"
-                                   MaxLength="80"
-                                   Watermark="Optional" />
-                        </StackPanel>
-
-                        <Button Content="Save organization changes"
-                                IsEnabled="{Binding CanSaveOrganizationProfile}"
-                                Click="UpdateAccountOrganizationProfile" />
-                        <TextBlock Text="{Binding OrganizationProfileUpdateStatus}"
-                                   FontSize="11"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding OrganizationProfileUpdateMessage}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.72" />
-                      </StackPanel>
-                    </Border>
-
-                    <StackPanel IsVisible="{Binding ShowOrganizationUsage}"
-                                Spacing="4"
-                                Margin="0,6,0,0">
-                      <TextBlock Text="Usage / rights"
-                                 FontWeight="SemiBold" />
-                      <StackPanel IsVisible="{Binding HasOrganizationLicenseCount}"
-                                  Orientation="Horizontal"
-                                  Spacing="6">
-                        <TextBlock Text="Licenses:" />
-                        <TextBlock Text="{Binding OrganizationLicenseCount}"
-                                   FontWeight="SemiBold" />
-                      </StackPanel>
-                      <StackPanel IsVisible="{Binding HasOrganizationSubscriptionCount}"
-                                  Orientation="Horizontal"
-                                  Spacing="6">
-                        <TextBlock Text="Subscriptions:" />
-                        <TextBlock Text="{Binding OrganizationSubscriptionCount}"
-                                   FontWeight="SemiBold" />
-                      </StackPanel>
-                      <StackPanel IsVisible="{Binding HasOrganizationOrderCount}"
-                                  Orientation="Horizontal"
-                                  Spacing="6">
-                        <TextBlock Text="Orders:" />
-                        <TextBlock Text="{Binding OrganizationOrderCount}"
-                                   FontWeight="SemiBold" />
-                      </StackPanel>
-                    </StackPanel>
-
-                    <Border IsVisible="{Binding ShowOrganizationLeaveSection}"
-                            Classes="content-card"
-                            Padding="12"
-                            Margin="0,6,0,0">
-                      <StackPanel Spacing="7">
-                        <TextBlock Text="Organization membership"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Leaving removes your membership from this Organization and requires fresh BKE account selection. It does not delete the Organization. Owners must transfer ownership before they can leave."
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.72" />
-                        <Button Content="Leave organization"
-                                IsEnabled="{Binding CanLeaveOrganization}"
-                                Click="LeaveAccountOrganization" />
-                        <TextBlock Text="{Binding OrganizationLeaveStatus}"
-                                   FontSize="11"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding OrganizationLeaveMessage}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.72" />
-                      </StackPanel>
-                    </Border>
-
-                    <StackPanel IsVisible="{Binding ShowOrganizationMembers}"
-                                Spacing="7"
-                                Margin="0,6,0,0">
-                      <Border IsVisible="{Binding ShowOrganizationInviteSection}"
-                              Classes="content-card"
-                              Padding="12"
-                              Margin="0,5,0,4">
-                        <StackPanel Spacing="7">
-                          <TextBlock Text="Invite member"
-                                     FontWeight="SemiBold" />
-                          <TextBlock Text="Invitation authority stays in BKE Digital Solutions. Launcher sends only the invited email and role through the Licensing Agent."
-                                     FontSize="11"
-                                     TextWrapping="Wrap"
-                                     Opacity="0.68" />
-
-                          <StackPanel IsVisible="{Binding CanManageOrganizationInvitations}"
-                                      Spacing="5">
-                            <TextBlock Text="Email"
-                                       FontSize="11"
-                                       Opacity="0.68" />
-                            <TextBox Text="{Binding OrganizationInvitationEmail, Mode=TwoWay}"
-                                     MaxLength="320"
-                                     Watermark="member@example.com" />
-                            <TextBlock Text="Role"
-                                       FontSize="11"
-                                       Opacity="0.68" />
-                            <ComboBox ItemsSource="{Binding OrganizationInvitationRoles}"
-                                      SelectedItem="{Binding OrganizationInvitationRole, Mode=TwoWay}" />
-                            <Button Content="Issue invitation"
-                                    IsEnabled="{Binding CanInviteOrganizationMember}"
-                                    Click="CreateAccountOrganizationInvitation" />
-                          </StackPanel>
-
-                          <StackPanel IsVisible="{Binding HasOrganizationInvitationCode}"
-                                      Spacing="5">
-                            <TextBlock Text="One-time invitation code"
-                                       FontWeight="SemiBold" />
-                            <TextBlock Text="Save or send this code before dismissing it. BKE does not persist a local copy and does not copy it to the clipboard automatically."
-                                       FontSize="11"
-                                       TextWrapping="Wrap"
-                                       Opacity="0.72" />
-                            <TextBox Text="{Binding OrganizationInvitationCode, Mode=OneWay}"
-                                     IsReadOnly="True" />
-                            <Button Content="I've saved or sent this invitation code"
-                                    Click="CompleteOrganizationInvitationDelivery" />
-                          </StackPanel>
-
-                          <TextBlock Text="{Binding OrganizationInvitationStatus}"
-                                     FontSize="11"
-                                     FontWeight="SemiBold" />
-                          <TextBlock Text="{Binding OrganizationInvitationMessage}"
-                                     FontSize="11"
-                                     TextWrapping="Wrap"
-                                     Opacity="0.72" />
-                        </StackPanel>
-                      </Border>
-
-                      <StackPanel IsVisible="{Binding ShowOrganizationOwnershipTransferSection}"
-                                  IsEnabled="{Binding CanTransferOrganizationOwnership}"
-                                  Spacing="7"
-                                  Margin="0,5,0,5">
-                        <TextBlock Text="Transfer ownership"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Choose the member who should become the Organization owner. BKE Digital Solutions performs the transfer; this machine will require fresh sign-in and account selection after success. Transfer is unavailable while checkout recovery is bound to this account."
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.72" />
-                        <ItemsControl ItemsSource="{Binding OrganizationMembers}">
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="contracts:AccountOrganizationMember">
-                              <Border Classes="content-card"
-                                      Padding="9"
-                                      Margin="0,0,0,5">
-                                <StackPanel Spacing="3">
-                                  <TextBlock Text="{Binding Name}"
-                                             FontWeight="SemiBold"
-                                             TextWrapping="Wrap" />
-                                  <TextBlock Text="{Binding Email}"
-                                             TextWrapping="Wrap" />
-                                  <TextBlock Text="{Binding Role}"
-                                             FontSize="11"
-                                             Opacity="0.72" />
-                                  <Button Content="Transfer ownership to this member"
-                                          Click="TransferOrganizationOwnership"
-                                          HorizontalAlignment="Left" />
-                                </StackPanel>
-                              </Border>
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="{Binding OrganizationOwnershipTransferStatus}"
-                                   FontSize="11"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding OrganizationOwnershipTransferMessage}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.72" />
-                      </StackPanel>
-
-                      <TextBlock Text="Members"
-                                 FontWeight="SemiBold" />
-                      <ItemsControl ItemsSource="{Binding OrganizationMembers}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="contracts:AccountOrganizationMember">
-                            <Border Classes="content-card"
-                                    Padding="9"
-                                    Margin="0,0,0,5">
-                              <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding Name}"
-                                           FontWeight="SemiBold"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding Email}"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding Role}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="6"
-                                            Margin="0,4,0,0">
-                                  <Button Content="Member"
-                                          Click="SetOrganizationMemberRoleMember" />
-                                  <Button Content="License manager"
-                                          Click="SetOrganizationMemberRoleLicenseManager" />
-                                  <Button Content="Billing"
-                                          Click="SetOrganizationMemberRoleBilling" />
-                                  <Button Content="Owner"
-                                          Click="SetOrganizationMemberRoleOwner" />
-                                  <Button Content="Remove"
-                                          Click="RemoveOrganizationMember" />
-                                </StackPanel>
-                              </StackPanel>
-                            </Border>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="No organization members were returned."
-                                 IsVisible="{Binding ShowEmptyOrganizationMembers}"
-                                 Opacity="0.68"
-                                 TextWrapping="Wrap" />
-                      <TextBlock Text="{Binding OrganizationMemberManagementStatus}"
-                                 FontSize="11"
-                                 FontWeight="SemiBold" />
-                      <TextBlock Text="{Binding OrganizationMemberManagementMessage}"
-                                 FontSize="11"
-                                 Opacity="0.72"
-                                 TextWrapping="Wrap" />
-
-                      <TextBlock Text="Pending invitations"
-                                 FontWeight="SemiBold"
-                                 Margin="0,5,0,0" />
-                      <ItemsControl ItemsSource="{Binding OrganizationInvitations}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="contracts:AccountOrganizationInvitation">
-                            <Border Classes="content-card"
-                                    Padding="9"
-                                    Margin="0,0,0,5">
-                              <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding Email}"
-                                           FontWeight="SemiBold"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding Role}" />
-                                <TextBlock Text="{Binding Status}"
-                                           FontSize="11"
-                                           Opacity="0.72" />
-                                <TextBlock Text="{Binding ExpiresAt}"
-                                           FontSize="11"
-                                           Opacity="0.72"
-                                           TextWrapping="Wrap" />
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="6"
-                                            Margin="0,4,0,0">
-                                  <Button Content="Resend"
-                                          Click="ResendOrganizationInvitation" />
-                                  <Button Content="Revoke"
-                                          Click="RevokeOrganizationInvitation" />
-                                </StackPanel>
-                              </StackPanel>
-                            </Border>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="No pending invitations were returned."
-                                 IsVisible="{Binding ShowEmptyOrganizationInvitations}"
-                                 Opacity="0.68"
-                                 TextWrapping="Wrap" />
-                    </StackPanel>
-                  </StackPanel>
-                </StackPanel>
-              </Border>
-
-              <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
-
-              <TextBlock Text="Security" FontSize="18" FontWeight="SemiBold" />
-              <TextBlock Text="Change your BKE password. A successful change signs this machine out so you can authenticate again with the new password."
-                         TextWrapping="Wrap"
-                         Opacity="0.72" />
-              <TextBlock Text="Current password" FontWeight="SemiBold" />
-              <TextBox Text="{Binding CurrentPassword, Mode=TwoWay}"
-                       PasswordChar="●" />
-              <TextBlock Text="New password" FontWeight="SemiBold" />
-              <TextBox Text="{Binding NewPassword, Mode=TwoWay}"
-                       PasswordChar="●" />
-              <TextBlock Text="Confirm new password" FontWeight="SemiBold" />
-              <TextBox Text="{Binding ConfirmNewPassword, Mode=TwoWay}"
-                       PasswordChar="●" />
-              <Button Content="Change password"
-                      IsEnabled="{Binding CanChangePassword}"
-                      Click="ChangePassword" />
-              <TextBlock Text="{Binding PasswordChangeStatus}"
-                         FontSize="11"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="{Binding PasswordChangeMessage}"
-                         TextWrapping="Wrap"
-                         Opacity="0.72" />
-
-              <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
-
-              <TextBlock Text="Multi-factor authentication"
-                         FontSize="18"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="{Binding AccountMfaSummary}"
-                         FontWeight="SemiBold"
-                         TextWrapping="Wrap" />
-              <TextBlock Text="{Binding AccountMfaMessage}"
-                         TextWrapping="Wrap"
-                         Opacity="0.72" />
-              <Button Content="Refresh MFA status"
-                      Click="RefreshAccountMfa" />
-              <TextBlock Text="Current password"
-                         FontWeight="SemiBold" />
-              <TextBox Text="{Binding AccountMfaCurrentPassword, Mode=TwoWay}"
-                       PasswordChar="●" />
-
-              <StackPanel IsVisible="{Binding ShowMfaEnableActions}" Spacing="8">
-                <Button Content="Enable MFA"
-                        IsEnabled="{Binding CanStartMfaEnrollment}"
-                        Click="StartMfaEnrollment" />
-              </StackPanel>
-
-              <StackPanel IsVisible="{Binding ShowMfaProtectedActions}" Spacing="8">
-                <Button Content="Verify password for MFA changes"
-                        IsEnabled="{Binding CanStartMfaProof}"
-                        Click="StartMfaProof" />
-              </StackPanel>
-
-              <StackPanel IsVisible="{Binding HasAccountMfaChallenge}" Spacing="8">
-                <TextBlock Text="{Binding AccountMfaReference}"
-                           FontWeight="SemiBold" />
-                <TextBox Text="{Binding AccountMfaCode, Mode=TwoWay}"
-                         Watermark="Verification code" />
-                <Button Content="Complete MFA enrollment"
-                        IsVisible="{Binding ShowMfaEnrollmentChallenge}"
-                        IsEnabled="{Binding CanCompleteMfaEnrollment}"
-                        Click="CompleteMfaEnrollment" />
-                <StackPanel IsVisible="{Binding ShowMfaProofChallenge}" Spacing="8">
-                  <Button Content="Disable MFA"
-                          IsEnabled="{Binding CanSubmitMfaProof}"
-                          Click="DisableMfa" />
-                  <Button Content="Regenerate recovery codes"
-                          IsEnabled="{Binding CanSubmitMfaProof}"
-                          Click="RegenerateMfaRecovery" />
-                </StackPanel>
-              </StackPanel>
-
-              <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
-
-              <TextBlock Text="Privacy requests"
-                         FontSize="18"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="Request types and status come from BKE Digital Solutions through the Licensing Agent. BKE does not store a separate local privacy-request record."
-                         TextWrapping="Wrap"
-                         Opacity="0.72" />
-              <TextBlock Text="{Binding AccountPrivacyStatus}"
-                         FontSize="11"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="{Binding AccountPrivacyMessage}"
-                         TextWrapping="Wrap"
-                         Opacity="0.72" />
-              <Button Content="Refresh privacy requests"
-                      IsEnabled="{Binding CanRefreshAccountPrivacy}"
-                      Click="RefreshAccountPrivacy" />
-
-              <TextBlock Text="Request type"
-                         FontWeight="SemiBold" />
-              <ComboBox ItemsSource="{Binding AccountPrivacyRequestTypes}"
-                        SelectedItem="{Binding SelectedAccountPrivacyRequestType, Mode=TwoWay}" />
-
-              <TextBlock Text="Summary"
-                         FontWeight="SemiBold" />
-              <TextBox Text="{Binding AccountPrivacySummary, Mode=TwoWay}"
-                       AcceptsReturn="True"
-                       TextWrapping="Wrap"
-                       MinHeight="90"
-                       MaxHeight="180"
-                       Watermark="Describe what you are requesting (10–2,000 characters)" />
-              <Button Content="Submit privacy request"
-                      IsEnabled="{Binding CanCreateAccountPrivacyRequest}"
-                      Click="CreateAccountPrivacyRequest" />
-
-              <ItemsControl ItemsSource="{Binding AccountPrivacyRequests}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:AccountPrivacyRequestViewModel">
-                    <Border Classes="content-card"
-                            Padding="12"
-                            Margin="0,0,0,8">
-                      <StackPanel Spacing="5">
-                        <Grid ColumnDefinitions="*,Auto">
-                          <TextBlock Text="{Binding RequestType}"
-                                     FontWeight="SemiBold"
-                                     TextWrapping="Wrap" />
-                          <TextBlock Grid.Column="1"
-                                     Text="{Binding Status}"
-                                     FontSize="11"
-                                     FontWeight="SemiBold" />
-                        </Grid>
-                        <TextBlock Text="{Binding ScopeLabel}"
-                                   FontSize="11"
-                                   Opacity="0.68" />
-                        <TextBlock Text="{Binding Summary}"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding ResponseSummary}"
-                                   IsVisible="{Binding HasResponseSummary}"
-                                   TextWrapping="Wrap"
-                                   Opacity="0.78" />
-                        <TextBlock Text="{Binding CreatedLabel}"
-                                   FontSize="11"
-                                   Opacity="0.68" />
-                        <TextBlock Text="{Binding LifecycleLabel}"
-                                   FontSize="11"
-                                   Opacity="0.68"
-                                   TextWrapping="Wrap" />
-                      </StackPanel>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-
-              <Border IsVisible="{Binding ShowEmptyAccountPrivacyRequests}"
-                      Classes="content-card"
-                      Padding="12">
-                <TextBlock Text="No privacy requests are recorded yet."
-                           TextWrapping="Wrap"
-                           TextAlignment="Center"
-                           Opacity="0.68" />
-              </Border>
-
-              <Border Height="1" Margin="0,8,0,4" Opacity="0.25" />
-
-              <TextBlock Text="Redeem Claim Code" FontSize="18" FontWeight="SemiBold" />
-              <TextBlock Text="The code redeems into the signed-in account shown above. BKE does not store the plaintext code locally; the field is cleared before the Agent mutation starts. Finish any unresolved checkout first."
-                         TextWrapping="Wrap"
-                         Opacity="0.72" />
-              <TextBox Text="{Binding ClaimCode, Mode=TwoWay}"
-                       Watermark="BKE-CLM-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" />
-              <Button Content="Redeem to this account"
-                      IsEnabled="{Binding CanRedeemClaimCode}"
-                      Click="RedeemClaimCode" />
-              <TextBlock Text="{Binding ClaimStatus}"
-                         FontSize="11"
-                         FontWeight="SemiBold" />
-              <TextBlock Text="{Binding ClaimMessage}"
-                         TextWrapping="Wrap"
-                         Opacity="0.72" />
+              <Button Content="Sign out on this machine"
+                      HorizontalAlignment="Stretch"
+                      Click="Logout" />
             </StackPanel>
           </ScrollViewer>
         </Border>
@@ -2111,7 +787,7 @@
                           Background="{StaticResource BkeHairlineBrush}"
                           VerticalAlignment="Center" />
                   <Button Grid.Column="1"
-                          Content="Library  ›"
+                          Content="Library  â€º"
                           Classes="quiet shelf-link"
                           Click="OpenLibrary"
                           VerticalAlignment="Center" />
@@ -2254,7 +930,7 @@
                                   <TextBlock Text="{Binding ExecutionLabel}"
                                              Classes="muted"
                                              FontSize="10" />
-                                  <TextBlock Text="·"
+                                  <TextBlock Text="Â·"
                                              Classes="muted"
                                              FontSize="10" />
                                   <TextBlock Text="{Binding VersionLabel}"
@@ -2381,7 +1057,7 @@
                               <TextBlock Text="{Binding BkeCurrentVersion, StringFormat='Installed v{0}'}"
                                          Classes="muted"
                                          FontSize="12" />
-                              <TextBlock Text="•" Classes="muted" FontSize="12" />
+                              <TextBlock Text="â€¢" Classes="muted" FontSize="12" />
                               <TextBlock Text="BKE Digital Solutions"
                                          Classes="muted"
                                          FontSize="12" />
@@ -2449,7 +1125,7 @@
                                       Size="15"
                                       StrokeWidth="1.8"
                                       Foreground="{StaticResource BkeSignalBrush}" />
-                          <TextBlock Text="Verified publisher: BKE Digital Solutions • Windows x64"
+                          <TextBlock Text="Verified publisher: BKE Digital Solutions â€¢ Windows x64"
                                      Classes="muted"
                                      FontSize="11"
                                      VerticalAlignment="Center" />
@@ -2561,7 +1237,7 @@
                                     <TextBlock Text="{Binding VersionLabel}"
                                                Classes="muted"
                                                FontSize="11" />
-                                    <TextBlock Text="{Binding AvailableVersion, StringFormat='➔ Available: v{0}'}"
+                                    <TextBlock Text="{Binding AvailableVersion, StringFormat='âž” Available: v{0}'}"
                                                Foreground="{StaticResource BkeDigitalYellowBrush}"
                                                FontWeight="SemiBold"
                                                FontSize="11" />
@@ -2769,7 +1445,7 @@
                     <TextBlock Text="{Binding PurchaseReviewLegalLabel}"
                                TextWrapping="Wrap"
                                Opacity="0.78" />
-                    <TextBlock Text="Review only — no order, payment, or checkout has been created yet."
+                    <TextBlock Text="Review only â€” no order, payment, or checkout has been created yet."
                                TextWrapping="Wrap"
                                FontSize="11"
                                Opacity="0.62" />
