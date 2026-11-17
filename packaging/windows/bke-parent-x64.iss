@@ -2,7 +2,7 @@
 #define BkeVersion "0.1.0"
 #endif
 #ifndef AgentVersion
-#define AgentVersion "2.0.2"
+#define AgentVersion "2.0.3"
 #endif
 #define AppName "BKE"
 #define AppPublisher "BKE Digital Solutions"
