@@ -7714,6 +7714,67 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 SelectedModuleIndex = 0;
                 break;
 
+            case "library":
+                SessionStatus = "AUTHENTICATED";
+                AccountDisplay = "Certification Customer · customer@example.test";
+                _authenticatedAccountEmail = "customer@example.test";
+                _authenticatedAccountType = "PERSONAL";
+                Raise(nameof(AccountTypeLabel));
+                PrepareAuthenticatedShellSurface();
+                Products.Clear();
+                Products.Add(new SoftwareProductViewModel(
+                    "bke-air-stack",
+                    "Air Stack",
+                    "Broadcast automation and live production sequencing platform with intelligent vMix integration.",
+                    "STANDALONE",
+                    "Ready to install",
+                    "v1.4.0",
+                    CanInstall: true,
+                    CanUpdate: false,
+                    CanRepair: false,
+                    CanOpen: false,
+                    CanRemove: false));
+                Products.Add(new SoftwareProductViewModel(
+                    "bke-live-deck",
+                    "BKE Live Deck",
+                    "A dedicated live production control interface for vMix operators.",
+                    "STANDALONE",
+                    "Installed",
+                    "v2.1.0",
+                    CanInstall: false,
+                    CanUpdate: true,
+                    CanRepair: true,
+                    CanOpen: true,
+                    CanRemove: true));
+                Products.Add(new SoftwareProductViewModel(
+                    "bke-media-organizer",
+                    "BKE Media Organizer",
+                    "Automated asset indexing, categorization, and production ingest pipeline.",
+                    "STANDALONE",
+                    "Ready to install",
+                    "v1.0.2",
+                    CanInstall: true,
+                    CanUpdate: false,
+                    CanRepair: false,
+                    CanOpen: false,
+                    CanRemove: false));
+                Products.Add(new SoftwareProductViewModel(
+                    "bke-render-dock",
+                    "Render Dock",
+                    "Streamlined media rendering application powered by FFmpeg for efficient encoding workflows.",
+                    "STANDALONE",
+                    "Installed",
+                    "v3.0.1",
+                    CanInstall: false,
+                    CanUpdate: false,
+                    CanRepair: true,
+                    CanOpen: true,
+                    CanRemove: true));
+                Raise(nameof(ShowEmptyProducts));
+                RefreshDashboardProducts();
+                SelectedModuleIndex = 1;
+                break;
+
             case "signed-out-google-only":
                 SessionStatus = "SIGNED_OUT";
                 AccountDisplay = "Not signed in";

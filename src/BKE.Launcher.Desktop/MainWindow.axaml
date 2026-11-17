@@ -840,47 +840,59 @@
 
           <Grid IsVisible="{Binding ShowLibraryModule}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-              <StackPanel Spacing="20"
-                          Margin="2,4,12,14">
-                <TextBlock Text="Library"
-                           FontSize="32"
-                           FontWeight="SemiBold" />
+              <StackPanel Spacing="14"
+                          Margin="4,6,12,14">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,6">
+                  <StackPanel Spacing="3">
+                    <TextBlock Text="MY SOFTWARE"
+                               Classes="eyebrow" />
+                    <TextBlock Text="Library"
+                               Classes="section-title"
+                               FontWeight="SemiBold"
+                               FontSize="22" />
+                    <TextBlock Text="Software available to this machine and account."
+                               Classes="muted"
+                               FontSize="12" />
+                  </StackPanel>
+                </Grid>
 
                 <ItemsControl ItemsSource="{Binding Products}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                       <WrapPanel Orientation="Horizontal"
-                                 ItemWidth="450" />
+                                 ItemWidth="360" />
                     </ItemsPanelTemplate>
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SoftwareProductViewModel">
-                      <Grid Width="436"
-                            MinHeight="210"
-                            Margin="0,0,14,14">
+                      <Grid Width="344"
+                            MinHeight="150"
+                            Margin="0,0,12,12">
                         <Border Background="#5A000000"
-                                CornerRadius="22"
-                                Margin="8,10,0,0" />
+                                CornerRadius="14"
+                                Margin="4,6,0,0" />
                         <Border Classes="library-card"
-                                Margin="0,0,8,10"
-                                Padding="19">
+                                Margin="0,0,4,6"
+                                Padding="14,12"
+                                CornerRadius="14">
                           <Grid RowDefinitions="Auto,*,Auto">
                             <Grid ColumnDefinitions="Auto,*,Auto"
-                                  ColumnSpacing="14">
-                              <Border Width="58"
-                                      Height="58"
-                                      Classes="app-mark">
+                                  ColumnSpacing="10">
+                              <Border Width="42"
+                                      Height="42"
+                                      Classes="app-mark"
+                                      CornerRadius="12">
                                 <Grid>
-                                  <Ellipse Width="30"
-                                           Height="30"
+                                  <Ellipse Width="22"
+                                           Height="22"
                                            Stroke="#355064"
                                            StrokeThickness="1" />
-                                  <Ellipse Width="17"
-                                           Height="17"
+                                  <Ellipse Width="12"
+                                           Height="12"
                                            Stroke="#4A8177FF"
                                            StrokeThickness="1" />
-                                  <Border Width="7"
-                                          Height="7"
+                                  <Border Width="6"
+                                          Height="6"
                                           Classes="signal-dot"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
@@ -888,12 +900,14 @@
                               </Border>
 
                               <StackPanel Grid.Column="1"
-                                          Spacing="4"
+                                          Spacing="2"
                                           VerticalAlignment="Center">
                                 <TextBlock Text="{Binding DisplayName}"
-                                           Classes="product-title" />
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource BkeTextBrush}" />
                                 <StackPanel Orientation="Horizontal"
-                                            Spacing="7">
+                                            Spacing="6">
                                   <TextBlock Text="{Binding ExecutionLabel}"
                                              Classes="muted"
                                              FontSize="10" />
@@ -908,7 +922,8 @@
 
                               <Border Grid.Column="2"
                                       Classes="status-pill"
-                                      Padding="9,5"
+                                      Padding="7,3"
+                                      CornerRadius="6"
                                       VerticalAlignment="Top">
                                 <TextBlock Text="{Binding StateLabel}"
                                            FontSize="9"
@@ -921,13 +936,13 @@
                                        Classes="muted"
                                        FontSize="11"
                                        TextWrapping="Wrap"
-                                       Margin="0,16,0,16"
-                                       MaxHeight="42" />
+                                       Margin="0,8,0,8"
+                                       MaxHeight="36" />
 
                             <StackPanel Grid.Row="2"
                                         Orientation="Horizontal"
                                         HorizontalAlignment="Right"
-                                        Spacing="7">
+                                        Spacing="6">
                               <Button Content="Install"
                                       Classes="signal"
                                       IsVisible="{Binding CanInstall}"
@@ -958,7 +973,8 @@
 
                 <Border IsVisible="{Binding ShowEmptyProducts}"
                         Classes="library-card"
-                        Padding="24">
+                        CornerRadius="14"
+                        Padding="20">
                   <TextBlock Text="No software is currently available to this account."
                              Classes="muted"
                              TextAlignment="Center" />
