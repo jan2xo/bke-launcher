@@ -7051,15 +7051,15 @@ static async Task CertifyParentInstallerAgentCompatibilityAsync()
     Require(scriptContent.Contains("Preserving newer Agent to prevent unsafe downgrade", StringComparison.Ordinal),
         "Parent installer script missing downgrade prevention logging.");
 
-    // Preserve installed older-Agent upgrade; never keep healthy 2.0.0 after
+    // Preserve installed older-Agent upgrade; never keep healthy 2.0.1 after
     // the pinned Digital Solutions production issuer source changes.
-    Require(scriptContent.Contains("#define AgentVersion \"2.0.1\"", StringComparison.Ordinal),
-        "BKE parent default must advance to Agent version 2.0.1.");
+    Require(scriptContent.Contains("#define AgentVersion \"2.0.2\"", StringComparison.Ordinal),
+        "BKE parent default must advance to Agent version 2.0.2.");
     var parentRoot = Path.GetFullPath(Path.Combine(
         Path.GetDirectoryName(scriptPath)!, "..", ".."));
     var parentWorkflow = File.ReadAllText(Path.Combine(parentRoot,
         ".github", "workflows", "windows-parent-installer.yml"));
-    Require(parentWorkflow.Contains("AGENT_VERSION: \"2.0.1\"", StringComparison.Ordinal) &&
+    Require(parentWorkflow.Contains("AGENT_VERSION: \"2.0.2\"", StringComparison.Ordinal) &&
             parentWorkflow.Contains("\"/DAppVersion=$env:AGENT_VERSION\"", StringComparison.Ordinal),
         "BKE parent workflow must version child installer consistently.");
 
@@ -7087,6 +7087,9 @@ static async Task CertifyParentInstallerAgentCompatibilityAsync()
     Require(CompareSemver("2.1.0", "2.0.0") > 0, "Newer minor agent must compare greater than bundled.");
     Require(CompareSemver("3.0.0", "2.0.0") > 0, "Newer major agent must compare greater than bundled.");
     Require(CompareSemver("2.0.0.1", "2.0.0") > 0, "Newer build agent must compare greater than bundled.");
+    Require(CompareSemver("2.0.1", "2.0.2") < 0, "Installed Agent 2.0.1 must upgrade to canonical catalog fix 2.0.2.");
+    Require(CompareSemver("2.0.2", "2.0.2") == 0, "Healthy Agent 2.0.2 must remain idempotent.");
+    Require(CompareSemver("2.0.3", "2.0.2") > 0, "Newer Agent must never be downgraded to 2.0.2.");
 }
 
 static async Task CertifyBkeRootUpdateOrchestratorAsync()
