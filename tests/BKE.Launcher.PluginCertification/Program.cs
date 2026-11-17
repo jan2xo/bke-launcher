@@ -290,7 +290,7 @@ static void CertifyCustomerCatalogToBundledDemoOpen()
             .Trim();
 
     const string LicensingAgentSourceSha =
-        "36a9a588d87d1b80cfb56d709fda7c5383a0abe0";
+        "bb417c9084487b858e6d4aa343ac6d8b70fc363f";
     var pinnedLicensingAgentSource =
         File.ReadAllText(
             Path.Combine(
