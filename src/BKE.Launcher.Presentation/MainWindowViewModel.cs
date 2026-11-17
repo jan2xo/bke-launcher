@@ -428,8 +428,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _registrationMessage, value);
     }
 
+    public bool IsAgentUnavailable =>
+        string.Equals(SessionStatus, "AGENT_UNAVAILABLE", StringComparison.Ordinal);
+
     public bool ShowPendingSignIn => ShowLoginPage && SessionStatus == "PENDING";
-    public bool ShowSignInForm => ShowLoginPage && !_showRegistration && SessionStatus != "PENDING";
+    public bool ShowSignInForm => ShowLoginPage && !IsAgentUnavailable && SessionStatus != "PENDING";
+    public bool ShowAgentUnavailableRecovery => ShowLoginPage && IsAgentUnavailable;
     public bool ShowRegistration => ShowLoginPage && _showRegistration;
     public bool ShowRegistrationEntry =>
         ShowRegistration && RegistrationStatus != "VERIFICATION_REQUIRED";
@@ -1773,9 +1777,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             SetField(ref _sessionStatus, value);
             Raise(nameof(IsAuthenticated));
+            Raise(nameof(IsAgentUnavailable));
             Raise(nameof(ShowLoginPage));
             Raise(nameof(ShowPendingSignIn));
             Raise(nameof(ShowSignInForm));
+            Raise(nameof(ShowAgentUnavailableRecovery));
             Raise(nameof(ShowAuthenticatedShell));
             RaiseRegistrationCapabilities();
             Raise(nameof(CanRequestPasswordReset));
@@ -2915,6 +2921,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
+            if (response.Status == "AUTHENTICATED")
+            {
+                var statusResponse = await _accountSession.StatusAsync(token).ConfigureAwait(false);
+                await RunOnUiAsync(() =>
+                {
+                    if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    ApplyStatus(statusResponse);
+                    PrepareAuthenticatedShellSurface();
+                }).ConfigureAwait(false);
+                return;
+            }
+
             await RunOnUiAsync(() =>
             {
                 if (generation != Volatile.Read(ref _signInGeneration) || token.IsCancellationRequested)
@@ -2927,26 +2949,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 VerificationUri = response.VerificationUri ?? string.Empty;
                 Message = response.Status switch
                 {
-                    "AUTHENTICATED" => "This machine already has an authenticated BKE account session.",
                     "PENDING" => "Complete sign-in in your browser. BKE Launcher will update automatically.",
                     _ => response.Error?.Message ?? "BKE account sign-in could not be started.",
                 };
-
-                if (response.Status == "AUTHENTICATED")
-                {
-                    PrepareAuthenticatedShellSurface();
-                    return;
-                }
 
                 ClearNotifications(
                     "AUTH_REQUIRED",
                     "Sign in to view BKE notifications.");
             }).ConfigureAwait(false);
-
-            if (response.Status == "AUTHENTICATED")
-            {
-                return;
-            }
 
             if (response.Status == "PENDING")
             {
@@ -3027,6 +3037,31 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public void OpenVerificationUriInBrowser()
     {
         _ = OpenVerificationUriInBrowserAsync(CancellationToken.None);
+    }
+
+    public async Task OpenAccountManagementInBrowserAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _externalNavigator.OpenAccountManagementAsync(
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or
+            System.ComponentModel.Win32Exception or
+            InvalidOperationException)
+        {
+            await RunOnUiAsync(() =>
+            {
+                Message = "Could not open your default browser. Please navigate to Digital Solutions manually.";
+            }).ConfigureAwait(false);
+        }
+    }
+
+    public void OpenAccountManagementInBrowser()
+    {
+        _ = OpenAccountManagementInBrowserAsync(CancellationToken.None);
     }
 
     public void CancelGoogleSignIn()
@@ -7663,6 +7698,67 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         ShowAccountSurface = false;
         SelectedModuleIndex = -1;
+    }
+
+    public void ApplyVisualQaState(string stateName)
+    {
+        switch (stateName)
+        {
+            case "authenticated-shell":
+                SessionStatus = "AUTHENTICATED";
+                AccountDisplay = "Certification Customer · customer@example.test";
+                _authenticatedAccountEmail = "customer@example.test";
+                _authenticatedAccountType = "PERSONAL";
+                Raise(nameof(AccountTypeLabel));
+                PrepareAuthenticatedShellSurface();
+                SelectedModuleIndex = 0;
+                break;
+
+            case "signed-out-google-only":
+                SessionStatus = "SIGNED_OUT";
+                AccountDisplay = "Not signed in";
+                _authenticatedAccountEmail = string.Empty;
+                _authenticatedAccountType = string.Empty;
+                Raise(nameof(AccountTypeLabel));
+                ResetShellSurface();
+                break;
+
+            case "agent-unavailable-recovery":
+                SessionStatus = "AGENT_UNAVAILABLE";
+                AccountDisplay = "Not available";
+                Message = "BKE Licensing Agent is unavailable or returned an invalid response.";
+                _authenticatedAccountEmail = string.Empty;
+                _authenticatedAccountType = string.Empty;
+                Raise(nameof(AccountTypeLabel));
+                ResetShellSurface();
+                break;
+
+            case "google-pending-device":
+                SessionStatus = "PENDING";
+                UserCode = "AUTH-7890";
+                VerificationUri = "https://digital-solutions.example.test/device?code=AUTH-7890";
+                AccountDisplay = "Not signed in";
+                _authenticatedAccountEmail = string.Empty;
+                _authenticatedAccountType = string.Empty;
+                Raise(nameof(AccountTypeLabel));
+                ResetShellSurface();
+                break;
+
+            case "updates":
+                SessionStatus = "AUTHENTICATED";
+                AccountDisplay = "Certification Customer · customer@example.test";
+                _authenticatedAccountEmail = "customer@example.test";
+                _authenticatedAccountType = "PERSONAL";
+                Raise(nameof(AccountTypeLabel));
+                PrepareAuthenticatedShellSurface();
+                SelectedModuleIndex = 2;
+                BkeAvailableVersion = "0.2.0";
+                IsBkeUpdateAvailable = true;
+                BkeUpdateStatus = "AVAILABLE";
+                BkeUpdateMessage = "BKE 0.2.0 is available.";
+                BkeUpdateSummary = "Native Updates & Activity surface, Inno Setup Agent version downgrade protection, and root BKE self-update lifecycle.";
+                break;
+        }
     }
 
     private void EnterPasswordChangeReauthentication(
