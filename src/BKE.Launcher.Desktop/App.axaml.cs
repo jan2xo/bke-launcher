@@ -130,6 +130,7 @@ public sealed partial class App : Avalonia.Application
                         var states = new[]
                         {
                             "authenticated-shell",
+                            "library",
                             "signed-out-google-only",
                             "agent-unavailable-recovery",
                             "google-pending-device",
