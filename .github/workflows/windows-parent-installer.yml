@@ -31,7 +31,7 @@ concurrency:
 
 env:
   BKE_VERSION: "0.1.0"
-  AGENT_VERSION: "2.0.2"
+  AGENT_VERSION: "2.0.3"
   AGENT_SOURCE_SHA: ${{ inputs.agent_source_sha }}
   AGENT_SERVICE_NAME: "BKE-Licensing-Agent"
   SOURCE_SHA: ${{ inputs.source_sha }}
