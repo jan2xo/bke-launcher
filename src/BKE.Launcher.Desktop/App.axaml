@@ -319,6 +319,19 @@
       <Setter Property="BorderBrush" Value="{StaticResource BkeAccentBrush}" />
     </Style>
 
+    <Style Selector="Button.yellow-cta">
+      <Setter Property="Background" Value="{StaticResource BkeDigitalYellowBrush}" />
+      <Setter Property="Foreground" Value="#0A0C0F" />
+      <Setter Property="BorderBrush" Value="{StaticResource BkeDigitalYellowBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="Button.yellow-cta:pointerover">
+      <Setter Property="Background" Value="#FFE28A" />
+      <Setter Property="Foreground" Value="#0A0C0F" />
+      <Setter Property="BorderBrush" Value="#FFE28A" />
+    </Style>
+
     <Style Selector="Button.signal">
       <Setter Property="Background" Value="{StaticResource BkeSignalSoftBrush}" />
       <Setter Property="Foreground" Value="{StaticResource BkeTextBrush}" />

@@ -258,6 +258,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private int _selectedModuleIndex = -1;
     private bool _showAccountSurface;
     private bool _sidebarExpanded = true;
+    private readonly LauncherBkeUpdateOrchestrator _bkeUpdater;
+    private string _bkeCurrentVersion = "0.1.0";
+    private string? _bkeAvailableVersion;
+    private bool _isBkeUpdateAvailable;
+    private string _bkeUpdateStatus = "UP_TO_DATE";
+    private string _bkeUpdateMessage = "BKE is running the latest verified release.";
+    private string _bkeUpdateSummary = string.Empty;
+    private bool _isUpdatingBke;
+    private double _bkeUpdateProgress;
+    private BkeUpdateRelease? _currentBkeRelease;
+    private string _agentServiceStatus = "Running";
+    private string _agentServiceVersion = "2.0.0";
+    private bool _isAgentHealthy = true;
 
     public MainWindowViewModel(
         LauncherAccountSessionController accountSession,
@@ -292,7 +305,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherAccountLicenseDevicesController accountLicenseDevices,
         LauncherAccountOrganizationController accountOrganization,
         ILauncherPluginRuntime pluginRuntime,
-        SynchronizationContext? uiContext = null)
+        SynchronizationContext? uiContext = null,
+        LauncherBkeUpdateOrchestrator? bkeUpdater = null)
     {
         _accountSession = accountSession;
         _nativeSignIn = nativeSignIn;
@@ -328,6 +342,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _pluginRuntime = pluginRuntime ??
             throw new ArgumentNullException(nameof(pluginRuntime));
         _uiContext = uiContext ?? SynchronizationContext.Current;
+        _bkeUpdater = bkeUpdater ?? new LauncherBkeUpdateOrchestrator();
         RestoreCheckoutRecoveryState();
     }
 
@@ -338,6 +353,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public SystemTelemetryViewModel Telemetry { get; } = new();
     public ObservableCollection<StoreProductViewModel> StoreProducts { get; } = [];
     public ObservableCollection<NotificationViewModel> Notifications { get; } = [];
+    public ObservableCollection<SoftwareProductViewModel> ProductUpdates { get; } = [];
     public ObservableCollection<string> AccountPrivacyRequestTypes { get; } = [];
     public ObservableCollection<AccountPrivacyRequestViewModel> AccountPrivacyRequests { get; } = [];
     public ObservableCollection<AccountLicenseViewModel> AccountLicenses { get; } = [];
@@ -1964,6 +1980,100 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _notificationMessage, value);
     }
 
+    public string BkeCurrentVersion
+    {
+        get => _bkeCurrentVersion;
+        set => SetField(ref _bkeCurrentVersion, value);
+    }
+
+    public string? BkeAvailableVersion
+    {
+        get => _bkeAvailableVersion;
+        set => SetField(ref _bkeAvailableVersion, value);
+    }
+
+    public bool IsBkeUpdateAvailable
+    {
+        get => _isBkeUpdateAvailable;
+        set
+        {
+            SetField(ref _isBkeUpdateAvailable, value);
+            Raise(nameof(HasPendingUpdatesOrActivity));
+            Raise(nameof(PendingUpdatesBadgeText));
+        }
+    }
+
+    public string BkeUpdateStatus
+    {
+        get => _bkeUpdateStatus;
+        set => SetField(ref _bkeUpdateStatus, value);
+    }
+
+    public string BkeUpdateMessage
+    {
+        get => _bkeUpdateMessage;
+        set => SetField(ref _bkeUpdateMessage, value);
+    }
+
+    public string BkeUpdateSummary
+    {
+        get => _bkeUpdateSummary;
+        set => SetField(ref _bkeUpdateSummary, value);
+    }
+
+    public bool IsUpdatingBke
+    {
+        get => _isUpdatingBke;
+        private set => SetField(ref _isUpdatingBke, value);
+    }
+
+    public double BkeUpdateProgress
+    {
+        get => _bkeUpdateProgress;
+        private set => SetField(ref _bkeUpdateProgress, value);
+    }
+
+    public BkeUpdateRelease? CurrentBkeRelease
+    {
+        get => _currentBkeRelease;
+        private set => SetField(ref _currentBkeRelease, value);
+    }
+
+    public string AgentServiceStatus
+    {
+        get => _agentServiceStatus;
+        private set => SetField(ref _agentServiceStatus, value);
+    }
+
+    public string AgentServiceVersion
+    {
+        get => _agentServiceVersion;
+        private set => SetField(ref _agentServiceVersion, value);
+    }
+
+    public bool IsAgentHealthy
+    {
+        get => _isAgentHealthy;
+        private set => SetField(ref _isAgentHealthy, value);
+    }
+
+    public bool HasProductUpdates => ProductUpdates.Count > 0;
+
+    public bool HasPendingUpdatesOrActivity =>
+        IsBkeUpdateAvailable || HasProductUpdates || Notifications.Any(n => n.CanMarkRead);
+
+    public string PendingUpdatesBadgeText
+    {
+        get
+        {
+            if (IsBkeUpdateAvailable) return "Update";
+            var unreadCount = Notifications.Count(n => n.CanMarkRead);
+            if (unreadCount > 0) return unreadCount.ToString();
+            if (HasProductUpdates) return $"{ProductUpdates.Count}";
+            return string.Empty;
+        }
+    }
+
     public bool GiftCheckoutEnabled
     {
         get => _giftCheckoutEnabled;
@@ -2209,6 +2319,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 break;
             case 2:
                 await RefreshNotificationsAsync(cancellationToken);
+                await CheckBkeUpdatesAsync(cancellationToken);
                 break;
             case 3:
                 await RefreshStoreAsync(cancellationToken);
@@ -3138,7 +3249,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     ? "No notifications for this BKE account."
                     : $"{Notifications.Count} notification(s) for this BKE account."
                 : snapshot.Message ?? "Notifications are unavailable.";
+            RefreshProductUpdates();
             Raise(nameof(ShowEmptyNotifications));
+            Raise(nameof(HasPendingUpdatesOrActivity));
+            Raise(nameof(PendingUpdatesBadgeText));
         }
         catch (Exception error) when (
             error is HttpRequestException or
@@ -3167,6 +3281,99 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             notification,
             "DISMISS",
             cancellationToken);
+
+    public void RefreshProductUpdates()
+    {
+        ProductUpdates.Clear();
+        foreach (var p in Products.Where(p => p.CanUpdate))
+        {
+            ProductUpdates.Add(p);
+        }
+        Raise(nameof(HasProductUpdates));
+        Raise(nameof(HasPendingUpdatesOrActivity));
+        Raise(nameof(PendingUpdatesBadgeText));
+    }
+
+    public async Task CheckBkeUpdatesAsync(CancellationToken cancellationToken)
+    {
+        BkeUpdateStatus = "CHECKING";
+        BkeUpdateMessage = "Checking for BKE updates…";
+
+        try
+        {
+            var result = await _bkeUpdater.CheckForUpdateAsync(BkeCurrentVersion, null, cancellationToken);
+            if (result.Status == Contracts.BkeUpdateStatus.UpdateAvailable && result.Release != null)
+            {
+                CurrentBkeRelease = result.Release;
+                BkeAvailableVersion = result.Release.TargetVersion;
+                IsBkeUpdateAvailable = true;
+                BkeUpdateStatus = "AVAILABLE";
+                BkeUpdateMessage = $"BKE {result.Release.TargetVersion} is available.";
+                BkeUpdateSummary = result.Release.ReleaseSummary;
+            }
+            else if (result.Status == Contracts.BkeUpdateStatus.Failed)
+            {
+                BkeUpdateStatus = "FAILED";
+                BkeUpdateMessage = result.ErrorMessage ?? "Failed to check for BKE updates.";
+                IsBkeUpdateAvailable = false;
+            }
+            else
+            {
+                IsBkeUpdateAvailable = false;
+                BkeAvailableVersion = null;
+                CurrentBkeRelease = null;
+                BkeUpdateStatus = "UP_TO_DATE";
+                BkeUpdateMessage = "BKE is running the latest verified release.";
+                BkeUpdateSummary = string.Empty;
+            }
+
+            RefreshProductUpdates();
+            Raise(nameof(HasPendingUpdatesOrActivity));
+            Raise(nameof(PendingUpdatesBadgeText));
+        }
+        catch (Exception ex)
+        {
+            BkeUpdateStatus = "FAILED";
+            BkeUpdateMessage = $"Update check failed: {ex.Message}";
+        }
+    }
+
+    public async Task UpdateBkeAsync(CancellationToken cancellationToken)
+    {
+        if (CurrentBkeRelease == null || !IsBkeUpdateAvailable)
+        {
+            return;
+        }
+
+        IsUpdatingBke = true;
+        BkeUpdateStatus = "STAGING";
+        BkeUpdateMessage = $"Downloading and verifying BKE {CurrentBkeRelease.TargetVersion} installer…";
+        BkeUpdateProgress = 0.0;
+
+        try
+        {
+            var progress = new Progress<double>(p => BkeUpdateProgress = p);
+            var stagedPath = await _bkeUpdater.StageUpdateAsync(
+                CurrentBkeRelease,
+                null,
+                progress,
+                cancellationToken);
+
+            BkeUpdateStatus = "READY_TO_RESTART";
+            BkeUpdateMessage = $"BKE {CurrentBkeRelease.TargetVersion} is ready to install. Starting installer…";
+
+            LauncherBkeUpdateOrchestrator.LaunchSilentInstaller(stagedPath);
+
+            await Task.Delay(1000, cancellationToken);
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            IsUpdatingBke = false;
+            BkeUpdateStatus = "FAILED";
+            BkeUpdateMessage = $"Update staging failed: {ex.Message}";
+        }
+    }
 
     private async Task MutateNotificationAsync(
         NotificationViewModel notification,
@@ -3350,6 +3557,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
 
             RefreshDashboardProducts();
+            RefreshProductUpdates();
             Raise(nameof(ShowEmptyProducts));
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException)
@@ -8198,8 +8406,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CatalogMessage = message;
         Products.Clear();
         DashboardProducts.Clear();
+        ProductUpdates.Clear();
         Raise(nameof(ShowEmptyProducts));
         Raise(nameof(ShowEmptyDashboardProducts));
+        Raise(nameof(HasProductUpdates));
+        Raise(nameof(HasPendingUpdatesOrActivity));
+        Raise(nameof(PendingUpdatesBadgeText));
     }
 
     private void RefreshDashboardProducts()
@@ -8229,6 +8441,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         NotificationMessage = message;
         Notifications.Clear();
         Raise(nameof(ShowEmptyNotifications));
+        Raise(nameof(HasPendingUpdatesOrActivity));
+        Raise(nameof(PendingUpdatesBadgeText));
     }
 
     private void ClearPurchaseReview()
