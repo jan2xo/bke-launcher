@@ -2733,13 +2733,13 @@ Require(
     mainWindowMarkup.Contains(
         "<LucideIcon Kind=\"Library\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "<LucideIcon Kind=\"Store\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
         "<LucideIcon Kind=\"Bell\"",
         StringComparison.Ordinal),
-    "Launcher compact navigation lost its Lucide icon treatment.");
+    "Launcher compact navigation lost its Lucide icon treatment or preserved excluded Store navigation.");
 Require(
     !mainWindowMarkup.Contains(
         "HeroParallaxPointerMoved",
@@ -2821,7 +2821,7 @@ Require(
     mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowNotificationsModule}\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowStoreModule}\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
@@ -2830,19 +2830,19 @@ Require(
     mainWindowSource.Contains(
         "OpenLibrary",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "Classes.active=\"{Binding ShowStoreModule}\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "ToolTip.Tip=\"Store\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
         "OpenNotifications",
         StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "OpenStore",
+    !mainWindowMarkup.Contains(
+        "Click=\"OpenStore\"",
         StringComparison.Ordinal),
-    "Launcher shell did not preserve explicit Dashboard / Library / Store / Notifications navigation.");
+    "Launcher shell did not preserve explicit Dashboard / Library / Notifications navigation, or restored excluded Store navigation.");
 var dashboardSurfaceStart = mainWindowMarkup.IndexOf(
     "IsVisible=\"{Binding ShowHomeModule}\"",
     StringComparison.Ordinal);
@@ -2960,18 +2960,12 @@ Require(!mainWindowMarkup.Contains("Content=\"Forgot password?\"", StringCompari
 Require(!mainWindowMarkup.Contains("ShowPasswordResetCompletion", StringComparison.Ordinal),
     "Obsolete browserless password-reset completion UX must be removed.");
 Require(!mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Obsolete native password field must be removed.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode, Mode=OneWay}\"", StringComparison.Ordinal),
-    "Launcher Store does not render the recovered gift Claim Code.");
-Require(mainWindowMarkup.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal),
-    "Launcher gift Claim Code field is not read-only.");
-Require(mainWindowMarkup.Contains("Content=\"I've saved this Claim Code\"", StringComparison.Ordinal),
-    "Launcher Store lacks explicit gift delivery acknowledgement.");
-Require(mainWindowMarkup.Contains("Content=\"Resume original checkout\"", StringComparison.Ordinal),
-    "Launcher Store lacks explicit same-correlation resume UX.");
-Require(mainWindowSource.Contains("RetryOriginalCheckout", StringComparison.Ordinal),
-    "Launcher same-correlation resume handler is missing.");
-Require(mainWindowSource.Contains("CompleteGiftClaimDelivery", StringComparison.Ordinal),
-    "Launcher gift delivery acknowledgement handler is missing.");
+Require(!mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode", StringComparison.Ordinal),
+    "Gift Claim Code rendering is excluded from Launcher shell per product boundary definition.");
+Require(!mainWindowMarkup.Contains("Content=\"I've saved this Claim Code\"", StringComparison.Ordinal),
+    "Gift delivery acknowledgement is excluded from Launcher shell per product boundary definition.");
+Require(!mainWindowMarkup.Contains("Content=\"Resume original checkout\"", StringComparison.Ordinal),
+    "Same-correlation resume UX is excluded from Launcher shell per product boundary definition.");
 Require(mainWindowMarkup.Contains("Content=\"Update\"", StringComparison.Ordinal), "Software Update action is missing.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanUpdate}\"", StringComparison.Ordinal), "Software Update visibility is not state-bound.");
 Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "Software Update click handler is missing.");
@@ -3048,67 +3042,17 @@ Require(
         StringComparison.Ordinal),
     "BKE Notifications lost automatic refresh after receipt mutation.");
 Require(
-    mainWindowMarkup.Contains(
-        "Classes.active=\"{Binding ShowStoreModule}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "ToolTip.Tip=\"Store\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "<LucideIcon Kind=\"Store\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"OpenStore\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowStoreModule}\"",
-        StringComparison.Ordinal),
-    "BKE Store is no longer reachable from first-class sidebar navigation.");
-Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal), "BKE Store products are not Agent-projected into the UI.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding GiftCheckoutLabel}\"", StringComparison.Ordinal), "BKE Store gift availability is not presentation-bound.");
-Require(
-    !mainWindowMarkup.Contains(
-        "Text=\"{Binding StoreStatus}\"",
-        StringComparison.Ordinal) &&
-    !mainWindowMarkup.Contains(
-        "Content=\"Refresh Store\"",
-        StringComparison.Ordinal) &&
-    !mainWindowSource.Contains(
-        "private async void RefreshStore(",
-        StringComparison.Ordinal) &&
-    registrationViewModelSource.Contains(
-        "case 3:",
-        StringComparison.Ordinal) &&
-    registrationViewModelSource.Contains(
-        "await RefreshStoreAsync(cancellationToken);",
-        StringComparison.Ordinal),
-    "BKE Store must refresh automatically on Store navigation without a manual READY/Refresh control.");
-Require(mainWindowMarkup.Contains("Content=\"Start free 7-day trial\"", StringComparison.Ordinal), "BKE Store trial action is missing.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding StoreTrialStatus}\"", StringComparison.Ordinal), "BKE Store trial status is not presentation-bound.");
-Require(mainWindowMarkup.Contains("Content=\"Refresh trial state\"", StringComparison.Ordinal), "BKE Store trial ambiguity refresh action is missing.");
-Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanRefreshStoreTrialState}\"", StringComparison.Ordinal), "BKE Store trial ambiguity refresh is not lock-state-bound.");
-Require(mainWindowSource.Contains("StartStoreTrial", StringComparison.Ordinal), "BKE Store trial-start handler is missing.");
-Require(mainWindowSource.Contains("RefreshStoreTrialState", StringComparison.Ordinal), "BKE Store trial-state refresh handler is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Review purchase\"", StringComparison.Ordinal), "BKE Store purchase review action is missing.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewPriceLabel}\"", StringComparison.Ordinal), "BKE Store canonical review price is not presentation-bound.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewModesLabel}\"", StringComparison.Ordinal), "BKE Store purchase modes are not presentation-bound.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding PurchaseReviewLegalLabel}\"", StringComparison.Ordinal), "BKE Store Legal requirements are not presentation-bound.");
-Require(mainWindowMarkup.Contains("no order, payment, or checkout has been created", StringComparison.OrdinalIgnoreCase), "BKE Store review does not state its read-only boundary.");
-Require(mainWindowSource.Contains("ReviewPurchase", StringComparison.Ordinal), "BKE Store purchase review click handler is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Buy for myself\"", StringComparison.Ordinal), "BKE Store SELF purchase action is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Buy as gift / Claim Code\"", StringComparison.Ordinal), "BKE Store GIFT purchase action is missing.");
-Require(mainWindowMarkup.Contains("ItemsSource=\"{Binding PurchaseLegalDocuments}\"", StringComparison.Ordinal), "BKE Store Legal acceptance list is missing.");
-Require(mainWindowMarkup.Contains("IsChecked=\"{Binding IsAccepted, Mode=TwoWay}\"", StringComparison.Ordinal), "BKE Store Legal acceptance is not explicit per document.");
-Require(mainWindowSource.Contains("BuyForSelf", StringComparison.Ordinal), "BKE Store SELF purchase handler is missing.");
-Require(mainWindowSource.Contains("BuyAsGift", StringComparison.Ordinal), "BKE Store GIFT purchase handler is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Check checkout status\"", StringComparison.Ordinal), "BKE Store checkout-status recovery action is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Open existing checkout\"", StringComparison.Ordinal), "BKE Store existing-checkout action is missing.");
-Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanCheckCheckoutStatus}\"", StringComparison.Ordinal), "BKE Store checkout-status action is not recovery-state-bound.");
-Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanOpenExistingCheckout}\"", StringComparison.Ordinal), "BKE Store existing-checkout action is not URL-state-bound.");
-Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowPurchaseCheckoutState}\"", StringComparison.Ordinal), "BKE Store checkout recovery is not visible independently of the current purchase review.");
-Require(mainWindowSource.Contains("CheckPurchaseCheckoutStatus", StringComparison.Ordinal), "BKE Store checkout-status click handler is missing.");
-Require(mainWindowSource.Contains("OpenExistingCheckout", StringComparison.Ordinal), "BKE Store existing-checkout click handler is missing.");
-Require(mainWindowSource.Contains("OpenPurchaseLegalDocument", StringComparison.Ordinal), "BKE Store Legal document navigation is missing.");
+    !mainWindowMarkup.Contains("Classes.active=\"{Binding ShowStoreModule}\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("ToolTip.Tip=\"Store\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("<LucideIcon Kind=\"Store\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Click=\"OpenStore\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("IsVisible=\"{Binding ShowStoreModule}\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("ItemsSource=\"{Binding StoreProducts}\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Content=\"Buy for myself\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Content=\"Buy as gift / Claim Code\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Content=\"Start free 7-day trial\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Content=\"Review purchase\"", StringComparison.Ordinal),
+    "BKE Store and commerce workflows are excluded from Launcher shell per product boundary definition; commerce belongs in Digital Solutions.");
 var viewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
 var normalizedViewModelSource = viewModelSource.Replace("\r\n", "\n", StringComparison.Ordinal);
