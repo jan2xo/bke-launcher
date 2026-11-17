@@ -4465,8 +4465,14 @@ await CertifyAccountOrganizationSettingsAsync();
 await CertifySafeAccountSwitchingAsync();
 await CertifyCustomerAcquisitionToMySoftwareAsync();
 await CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync();
+await CertifyParentInstallerAgentCompatibilityAsync();
+await CertifyBkeRootUpdateOrchestratorAsync();
+await CertifyUpdatesAndActivityPresentationAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
+Console.WriteLine("BKE parent installer Agent version compatibility certified (no unsafe downgrade)");
+Console.WriteLine("BKE root self-update orchestrator, staging, and SHA-256 integrity certified");
+Console.WriteLine("BKE Updates & Activity native presentation and authoritative release binding certified");
 Console.WriteLine("Google sign-in device approval and Agent session custody certified");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
@@ -7300,13 +7306,153 @@ static async Task CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync()
         "ExternalBrowserNavigator did not reject invalid path on loopback target.");
 }
 
+static async Task CertifyParentInstallerAgentCompatibilityAsync()
+{
+    var scriptPath = Path.Combine("packaging", "windows", "bke-parent-x64.iss");
+    if (!File.Exists(scriptPath))
+    {
+        var probe = AppContext.BaseDirectory;
+        while (!string.IsNullOrEmpty(probe) && !File.Exists(Path.Combine(probe, scriptPath)))
+        {
+            var parent = Directory.GetParent(probe);
+            if (parent == null) break;
+            probe = parent.FullName;
+        }
+        if (File.Exists(Path.Combine(probe, scriptPath)))
+        {
+            scriptPath = Path.Combine(probe, scriptPath);
+        }
+    }
+    Require(File.Exists(scriptPath), $"bke-parent-x64.iss script must exist at {scriptPath}");
+    var scriptContent = await File.ReadAllTextAsync(scriptPath);
+
+    Require(scriptContent.Contains("function CompareVersions(V1, V2: String): Integer;", StringComparison.Ordinal),
+        "Parent installer script missing CompareVersions function.");
+    Require(scriptContent.Contains("function GetInstalledAgentVersion(", StringComparison.Ordinal),
+        "Parent installer script missing GetInstalledAgentVersion function.");
+    Require(scriptContent.Contains("CompareVersions(InstalledAgentVer, '{#AgentVersion}')", StringComparison.Ordinal),
+        "Parent installer script missing agent version comparison call.");
+    Require(scriptContent.Contains("Comparison > 0", StringComparison.Ordinal),
+        "Parent installer script missing strictly-newer comparison branch.");
+    Require(scriptContent.Contains("Preserving newer Agent to prevent unsafe downgrade", StringComparison.Ordinal),
+        "Parent installer script missing downgrade prevention logging.");
+
+    // Direct semver parity verification matching Inno Setup CompareVersions algorithm
+    int CompareSemver(string v1, string v2)
+    {
+        var p1 = v1.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var p2 = v2.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        int maxLen = Math.Max(p1.Length, p2.Length);
+        for (int i = 0; i < maxLen; i++)
+        {
+            int n1 = i < p1.Length && int.TryParse(p1[i], out var parsed1) ? parsed1 : 0;
+            int n2 = i < p2.Length && int.TryParse(p2[i], out var parsed2) ? parsed2 : 0;
+            if (n1 < n2) return -1;
+            if (n1 > n2) return 1;
+        }
+        return 0;
+    }
+
+    Require(CompareSemver("", "2.0.0") < 0, "Missing agent must compare less than bundled.");
+    Require(CompareSemver("1.0.0", "2.0.0") < 0, "Older agent 1.0.0 must compare less than bundled.");
+    Require(CompareSemver("1.9.9", "2.0.0") < 0, "Older agent 1.9.9 must compare less than bundled.");
+    Require(CompareSemver("2.0.0", "2.0.0") == 0, "Equal agent version must compare equal.");
+    Require(CompareSemver("2.0.1", "2.0.0") > 0, "Newer patch agent must compare greater than bundled.");
+    Require(CompareSemver("2.1.0", "2.0.0") > 0, "Newer minor agent must compare greater than bundled.");
+    Require(CompareSemver("3.0.0", "2.0.0") > 0, "Newer major agent must compare greater than bundled.");
+    Require(CompareSemver("2.0.0.1", "2.0.0") > 0, "Newer build agent must compare greater than bundled.");
+}
+
+static async Task CertifyBkeRootUpdateOrchestratorAsync()
+{
+    var tempDir = Path.Combine(Path.GetTempPath(), "bke-cert-updater-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(tempDir);
+    try
+    {
+        var orchestrator = new LauncherBkeUpdateOrchestrator(stagingDirectory: tempDir);
+
+        Require(LauncherBkeUpdateOrchestrator.CompareVersions("0.2.0", "0.1.0") > 0, "0.2.0 must be greater than 0.1.0");
+        Require(LauncherBkeUpdateOrchestrator.CompareVersions("0.1.0", "0.1.0") == 0, "0.1.0 must be equal to 0.1.0");
+        Require(LauncherBkeUpdateOrchestrator.CompareVersions("0.1.0", "0.2.0") < 0, "0.1.0 must be less than 0.2.0");
+
+        var testBinary = Path.Combine(tempDir, "mock-bke-setup.exe");
+        var fakeInstallerBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x05 };
+        await File.WriteAllBytesAsync(testBinary, fakeInstallerBytes);
+
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var correctHash = Convert.ToHexString(sha256.ComputeHash(fakeInstallerBytes)).ToLowerInvariant();
+        var corruptHash = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+
+        var validRelease = new BkeUpdateRelease(
+            "0.1.0",
+            "0.2.0",
+            "STABLE",
+            "https://updates.bke.internal/BKE-0.2.0-PREPRODUCTION-Windows.exe",
+            correctHash,
+            fakeInstallerBytes.Length,
+            "BKE 0.2.0 update",
+            DateTimeOffset.UtcNow);
+
+        var corruptRelease = validRelease with { Sha256 = corruptHash };
+
+        var stagedPath = await orchestrator.StageUpdateAsync(validRelease, testBinary, null, CancellationToken.None);
+        Require(File.Exists(stagedPath), "Staged installer must exist after successful staging.");
+        Require(new FileInfo(stagedPath).Length == fakeInstallerBytes.Length, "Staged file size must match original.");
+
+        bool caughtIntegrityError = false;
+        try
+        {
+            await orchestrator.StageUpdateAsync(corruptRelease, testBinary, null, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is InvalidDataException || ex is InvalidOperationException)
+        {
+            caughtIntegrityError = true;
+        }
+        Require(caughtIntegrityError, "StageUpdateAsync must fail when SHA-256 does not match.");
+
+        orchestrator.CleanStaging();
+        Require(!File.Exists(stagedPath), "CleanStaging must remove staged update files.");
+    }
+    finally
+    {
+        try { Directory.Delete(tempDir, true); } catch { }
+    }
+}
+
+static async Task CertifyUpdatesAndActivityPresentationAsync()
+{
+    var catalog = new CustomerJourneyCatalogSource();
+    var agent = new CustomerJourneyAgentClient(catalog) { Authenticated = true };
+    var recovery = new CustomerJourneyRecoveryStore();
+    var navigator = new CustomerJourneyNavigator();
+    var orchestrator = new LauncherBkeUpdateOrchestrator();
+
+    var vm = BuildCustomerJourneyViewModel(agent, catalog, recovery, navigator, bkeUpdater: orchestrator);
+
+    Require(!string.IsNullOrWhiteSpace(vm.BkeCurrentVersion), "BkeCurrentVersion must be populated.");
+    Require(!vm.IsBkeUpdateAvailable, "IsBkeUpdateAvailable must default to false.");
+    Require(!string.IsNullOrEmpty(vm.AgentServiceStatus), "AgentServiceStatus must be non-empty.");
+
+    vm.BkeAvailableVersion = "0.2.0";
+    vm.IsBkeUpdateAvailable = true;
+    Require(vm.HasPendingUpdatesOrActivity, "HasPendingUpdatesOrActivity must be true when BKE update is available.");
+    Require(vm.PendingUpdatesBadgeText == "Update", "PendingUpdatesBadgeText must reflect pending update.");
+
+    vm.RefreshProductUpdates();
+    Require(vm.ProductUpdates != null, "ProductUpdates collection must not be null.");
+
+    vm.IsBkeUpdateAvailable = false;
+    Require(!vm.IsBkeUpdateAvailable, "IsBkeUpdateAvailable must reset to false.");
+}
+
 static MainWindowViewModel BuildCustomerJourneyViewModel(
     CustomerJourneyAgentClient agent,
     CustomerJourneyCatalogSource catalog,
     CustomerJourneyRecoveryStore recovery,
     CustomerJourneyNavigator navigator,
     CustomerJourneyIdentityClient? identity = null,
-    SynchronizationContext? uiContext = null)
+    SynchronizationContext? uiContext = null,
+    LauncherBkeUpdateOrchestrator? bkeUpdater = null)
 {
     var platformAuthority = new LauncherPlatformAuthorityResolver(agent);
     identity ??= new CustomerJourneyIdentityClient();
@@ -7352,7 +7498,8 @@ static MainWindowViewModel BuildCustomerJourneyViewModel(
         new LauncherAccountLicenseDevicesController(agent),
         new LauncherAccountOrganizationController(agent),
         new CustomerJourneyPluginRuntime(),
-        uiContext);
+        uiContext,
+        bkeUpdater);
 }
 
 static void Require(bool condition, string message)

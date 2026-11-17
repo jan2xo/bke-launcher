@@ -52,6 +52,94 @@ Name: "{autodesktop}\BKE"; Filename: "{app}\bke-launcher.exe"
 Filename: "{app}\bke-launcher.exe"; Description: "Open BKE"; Flags: postinstall nowait skipifsilent
 
 [Code]
+function CompareVersionPart(Part1, Part2: String): Integer;
+var
+  N1, N2: Integer;
+begin
+  N1 := StrToIntDef(Part1, 0);
+  N2 := StrToIntDef(Part2, 0);
+  if N1 > N2 then
+    Result := 1
+  else if N1 < N2 then
+    Result := -1
+  else
+    Result := 0;
+end;
+
+function CompareVersions(V1, V2: String): Integer;
+var
+  P1, P2: Integer;
+  Part1, Part2: String;
+  C: Integer;
+begin
+  Result := 0;
+  while (Length(V1) > 0) or (Length(V2) > 0) do
+  begin
+    P1 := Pos('.', V1);
+    if P1 > 0 then
+    begin
+      Part1 := Copy(V1, 1, P1 - 1);
+      Delete(V1, 1, P1);
+    end
+    else
+    begin
+      Part1 := V1;
+      V1 := '';
+    end;
+
+    P2 := Pos('.', V2);
+    if P2 > 0 then
+    begin
+      Part2 := Copy(V2, 1, P2 - 1);
+      Delete(V2, 1, P2);
+    end
+    else
+    begin
+      Part2 := V2;
+      V2 := '';
+    end;
+
+    C := CompareVersionPart(Part1, Part2);
+    if C <> 0 then
+    begin
+      Result := C;
+      Exit;
+    end;
+  end;
+end;
+
+function GetInstalledAgentVersion(var VersionStr: String): Boolean;
+var
+  ExePath: String;
+begin
+  Result := False;
+  VersionStr := '';
+
+  if RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1', 'DisplayVersion', VersionStr) or
+     RegQueryStringValue(HKLM32, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{BKE-Licensing-Agent}_is1', 'DisplayVersion', VersionStr) or
+     RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BKE-Licensing-Agent_is1', 'DisplayVersion', VersionStr) or
+     RegQueryStringValue(HKLM32, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BKE-Licensing-Agent_is1', 'DisplayVersion', VersionStr) then
+  begin
+    VersionStr := Trim(VersionStr);
+    if Length(VersionStr) > 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  ExePath := ExpandConstant('{autopf}\BKE Digital Solutions\Licensing Agent\service\bke-licensing-agent-service.exe');
+  if FileExists(ExePath) and GetVersionNumbersString(ExePath, VersionStr) then
+  begin
+    VersionStr := Trim(VersionStr);
+    if Length(VersionStr) > 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
 function AgentHealthy: Boolean;
 var
   ResultCode: Integer;
@@ -88,28 +176,70 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
   AgentInstallerPath: String;
+  InstalledAgentVer: String;
+  Comparison: Integer;
+  ShouldRunInstaller: Boolean;
 begin
   if CurStep <> ssPostInstall then
     Exit;
 
-  AgentInstallerPath := ExpandConstant('{tmp}\{#AgentInstaller}');
-  if not Exec(
-    AgentInstallerPath,
-    '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
-    '',
-    SW_HIDE,
-    ewWaitUntilTerminated,
-    ResultCode) then
-    RaiseException('BKE could not start the bundled Licensing Agent installer.');
+  ShouldRunInstaller := True;
+  if GetInstalledAgentVersion(InstalledAgentVer) then
+  begin
+    Log(Format('Detected installed Licensing Agent version: %s (bundled version: %s)', [InstalledAgentVer, '{#AgentVersion}']));
+    Comparison := CompareVersions(InstalledAgentVer, '{#AgentVersion}');
+    if Comparison > 0 then
+    begin
+      Log('Installed Licensing Agent is strictly newer than bundled version. Preserving newer Agent to prevent unsafe downgrade.');
+      ShouldRunInstaller := False;
+    end
+    else if Comparison = 0 then
+    begin
+      Log('Installed Licensing Agent version matches bundled version.');
+      if AgentHealthy then
+      begin
+        Log('Existing Licensing Agent is healthy; skipping reinstall.');
+        ShouldRunInstaller := False;
+      end
+      else
+      begin
+        Log('Existing Licensing Agent is not responding; running bundled installer to repair.');
+        ShouldRunInstaller := True;
+      end;
+    end
+    else
+    begin
+      Log('Installed Licensing Agent is older than bundled version. Proceeding with upgrade.');
+      ShouldRunInstaller := True;
+    end;
+  end
+  else
+  begin
+    Log('No existing Licensing Agent detected. Proceeding with fresh installation.');
+    ShouldRunInstaller := True;
+  end;
 
-  if ResultCode <> 0 then
-    RaiseException(Format('Bundled Licensing Agent installation failed with exit code %d.', [ResultCode]));
+  if ShouldRunInstaller then
+  begin
+    AgentInstallerPath := ExpandConstant('{tmp}\{#AgentInstaller}');
+    if not Exec(
+      AgentInstallerPath,
+      '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
+      '',
+      SW_HIDE,
+      ewWaitUntilTerminated,
+      ResultCode) then
+      RaiseException('BKE could not start the bundled Licensing Agent installer.');
+
+    if ResultCode <> 0 then
+      RaiseException(Format('Bundled Licensing Agent installation failed with exit code %d.', [ResultCode]));
+  end;
 
   if not AgentHealthy then
-    RaiseException('Bundled Licensing Agent did not become healthy after installation.');
+    RaiseException('Licensing Agent did not become healthy after installation.');
 
   RemoveAgentCustomerShortcut;
-  Log('Bundled Licensing Agent is healthy; BKE remains the only customer-facing desktop entry.');
+  Log('Licensing Agent is healthy; BKE remains the only customer-facing desktop entry.');
 end;
 
 

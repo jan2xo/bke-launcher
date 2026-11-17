@@ -7,3 +7,5 @@ obj/
 *.cache
 artifacts/
 TestResults/
+dist/
+agent-src/

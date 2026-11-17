@@ -110,14 +110,66 @@ public sealed partial class App : Avalonia.Application
                 accountLicenseSeats,
                 accountLicenseDevices,
                 accountOrganization,
-                pluginRuntime);
+                pluginRuntime,
+                bkeUpdater: new LauncherBkeUpdateOrchestrator());
 
             desktop.MainWindow = new MainWindow
             {
                 DataContext = viewModel,
             };
 
-            if (Program.IsUiSmoke)
+            if (Program.ScreenshotDir != null)
+            {
+                var targetDir = Program.ScreenshotDir;
+                desktop.MainWindow.Opened += async (_, _) =>
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(targetDir);
+                        await viewModel.OpenModuleAsync(2, CancellationToken.None);
+                        viewModel.BkeAvailableVersion = "0.2.0";
+                        viewModel.IsBkeUpdateAvailable = true;
+                        viewModel.BkeUpdateStatus = "AVAILABLE";
+                        viewModel.BkeUpdateMessage = "BKE 0.2.0 is available.";
+                        viewModel.BkeUpdateSummary = "Native Updates & Activity surface, Inno Setup Agent version downgrade protection, and root BKE self-update lifecycle.";
+
+                        var sizes = new (int Width, int Height)[]
+                        {
+                            (760, 540),
+                            (1024, 680),
+                            (1440, 900)
+                        };
+
+                        foreach (var (w, h) in sizes)
+                        {
+                            desktop.MainWindow.Width = w;
+                            desktop.MainWindow.Height = h;
+                            desktop.MainWindow.Measure(new Size(w, h));
+                            desktop.MainWindow.Arrange(new Rect(0, 0, w, h));
+                            desktop.MainWindow.UpdateLayout();
+                            await Task.Delay(250);
+
+                            var pixelSize = new PixelSize(w, h);
+                            using var rtb = new Avalonia.Media.Imaging.RenderTargetBitmap(pixelSize, new Vector(96, 96));
+                            rtb.Render(desktop.MainWindow);
+                            var outPath = Path.Combine(targetDir, $"bke-updates-{w}x{h}.png");
+#pragma warning disable CS0618
+                            rtb.Save(outPath);
+#pragma warning restore CS0618
+                            Console.WriteLine($"Saved screenshot: {outPath}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Screenshot error: {ex}");
+                    }
+                    finally
+                    {
+                        desktop.Shutdown(0);
+                    }
+                };
+            }
+            else if (Program.IsUiSmoke)
             {
                 desktop.MainWindow.Opened += (_, _) =>
                 {

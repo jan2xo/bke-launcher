@@ -972,6 +972,16 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void CheckBkeUpdates(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.CheckBkeUpdatesAsync(CancellationToken.None);
+    }
+
+    private async void UpdateBke(object? sender, RoutedEventArgs args)
+    {
+        await ViewModel.UpdateBkeAsync(CancellationToken.None);
+    }
+
     private async void StartStoreTrial(
         object? sender,
         RoutedEventArgs args)
