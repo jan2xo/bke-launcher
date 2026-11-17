@@ -291,6 +291,8 @@ public interface ILauncherExternalNavigator
         string absoluteUrl,
         CancellationToken cancellationToken);
     void OpenVerificationUri(string absoluteUrl);
+    Task OpenAccountManagementAsync(CancellationToken cancellationToken);
+    void OpenAccountManagement();
 }
 
 public sealed record LauncherCheckoutRecoveryState(

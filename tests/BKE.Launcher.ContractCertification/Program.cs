@@ -2469,42 +2469,24 @@ var telemetrySamplerSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Desktop", "SystemTelemetrySampler.cs"));
 var telemetryViewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "SystemTelemetryViewModel.cs"));
-Require(mainWindowMarkup.Contains(
-        "I have reviewed and accept this exact published version.",
-        StringComparison.Ordinal),
-    "Launcher Create Account UX does not require explicit exact-version legal acceptance.");
-Require(mainWindowMarkup.Contains(
-        "Text=\"{Binding ContentMarkdown}\"",
-        StringComparison.Ordinal),
-    "Launcher Create Account UX does not present authoritative registration legal text.");
-Require(mainWindowMarkup.Contains(
-        "Click=\"CreateNativeAccount\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"VerifyRegistrationEmail\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"ResendRegistrationVerification\"",
-        StringComparison.Ordinal),
-    "Launcher Create Account UX lacks registration/verification actions.");
-
 var registrationViewModelSource = File.ReadAllText(
     Path.Combine("src", "BKE.Launcher.Presentation", "MainWindowViewModel.cs"));
-Require(registrationViewModelSource.Contains(
-        "finally\n        {\n            RegistrationPassword = string.Empty;",
-        StringComparison.Ordinal),
-    "Launcher registration UX does not clear the transient password after registration.");
-Require(registrationViewModelSource.Contains(
-        "var code = RegistrationCode;\n        RegistrationCode = string.Empty;",
-        StringComparison.Ordinal),
-    "Launcher registration UX does not clear the transient verification code before submission.");
-Require(registrationViewModelSource.Contains(
-        "Email = verifiedEmail;",
-        StringComparison.Ordinal) &&
-    registrationViewModelSource.Contains(
-        "_showRegistration = false;",
-        StringComparison.Ordinal),
-    "Launcher verified-registration UX does not return to the normal sign-in surface.");
+Require(mainWindowMarkup.Contains("Content=\"Continue with Google\"", StringComparison.Ordinal) &&
+        mainWindowMarkup.Contains("Click=\"ContinueWithGoogle\"", StringComparison.Ordinal) &&
+        mainWindowMarkup.Contains("Text=\"Approve BKE Device\"", StringComparison.Ordinal) &&
+        mainWindowMarkup.Contains("Text=\"{Binding UserCode}\"", StringComparison.Ordinal) &&
+        mainWindowMarkup.Contains("Click=\"OpenVerificationPage\"", StringComparison.Ordinal) &&
+        mainWindowMarkup.Contains("Click=\"CancelGoogleSignIn\"", StringComparison.Ordinal),
+    "Launcher must provide Google-only device approval authentication.");
+
+Require(!mainWindowMarkup.Contains("or sign in with existing BKE password", StringComparison.Ordinal) &&
+        !mainWindowMarkup.Contains("Click=\"NativeSignIn\"", StringComparison.Ordinal) &&
+        !mainWindowMarkup.Contains("Click=\"CreateNativeAccount\"", StringComparison.Ordinal) &&
+        !mainWindowMarkup.Contains("Click=\"VerifyNativeMfa\"", StringComparison.Ordinal) &&
+        !mainWindowMarkup.Contains("Click=\"RequestPasswordReset\"", StringComparison.Ordinal) &&
+        !mainWindowMarkup.Contains("Click=\"CompletePasswordReset\"", StringComparison.Ordinal) &&
+        !mainWindowMarkup.Contains("Click=\"OpenRegistration\"", StringComparison.Ordinal),
+    "Launcher customer UI must not contain native password, registration, reset, or MFA controls.");
 
 Require(desktopProjectSource.Contains("Avalonia\" Version=\"12.1.3\"", StringComparison.Ordinal),
     "Launcher Avalonia package baseline is not 12.1.3.");
@@ -2941,113 +2923,29 @@ Require(mainWindowMarkup.Contains("IsVisible=\"{Binding ShowAccountSurface}\"", 
     "Launcher Account surface is not explicitly user-selected.");
 Require(
     mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowOrganizationSection}\"",
+        "Content=\"Manage account in Digital Solutions\"",
         StringComparison.Ordinal) &&
     mainWindowMarkup.Contains(
-        "Click=\"RefreshAccountOrganization\"",
+        "Click=\"OpenAccountManagement\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
-        "RefreshAccountOrganizationAsync",
+        "OpenAccountManagement",
         StringComparison.Ordinal),
-    "Launcher organization Account surface is missing.");
+    "Launcher Account surface must provide Manage account in Digital Solutions action.");
 Require(
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowOrganizationCreateSection}\"",
+    !mainWindowMarkup.Contains(
+        "ShowOrganizationSection",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Text=\"{Binding OrganizationCreateDisplayName, Mode=TwoWay}\"",
+    !mainWindowMarkup.Contains(
+        "ShowOrganizationCreateSection",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanCreateOrganization}\"",
+    !mainWindowMarkup.Contains(
+        "ShowOrganizationProfileEditor",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"CreateAccountOrganization\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "CreateAccountOrganizationAsync",
+    !mainWindowMarkup.Contains(
+        "ShowOrganizationInviteSection",
         StringComparison.Ordinal),
-    "Launcher organization-create Account surface is missing.");
-Require(
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowOrganizationProfileEditor}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding CanEditOrganizationIdentity}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding CanEditOrganizationBilling}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanSaveOrganizationProfile}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"UpdateAccountOrganizationProfile\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "UpdateAccountOrganizationProfileAsync",
-        StringComparison.Ordinal),
-    "Launcher permission-aware organization profile editor is missing.");
-Require(
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowOrganizationInviteSection}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "ItemsSource=\"{Binding OrganizationInvitationRoles}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanInviteOrganizationMember}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Text=\"{Binding OrganizationInvitationCode, Mode=OneWay}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"I've saved or sent this invitation code\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsReadOnly=\"True\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "CreateAccountOrganizationInvitationAsync",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "CompleteOrganizationInvitationDelivery",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"Resend\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"Revoke\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "ResendOrganizationInvitation",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "RevokeOrganizationInvitation",
-        StringComparison.Ordinal),
-    "Launcher transient Organization invitation-code delivery and management UX is missing.");
-Require(
-    mainWindowMarkup.Contains(
-        "Content=\"License manager\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"SetOrganizationMemberRoleMember\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"SetOrganizationMemberRoleLicenseManager\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"SetOrganizationMemberRoleBilling\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"SetOrganizationMemberRoleOwner\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"RemoveOrganizationMember\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "ManageAccountOrganizationMemberAsync",
-        StringComparison.Ordinal),
-    "Launcher Organization member-management UX is missing.");
+    "Launcher Account surface must not contain obsolete organization administration controls.");
 Require(mainWindowSource.Contains("await ViewModel.InitializeAsync(CancellationToken.None);", StringComparison.Ordinal),
     "Launcher does not resolve Agent-owned authentication state on startup.");
 Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison.Ordinal),
@@ -3055,39 +2953,13 @@ Require(mainWindowSource.Contains("ViewModel.OpenModuleAsync(", StringComparison
 Require(mainWindowSource.Contains("ViewModel.OpenAccountSurface();", StringComparison.Ordinal),
     "Launcher Account surface lacks explicit navigation.");
 
-Require(!mainWindowSource.Contains("Process.Start", StringComparison.Ordinal), "Native sign-in still launches a browser.");
 Require(!mainWindowMarkup.Contains("Device code", StringComparison.Ordinal), "Device-code UX remains visible in Launcher.");
-Require(mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Native sign-in action is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Forgot password?\"", StringComparison.Ordinal),
-    "Native Forgot Password action is missing.");
-Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRequestPasswordReset}\"", StringComparison.Ordinal),
-    "Native Forgot Password action is not recovery-state-bound.");
-Require(mainWindowSource.Contains("RequestPasswordReset", StringComparison.Ordinal),
-    "Native Forgot Password click handler is missing.");
-Require(
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding ShowPasswordResetCompletion}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Text=\"{Binding PasswordResetProof, Mode=TwoWay}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Text=\"{Binding PasswordResetNewPassword, Mode=TwoWay}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Text=\"{Binding PasswordResetConfirmPassword, Mode=TwoWay}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanCompletePasswordReset}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"CompletePasswordReset\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "CompletePasswordResetAsync",
-        StringComparison.Ordinal),
-    "Native browserless password-reset completion UX is missing.");
-Require(mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Native password field is not masked.");
+Require(!mainWindowMarkup.Contains("Sign in with BKE", StringComparison.Ordinal), "Obsolete native sign-in action must be removed.");
+Require(!mainWindowMarkup.Contains("Content=\"Forgot password?\"", StringComparison.Ordinal),
+    "Obsolete Forgot Password action must be removed.");
+Require(!mainWindowMarkup.Contains("ShowPasswordResetCompletion", StringComparison.Ordinal),
+    "Obsolete browserless password-reset completion UX must be removed.");
+Require(!mainWindowMarkup.Contains("PasswordChar", StringComparison.Ordinal), "Obsolete native password field must be removed.");
 Require(mainWindowMarkup.Contains("Text=\"{Binding GiftClaimCode, Mode=OneWay}\"", StringComparison.Ordinal),
     "Launcher Store does not render the recovered gift Claim Code.");
 Require(mainWindowMarkup.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal),
@@ -3106,23 +2978,12 @@ Require(mainWindowSource.Contains("UpdateProduct", StringComparison.Ordinal), "S
 Require(mainWindowMarkup.Contains("Content=\"Repair\"", StringComparison.Ordinal), "Software Repair action is missing.");
 Require(mainWindowMarkup.Contains("IsVisible=\"{Binding CanRepair}\"", StringComparison.Ordinal), "Software Repair visibility is not state-bound.");
 Require(mainWindowSource.Contains("RepairProduct", StringComparison.Ordinal), "Software Repair click handler is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Redeem to this account\"", StringComparison.Ordinal), "Claim Code redemption action is missing or its destination is ambiguous.");
-Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanRedeemClaimCode}\"", StringComparison.Ordinal), "Claim Code redemption action is not session-bound.");
-Require(mainWindowSource.Contains("RedeemClaimCode", StringComparison.Ordinal), "Claim Code redemption click handler is missing.");
-Require(mainWindowMarkup.Contains("Text=\"Security\"", StringComparison.Ordinal),
-    "Launcher Account Security section is missing.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding CurrentPassword, Mode=TwoWay}\"", StringComparison.Ordinal),
-    "Launcher current-password field is missing.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding NewPassword, Mode=TwoWay}\"", StringComparison.Ordinal),
-    "Launcher new-password field is missing.");
-Require(mainWindowMarkup.Contains("Text=\"{Binding ConfirmNewPassword, Mode=TwoWay}\"", StringComparison.Ordinal),
-    "Launcher password confirmation field is missing.");
-Require(mainWindowMarkup.Contains("Content=\"Change password\"", StringComparison.Ordinal),
-    "Launcher Change Password action is missing.");
-Require(mainWindowMarkup.Contains("IsEnabled=\"{Binding CanChangePassword}\"", StringComparison.Ordinal),
-    "Launcher Change Password action is not state-bound.");
-Require(mainWindowSource.Contains("ChangePassword", StringComparison.Ordinal),
-    "Launcher Change Password click handler is missing.");
+Require(!mainWindowMarkup.Contains("Content=\"Redeem to this account\"", StringComparison.Ordinal),
+    "Claim Code redemption must be removed from Launcher Account module.");
+Require(!mainWindowMarkup.Contains("Text=\"Security\"", StringComparison.Ordinal),
+    "Launcher Account Security section must be removed from Launcher Account module.");
+Require(!mainWindowMarkup.Contains("Content=\"Change password\"", StringComparison.Ordinal),
+    "Launcher Change Password action must be removed from Launcher Account module.");
 Require(
     mainWindowMarkup.Contains(
         "Text=\"Notifications\"",
@@ -3508,19 +3369,19 @@ Require(
         StringComparison.OrdinalIgnoreCase),
     "Launcher presentation bypasses Agent account-privacy mediation.");
 Require(
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "ItemsSource=\"{Binding AccountPrivacyRequestTypes}\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "ItemsSource=\"{Binding AccountPrivacyRequests}\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "Click=\"RefreshAccountPrivacy\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "Click=\"CreateAccountPrivacyRequest\"",
         StringComparison.Ordinal),
-    "Launcher Account Privacy desktop surface is incomplete.");
+    "Launcher Account Privacy controls must be removed from Launcher desktop markup.");
 Require(
     mainWindowSource.Contains(
         "RefreshAccountPrivacy",
@@ -4044,13 +3905,10 @@ Require(
         StringComparison.Ordinal),
     "Launcher Claim Code redemption lost checkout binding or no-blind-retry handling.");
 Require(
-    mainWindowMarkup.Contains(
-        "BKE does not store the plaintext code locally",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "Content=\"Redeem to this account\"",
         StringComparison.Ordinal),
-    "Launcher Claim Code redemption UI does not explain destination/transient handling.");
+    "Launcher Account module must not contain Claim Code redemption UI.");
 
 var launcherSource = string.Join(
     "\n",
@@ -4241,13 +4099,10 @@ Require(
     accountSwitchViewModelSource.Contains(
         "Resolve the existing checkout attempt before leaving this Organization.",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowOrganizationLeaveSection}\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanLeaveOrganization}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "Click=\"LeaveAccountOrganization\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
@@ -4256,7 +4111,7 @@ Require(
     mainWindowSource.Contains(
         "This action does not delete the Organization.",
         StringComparison.Ordinal),
-    "Launcher organization self-leave permission/checkout/confirmation boundary drifted.");
+    "Launcher organization self-leave UI must be removed from Launcher desktop markup.");
 Require(
     accountSwitchViewModelSource.Contains(
         "_organizationPermissions?.TransferOwnership == true",
@@ -4267,13 +4122,10 @@ Require(
     accountSwitchViewModelSource.Contains(
         "BKE will not replay the request.",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "IsVisible=\"{Binding ShowOrganizationOwnershipTransferSection}\"",
         StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanTransferOrganizationOwnership}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
+    !mainWindowMarkup.Contains(
         "Click=\"TransferOrganizationOwnership\"",
         StringComparison.Ordinal) &&
     mainWindowSource.Contains(
@@ -4282,157 +4134,17 @@ Require(
     mainWindowSource.Contains(
         "change the Organization owner immediately",
         StringComparison.Ordinal),
-    "Launcher organization ownership-transfer permission/checkout/confirmation boundary drifted.");
+    "Launcher organization ownership-transfer UI must be removed from Launcher desktop markup.");
 
 Require(
-    mainWindowMarkup.Contains(
-        "Content=\"Manage seats\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"OpenAccountLicenseSeats\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"RefreshAccountLicenseSeats\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"ChangeAccountLicenseSeat\"",
-        StringComparison.Ordinal) &&
-    !mainWindowMarkup.Contains(
-        "SeatManagementHandle",
-        StringComparison.Ordinal) &&
-    !mainWindowMarkup.Contains(
-        "ManagementHandle",
-        StringComparison.Ordinal),
-    "Launcher license-seat UI is missing or exposes opaque handles as presentation data.");
-
-Require(
-    mainWindowMarkup.Contains(
-        "Content=\"Manage devices\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"OpenAccountLicenseDevices\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"RefreshAccountLicenseDevices\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Click=\"DeactivateAccountLicenseDevice\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "ConfirmDeviceDeactivationAsync",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "does not uninstall software from the remote device",
-        StringComparison.Ordinal) &&
-    !mainWindowMarkup.Contains(
-        "DeviceManagementHandle",
-        StringComparison.Ordinal),
-    "Launcher authorized-device UX/confirmation boundary drifted.");
-
-Require(
-    mainWindowMarkup.Contains(
-        "Content=\"Continue payment\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"Cancel order\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsEnabled=\"{Binding CanMutateAccountPendingOrders}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding CanContinuePayment}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "IsVisible=\"{Binding CanCancelOrder}\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "ContinueAccountPendingOrder",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "ConfirmPendingOrderCancellationAsync",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "cancel this pending order",
-        StringComparison.OrdinalIgnoreCase) &&
-    !mainWindowMarkup.Contains(
-        "ContinueHandle",
-        StringComparison.Ordinal) &&
-    !mainWindowMarkup.Contains(
-        "CancelHandle",
-        StringComparison.Ordinal),
-    "Launcher pending-order UX/confirmation/opaque-handle boundary drifted.");
-
-Require(
-    mainWindowMarkup.Contains(
-        "Text=\"Billing history\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"Refresh billing history\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "ItemsSource=\"{Binding AccountInvoices}\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "ItemsSource=\"{Binding AccountPayments}\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "RefreshAccountBilling",
-        StringComparison.Ordinal) &&
-    !mainWindowMarkup.Contains(
-        "InvoiceId",
-        StringComparison.OrdinalIgnoreCase) &&
-    !mainWindowMarkup.Contains(
-        "PaymentId",
-        StringComparison.OrdinalIgnoreCase) &&
-    !mainWindowMarkup.Contains(
-        "ProviderId",
-        StringComparison.OrdinalIgnoreCase) &&
-    !mainWindowMarkup.Contains(
-        "ProviderName",
-        StringComparison.OrdinalIgnoreCase) &&
-    !mainWindowMarkup.Contains(
-        "ExternalId",
-        StringComparison.OrdinalIgnoreCase),
-    "Launcher billing history UX/identifier boundary drifted.");
-
-Require(
-    mainWindowMarkup.Contains(
-        "Text=\"Gift Claim Codes\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"Refresh Gift Claim Codes\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"Reveal Claim Code\"",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "GiftClaimRecentPassword",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "GiftClaimMfaCode",
-        StringComparison.Ordinal) &&
-    mainWindowMarkup.Contains(
-        "Content=\"I've saved this Claim Code\"",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "RefreshPersistentGiftClaims",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "RevealPersistentGiftClaim",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "StartPersistentGiftClaimRecentAuth",
-        StringComparison.Ordinal) &&
-    mainWindowSource.Contains(
-        "CompletePersistentGiftClaimRecentAuth",
-        StringComparison.Ordinal) &&
-    !mainWindowMarkup.Contains(
-        "ClaimCodeId",
-        StringComparison.OrdinalIgnoreCase) &&
-    !mainWindowMarkup.Contains(
-        "OrderId",
-        StringComparison.OrdinalIgnoreCase),
-    "Launcher persistent Gift Claim Code UX/recent-auth/identifier boundary drifted.");
+    !mainWindowMarkup.Contains("Content=\"Manage seats\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Content=\"Manage devices\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Content=\"Continue payment\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Text=\"Billing history\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Text=\"Gift Claim Codes\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Click=\"RefreshPersistentGiftClaims\"", StringComparison.Ordinal) &&
+    !mainWindowMarkup.Contains("Click=\"RevealPersistentGiftClaim\"", StringComparison.Ordinal),
+    "Launcher Account module must not contain Digital Solutions billing, seats, devices, or gift claims administration.");
 
 Require(
     mainWindowMarkup.Contains(
@@ -4468,11 +4180,13 @@ await CertifyGoogleSignInDeviceApprovalAndSessionCustodyAsync();
 await CertifyParentInstallerAgentCompatibilityAsync();
 await CertifyBkeRootUpdateOrchestratorAsync();
 await CertifyUpdatesAndActivityPresentationAsync();
+await CertifyGoogleOnlyBoundaryAndSessionConvergenceAsync();
 
 Console.WriteLine("BKE Launcher contract certification: PASS");
 Console.WriteLine("BKE parent installer Agent version compatibility certified (no unsafe downgrade)");
 Console.WriteLine("BKE root self-update orchestrator, staging, and SHA-256 integrity certified");
 Console.WriteLine("BKE Updates & Activity native presentation and authoritative release binding certified");
+Console.WriteLine("Google-only authentication and session convergence certified");
 Console.WriteLine("Google sign-in device approval and Agent session custody certified");
 Console.WriteLine("Agent-owned account session boundary certified");
 Console.WriteLine("Native Forgot Password enumeration-safe recovery composition certified");
@@ -7337,17 +7051,17 @@ static async Task CertifyParentInstallerAgentCompatibilityAsync()
     Require(scriptContent.Contains("Preserving newer Agent to prevent unsafe downgrade", StringComparison.Ordinal),
         "Parent installer script missing downgrade prevention logging.");
 
-    // Ensure the real BKE parent does not silently keep a healthy old 2.0.0
-    // Agent while its new DS public-issuer source has changed.
+    // Preserve installed older-Agent upgrade; never keep healthy 2.0.0 after
+    // the pinned Digital Solutions production issuer source changes.
     Require(scriptContent.Contains("#define AgentVersion \"2.0.1\"", StringComparison.Ordinal),
-        "BKE direct parent build must default to newer Agent 2.0.1.");
-    var repoRoot = Path.GetFullPath(Path.Combine(
+        "BKE parent default must advance to Agent version 2.0.1.");
+    var parentRoot = Path.GetFullPath(Path.Combine(
         Path.GetDirectoryName(scriptPath)!, "..", ".."));
-    var parentWorkflow = File.ReadAllText(Path.Combine(repoRoot,
+    var parentWorkflow = File.ReadAllText(Path.Combine(parentRoot,
         ".github", "workflows", "windows-parent-installer.yml"));
     Require(parentWorkflow.Contains("AGENT_VERSION: \"2.0.1\"", StringComparison.Ordinal) &&
             parentWorkflow.Contains("\"/DAppVersion=$env:AGENT_VERSION\"", StringComparison.Ordinal),
-        "BKE parent CI must embed and label the new Agent version consistently.");
+        "BKE parent workflow must version child installer consistently.");
 
     // Direct semver parity verification matching Inno Setup CompareVersions algorithm
     int CompareSemver(string v1, string v2)
@@ -7455,6 +7169,120 @@ static async Task CertifyUpdatesAndActivityPresentationAsync()
 
     vm.IsBkeUpdateAvailable = false;
     Require(!vm.IsBkeUpdateAvailable, "IsBkeUpdateAvailable must reset to false.");
+}
+
+static async Task CertifyGoogleOnlyBoundaryAndSessionConvergenceAsync()
+{
+    // 1. Cold start authenticated -> open BKE directly without login page
+    var catalogAuth = new CustomerJourneyCatalogSource();
+    var agentAuth = new CustomerJourneyAgentClient(catalogAuth)
+    {
+        Authenticated = true,
+        OverrideSessionStatus = "AUTHENTICATED",
+    };
+    var recoveryAuth = new CustomerJourneyRecoveryStore();
+    var navigatorAuth = new CustomerJourneyNavigator();
+    var vmAuth = BuildCustomerJourneyViewModel(agentAuth, catalogAuth, recoveryAuth, navigatorAuth);
+    await vmAuth.InitializeAsync(CancellationToken.None);
+
+    Require(vmAuth.IsAuthenticated, "Cold start with authenticated Agent must mark IsAuthenticated true.");
+    Require(vmAuth.ShowAuthenticatedShell, "Cold start with authenticated Agent must show authenticated shell.");
+    Require(!vmAuth.ShowLoginPage, "Cold start with authenticated Agent must NOT show login page.");
+    Require(!vmAuth.ShowSignInForm, "Cold start with authenticated Agent must NOT show sign-in form.");
+    Require(!vmAuth.ShowPendingSignIn, "Cold start with authenticated Agent must NOT show pending sign-in.");
+    Require(!vmAuth.ShowAgentUnavailableRecovery, "Cold start with authenticated Agent must NOT show agent unavailable recovery.");
+    Require(vmAuth.SelectedModuleIndex == 0, "Cold start with authenticated Agent must select Dashboard (index 0).");
+    Require(vmAuth.AccountDisplay.Contains("customer@example.test", StringComparison.Ordinal), "AccountDisplay must reflect authenticated account.");
+
+    // 2. Cold start signed out -> single "Continue with Google" CTA, no password/MFA
+    var catalogOut = new CustomerJourneyCatalogSource();
+    var agentOut = new CustomerJourneyAgentClient(catalogOut)
+    {
+        Authenticated = false,
+        OverrideSessionStatus = "SIGNED_OUT",
+    };
+    var recoveryOut = new CustomerJourneyRecoveryStore();
+    var navigatorOut = new CustomerJourneyNavigator();
+    var vmOut = BuildCustomerJourneyViewModel(agentOut, catalogOut, recoveryOut, navigatorOut);
+    await vmOut.InitializeAsync(CancellationToken.None);
+
+    Require(!vmOut.IsAuthenticated, "Signed-out cold start must have IsAuthenticated false.");
+    Require(!vmOut.ShowAuthenticatedShell, "Signed-out cold start must NOT show authenticated shell.");
+    Require(vmOut.ShowLoginPage, "Signed-out cold start must show login page.");
+    Require(vmOut.ShowSignInForm, "Signed-out cold start must show Google-only sign-in form.");
+    Require(!vmOut.ShowPendingSignIn, "Signed-out cold start must NOT show pending sign-in.");
+    Require(!vmOut.ShowAgentUnavailableRecovery, "Signed-out cold start must NOT show agent unavailable recovery.");
+    Require(!vmOut.IsAgentUnavailable, "Signed-out cold start must have IsAgentUnavailable false.");
+
+    // 3. Agent unavailable -> dedicated recovery card, NOT another login or password form
+    var catalogOffline = new CustomerJourneyCatalogSource();
+    var agentOffline = new CustomerJourneyAgentClient(catalogOffline)
+    {
+        SimulateUnavailable = true,
+    };
+    var recoveryOffline = new CustomerJourneyRecoveryStore();
+    var navigatorOffline = new CustomerJourneyNavigator();
+    var vmOffline = BuildCustomerJourneyViewModel(agentOffline, catalogOffline, recoveryOffline, navigatorOffline);
+    await vmOffline.InitializeAsync(CancellationToken.None);
+
+    Require(vmOffline.IsAgentUnavailable, "Offline Agent must set IsAgentUnavailable true.");
+    Require(vmOffline.SessionStatus == "AGENT_UNAVAILABLE", "Offline Agent must set SessionStatus AGENT_UNAVAILABLE.");
+    Require(vmOffline.ShowAgentUnavailableRecovery, "Offline Agent must show connection recovery card.");
+    Require(!vmOffline.ShowSignInForm, "Offline Agent must NOT show sign-in form.");
+    Require(!vmOffline.ShowPendingSignIn, "Offline Agent must NOT show pending sign-in.");
+    Require(!vmOffline.ShowAuthenticatedShell, "Offline Agent must NOT show authenticated shell.");
+
+    // 4. Agent recovery via RefreshStatusAsync
+    agentOffline.SimulateUnavailable = false;
+    agentOffline.OverrideSessionStatus = "SIGNED_OUT";
+    agentOffline.Authenticated = false;
+    await vmOffline.RefreshStatusAsync(CancellationToken.None);
+
+    Require(!vmOffline.IsAgentUnavailable, "Recovered Agent must clear IsAgentUnavailable.");
+    Require(vmOffline.SessionStatus == "SIGNED_OUT", "Recovered Agent must update SessionStatus to SIGNED_OUT.");
+    Require(vmOffline.ShowSignInForm, "Recovered Agent must show sign-in form.");
+    Require(!vmOffline.ShowAgentUnavailableRecovery, "Recovered Agent must hide connection recovery card.");
+
+    // 5. Compact Account surface: OpenAccountManagementInBrowser invokes navigator
+    Require(!navigatorAuth.AccountManagementOpened, "AccountManagementOpened must start false.");
+    await vmAuth.OpenAccountManagementInBrowserAsync(CancellationToken.None);
+    Require(navigatorAuth.AccountManagementOpened, "OpenAccountManagementInBrowserAsync must invoke navigator.OpenAccountManagementAsync.");
+
+    // 6. Safe account switch returns to Google-only signed-out state
+    agentAuth.OverrideSessionStatus = "SIGNED_OUT";
+    agentAuth.Authenticated = false;
+    await vmAuth.SwitchAccountAsync(CancellationToken.None);
+    Require(!vmAuth.IsAuthenticated, "SwitchAccountAsync must transition out of authenticated state.");
+    Require(vmAuth.ShowLoginPage, "SwitchAccountAsync must transition to login page.");
+    Require(vmAuth.ShowSignInForm, "SwitchAccountAsync must display Google sign-in form.");
+    Require(!vmAuth.ShowPendingSignIn, "SwitchAccountAsync must not show pending sign-in.");
+    Require(!vmAuth.ShowAuthenticatedShell, "SwitchAccountAsync must hide authenticated shell.");
+
+    // 7. Standalone product execution independent of BKE Google account (LICENSE_KEY activation)
+    var keyProduct = new LauncherProduct(
+        "bke-commercial-tool",
+        "BKE Commercial Tool",
+        "Standalone tool activated via commercial license key",
+        ProductExecutionType.Standalone,
+        LauncherProductState.Installed,
+        "1.0.0",
+        "1.0.0",
+        ProductActivationMode.LicenseKey);
+    var keyVm = SoftwareProductViewModel.From(keyProduct, false);
+    Require(!keyVm.CanOpen && !keyVm.CanInstall && keyVm.StateLabel == "License key activation",
+        "Key-only product is properly bounded to external license key activation.");
+
+    var eitherProduct = new LauncherProduct(
+        "bke-dual-mode-tool",
+        "BKE Dual Mode Tool",
+        "Standalone tool supporting both account and commercial license key",
+        ProductExecutionType.Standalone,
+        LauncherProductState.Installed,
+        "1.0.0",
+        "1.0.0",
+        ProductActivationMode.Either);
+    var eitherVm = SoftwareProductViewModel.From(eitherProduct, false);
+    Require(eitherVm.CanOpen, "Dual-mode product must remain executable (CanOpen == true).");
 }
 
 static MainWindowViewModel BuildCustomerJourneyViewModel(
@@ -7602,10 +7430,18 @@ sealed class QueuedTestSynchronizationContext : SynchronizationContext, IDisposa
 sealed class CustomerJourneyCatalogSource : ILauncherCatalogSource
 {
     public bool Owned { get; set; }
+    public IReadOnlyList<LauncherProduct>? OverrideProducts { get; set; }
 
     public Task<LauncherCatalogSnapshot> GetProductsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (OverrideProducts != null)
+        {
+            return Task.FromResult(new LauncherCatalogSnapshot(
+                "READY",
+                OverrideProducts,
+                null));
+        }
         return Task.FromResult(new LauncherCatalogSnapshot(
             "READY",
             new[]
@@ -7680,6 +7516,20 @@ sealed class CustomerJourneyNavigator : ILauncherExternalNavigator
     public void OpenVerificationUri(string absoluteUrl)
     {
         LastVerificationUrl = absoluteUrl;
+    }
+
+    public bool AccountManagementOpened { get; private set; }
+
+    public Task OpenAccountManagementAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        AccountManagementOpened = true;
+        return Task.CompletedTask;
+    }
+
+    public void OpenAccountManagement()
+    {
+        AccountManagementOpened = true;
     }
 
     public Task OpenLegalDocumentAsync(
@@ -8009,12 +7859,17 @@ sealed class CustomerJourneyAgentClient : ILauncherAgentClient
     public string StartVerificationUri { get; set; } = "https://digital-solutions.example.test/device?code=ABCD-1234";
     public string StartUserCode { get; set; } = "ABCD-1234";
     public string? OverrideSessionStatus { get; set; }
+    public bool SimulateUnavailable { get; set; }
 
     public Task<AccountSessionStatusResponse> GetAccountSessionStatusAsync(
         AccountSessionStatusRequest request,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (SimulateUnavailable)
+        {
+            throw new HttpRequestException("Agent daemon offline or unreachable.");
+        }
         if (OverrideSessionStatus is not null)
         {
             return Task.FromResult(new AccountSessionStatusResponse(

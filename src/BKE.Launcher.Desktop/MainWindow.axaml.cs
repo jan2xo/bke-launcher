@@ -85,14 +85,14 @@ public sealed partial class MainWindow : Window
         _telemetrySampler.Dispose();
     }
 
-    private async void OpenAccount(object? sender, RoutedEventArgs args)
+    private void OpenAccount(object? sender, RoutedEventArgs args)
     {
         ViewModel.OpenAccountSurface();
-        if (ViewModel.ShowOrganizationSection)
-        {
-            await ViewModel.RefreshAccountOrganizationAsync(
-                CancellationToken.None);
-        }
+    }
+
+    private void OpenAccountManagement(object? sender, RoutedEventArgs args)
+    {
+        ViewModel.OpenAccountManagementInBrowser();
     }
     private void ToggleSidebar(object? sender, RoutedEventArgs args) =>
         ViewModel.ToggleSidebar();

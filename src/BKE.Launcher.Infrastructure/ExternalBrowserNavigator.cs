@@ -47,6 +47,18 @@ public sealed class ExternalBrowserNavigator : ILauncherExternalNavigator
         OpenVerificationUriAsync(absoluteUrl, CancellationToken.None).GetAwaiter().GetResult();
     }
 
+    public async Task OpenAccountManagementAsync(CancellationToken cancellationToken)
+    {
+        var platformBaseUri =
+            await _platformAuthority.ResolveAsync(cancellationToken);
+        Open(new Uri(platformBaseUri, "/account"));
+    }
+
+    public void OpenAccountManagement()
+    {
+        OpenAccountManagementAsync(CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     public static void ValidateVerificationTarget(
         Uri uri,
         Uri platformAuthority)
